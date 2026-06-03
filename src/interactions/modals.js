@@ -1,6 +1,7 @@
 const { can } = require('../config/permissions');
 const ids = require('../config/ids');
 const events = require('../modules/events/events.service');
+const eventsRepo = require('../modules/events/events.repository');
 const registration = require('../modules/registration/registration.service');
 const finance = require('../modules/finance/finance.service');
 const audit = require('../modules/audit/audit.repository');
@@ -63,7 +64,14 @@ async function handleModal(interaction) {
 
   if (interaction.customId.startsWith('event:loot:')) {
     const eventId = Number(interaction.customId.split(':')[2]);
-    await events.finishEvent(interaction, eventId);
+    await interaction.deferReply({ ephemeral: true });
+    const event = eventsRepo.getEvent(eventId);
+    if (!event) throw new Error('Evento nao encontrado.');
+    if (event.status === 'running') {
+      await events.finishEvent(interaction, eventId);
+    } else if (event.status !== 'review') {
+      throw new Error('Este evento nao pode receber revisao de loot neste status.');
+    }
     const result = events.saveLootReview({
       eventId,
       lootTotal: parseSilver(interaction.fields.getTextInputValue('lootTotal')),
@@ -76,7 +84,7 @@ async function handleModal(interaction) {
       embeds: [events.reviewEmbed(eventId)],
       components: events.reviewComponents(eventId, 'review')
     });
-    return interaction.reply({ content: `Revisao criada. Loot liquido: ${formatSilver(result.netLoot)}. Ajuste a participacao antes de enviar ao financeiro.`, ephemeral: true });
+    return interaction.editReply({ content: `Revisao criada. Loot liquido: ${formatSilver(result.netLoot)}. Ajuste a participacao antes de enviar ao financeiro.` });
   }
 
   if (interaction.customId.startsWith('event_review:')) {
@@ -89,6 +97,7 @@ async function handleModal(interaction) {
     }
 
     if (action === 'edit_modal' || action === 'add_modal') {
+      await interaction.deferReply({ ephemeral: true });
       const targetId = cleanUserId(interaction.fields.getTextInputValue('userId'));
       const role = normalizeRole(interaction.fields.getTextInputValue('role'));
       const minutes = parseMinutes(interaction.fields.getTextInputValue('minutes'));
@@ -101,16 +110,17 @@ async function handleModal(interaction) {
         events.addParticipantReview({ eventId, actorId: interaction.user.id, discordId: targetId, role, minutes, reason });
       }
       await updateReviewMessage(interaction, eventId, messageId);
-      return interaction.reply({ content: 'Participacao atualizada e split recalculado.', ephemeral: true });
+      return interaction.editReply({ content: 'Participacao atualizada e split recalculado.' });
     }
 
     if (action === 'remove_modal') {
+      await interaction.deferReply({ ephemeral: true });
       const targetId = cleanUserId(interaction.fields.getTextInputValue('userId'));
       const reason = interaction.fields.getTextInputValue('reason') || 'Removido da revisao';
       if (!targetId) throw new Error('Informe um membro valido.');
       events.removeParticipantReview({ eventId, actorId: interaction.user.id, discordId: targetId, reason });
       await updateReviewMessage(interaction, eventId, messageId);
-      return interaction.reply({ content: 'Participante removido e split recalculado.', ephemeral: true });
+      return interaction.editReply({ content: 'Participante removido e split recalculado.' });
     }
   }
 

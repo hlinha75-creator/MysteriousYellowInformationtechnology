@@ -19,8 +19,8 @@ async function handleInteraction(interaction) {
       return await handleModal(interaction);
     }
   } catch (error) {
-    console.error('Erro em interaction:', error);
     if (error.code === 10062 || error.code === 40060) return;
+    console.error('Erro em interaction:', error);
     const payload = { content: `Erro: ${error.message}`, ephemeral: true };
     if (interaction.deferred || interaction.replied) return interaction.followUp(payload).catch(() => {});
     return interaction.reply(payload).catch(() => {});

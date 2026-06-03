@@ -58,9 +58,19 @@ async function handleButton(interaction) {
   if (scope === 'event') {
     const eventId = Number(id);
     const event = eventsRepo.getEvent(eventId);
+    if (action === 'auto_join') {
+      const role = await events.autoJoinRunningEvent(interaction, eventId);
+      const updated = eventsRepo.getEvent(eventId);
+      const voiceText = updated?.voice_channel_id ? ` Sala: <#${updated.voice_channel_id}>.` : '';
+      const moveText = interaction.member?.voice?.channel ? ' Estou te movendo para a sala.' : ' Entre em uma call primeiro ou clique na sala do evento.';
+      return interaction.reply({ content: `Voce entrou como ${roleLabel(role)}.${moveText}${voiceText}`, ephemeral: true });
+    }
     if (action === 'spectate') {
       await events.spectateEvent(interaction, eventId);
-      return interaction.reply({ content: 'Voce entrou como espectador.', ephemeral: true });
+      const updated = eventsRepo.getEvent(eventId);
+      const voiceText = updated?.voice_channel_id ? ` Sala: <#${updated.voice_channel_id}>.` : '';
+      const moveText = interaction.member?.voice?.channel ? ' Estou te movendo para a sala.' : ' Entre em uma call primeiro ou clique na sala do evento.';
+      return interaction.reply({ content: `Voce entrou como espectador. Seu tempo nao sera contado.${moveText}${voiceText}`, ephemeral: true });
     }
     if (!canManageEvent(interaction.member, event)) {
       return interaction.reply({ content: 'Somente o criador ou alguem autorizado pode gerenciar este evento.', ephemeral: true });
@@ -81,10 +91,16 @@ async function handleButton(interaction) {
       if (!can(interaction.member, 'approvePayment')) {
         return interaction.reply({ content: 'Voce nao tem permissao para aprovar pagamento.', ephemeral: true });
       }
+      const current = eventsRepo.getEvent(eventId);
+      if (!current || current.status !== 'pending_payment') {
+        await interaction.message.edit({ components: [] }).catch(() => {});
+        return interaction.reply({ content: 'Este evento nao esta pendente de pagamento. O botao foi removido.', ephemeral: true });
+      }
+      await interaction.deferReply({ ephemeral: true });
       const transactions = events.approveEventPayment({ eventId, actorId: interaction.user.id });
       await finance.notifyPositiveTransactions({ client: interaction.client, transactions });
       await interaction.message.edit({ content: `${interaction.message.content || ''}\n\nAprovado por <@${interaction.user.id}>.`, components: [] }).catch(() => {});
-      return interaction.reply({ content: 'Pagamento aprovado e saldos depositados.', ephemeral: true });
+      return interaction.editReply({ content: 'Pagamento aprovado e saldos depositados.' });
     }
     if (action === 'cancel') {
       return showModal(interaction, `event:cancel_modal:${eventId}`, 'Cancelar Evento', [
@@ -108,13 +124,14 @@ async function handleButton(interaction) {
     }
 
     if (action === 'confirm') {
+      await interaction.deferReply({ ephemeral: true });
       const result = await deposit.confirmDraft({ draftId: id, actorId: interaction.user.id, client: interaction.client });
       await interaction.message.edit({
         content: `Deposito confirmado por <@${interaction.user.id}>. ${result.participants.length} membro(s) receberam ${formatSilver(result.amount)}.`,
         embeds: [],
         components: []
       });
-      return interaction.reply({ content: 'Deposito aplicado nos saldos.', ephemeral: true });
+      return interaction.editReply({ content: 'Deposito aplicado nos saldos.' });
     }
 
     if (action === 'cancel') {
@@ -157,13 +174,14 @@ async function handleButton(interaction) {
     }
 
     if (action === 'submit') {
+      await interaction.deferReply({ ephemeral: true });
       events.submitEventToFinance({ eventId, actorId: interaction.user.id });
       await interaction.message.edit({
         content: `Evento #${eventId} enviado para aprovacao financeira.`,
         embeds: [events.reviewEmbed(eventId)],
         components: events.reviewComponents(eventId, 'finance')
       });
-      return interaction.reply({ content: 'Evento enviado ao financeiro para aprovacao.', ephemeral: true });
+      return interaction.editReply({ content: 'Evento enviado ao financeiro para aprovacao.' });
     }
   }
 

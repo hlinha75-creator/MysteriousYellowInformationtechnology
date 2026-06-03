@@ -24,6 +24,7 @@ const roles = [
 
 function eventEmbed(event, participants = []) {
   const count = (role) => participants.filter((p) => p.role === role && !p.is_spectator).length;
+  const elapsed = event.started_at ? formatDuration(Math.floor((Date.now() - Date.parse(event.started_at)) / 1000)) : '0m';
   const embed = new EmbedBuilder()
     .setTitle(event.title)
     .setFooter({ text: event.event_code })
@@ -34,6 +35,7 @@ function eventEmbed(event, participants = []) {
     return embed
       .setDescription(`**${event.description || 'Evento em andamento'}**\nEm andamento | ${event.location || 'Local nao informado'} | ${event.scheduled_time || 'Horario nao informado'}`)
       .addFields(
+        { name: 'Tempo em andamento', value: elapsed, inline: true },
         { name: 'Vagas', value: `T ${count('tank')}/${event.tank_slots} | H ${count('healer')}/${event.healer_slots} | S ${count('support')}/${event.support_slots} | DPS ${count('dps')}/${event.dps_slots}`, inline: false },
         { name: 'Voz', value: event.voice_channel_id ? `<#${event.voice_channel_id}>` : 'Sala em criacao', inline: true },
         { name: 'Criador', value: `<@${event.creator_id}>`, inline: true }
@@ -66,15 +68,20 @@ function roleOccupants(participants, role, slots) {
 function eventComponents(event) {
   if (!['created', 'running'].includes(event.status)) return [];
 
-  const select = new StringSelectMenuBuilder()
-    .setCustomId(`event:join:${event.id}`)
-    .setPlaceholder('Participar como...')
-    .addOptions(roles);
+  const rows = [];
+  if (event.status === 'created') {
+    rows.push(new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(`event:join:${event.id}`)
+        .setPlaceholder('Participar como...')
+        .addOptions(roles)
+    ));
+  }
 
-  const row1 = new ActionRowBuilder().addComponents(select);
   const buttons = event.status === 'running'
     ? [
-      new ButtonBuilder().setCustomId(`event:spectate:${event.id}`).setLabel('Espectador').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`event:auto_join:${event.id}`).setLabel('Quero participar').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`event:spectate:${event.id}`).setLabel('Assistir').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId(`event:finish:${event.id}`).setLabel('Finalizar').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId(`event:cancel:${event.id}`).setLabel('Cancelar').setStyle(ButtonStyle.Danger)
     ]
@@ -83,7 +90,8 @@ function eventComponents(event) {
       new ButtonBuilder().setCustomId(`event:cancel:${event.id}`).setLabel('Cancelar').setStyle(ButtonStyle.Danger)
     ];
 
-  return [row1, new ActionRowBuilder().addComponents(buttons)];
+  rows.push(new ActionRowBuilder().addComponents(buttons));
+  return rows;
 }
 
 async function createEventFromModal(interaction, fields) {
@@ -128,11 +136,21 @@ async function refreshEventMessage(client, eventId) {
   }
 }
 
+async function refreshRunningEventMessages(client) {
+  const events = repo.listActiveEvents();
+  for (const event of events) {
+    await refreshEventMessage(client, event.id).catch((error) => console.error(`Falha ao atualizar ${event.event_code}:`, error));
+  }
+}
+
 async function joinEvent(interaction, eventId, role) {
   const event = repo.getEvent(eventId);
   if (!event || ['cancelled', 'approved'].includes(event.status)) throw new Error('Evento indisponivel.');
   repo.upsertParticipant({ eventId, discordId: interaction.user.id, role, isSpectator: 0 });
   audit.createAuditLog({ type: 'event_joined', actorId: interaction.user.id, targetId: String(eventId), afterValue: role });
+  if (event.status === 'running') {
+    await moveMemberToEventVoice(interaction, event);
+  }
   await refreshEventMessage(interaction.client, eventId);
 }
 
@@ -141,7 +159,39 @@ async function spectateEvent(interaction, eventId) {
   if (!event || event.status !== 'running') throw new Error('Evento nao esta em andamento.');
   repo.upsertParticipant({ eventId, discordId: interaction.user.id, role: 'spectator', isSpectator: 1 });
   audit.createAuditLog({ type: 'event_spectator', actorId: interaction.user.id, targetId: String(eventId) });
+  await moveMemberToEventVoice(interaction, event);
   await refreshEventMessage(interaction.client, eventId);
+}
+
+async function autoJoinRunningEvent(interaction, eventId) {
+  const event = repo.getEvent(eventId);
+  if (!event || event.status !== 'running') throw new Error('Evento nao esta em andamento.');
+  const role = firstAvailableRole(event, repo.listParticipants(eventId));
+  if (!role) throw new Error('Nao ha vagas livres neste evento. Use Assistir se quiser acompanhar.');
+  await joinEvent(interaction, eventId, role);
+  return role;
+}
+
+function firstAvailableRole(event, participants) {
+  const order = [
+    ['tank', event.tank_slots],
+    ['healer', event.healer_slots],
+    ['support', event.support_slots],
+    ['dps', event.dps_slots]
+  ];
+  for (const [role, slots] of order) {
+    const used = participants.filter((participant) => participant.role === role && !participant.is_spectator).length;
+    if (used < slots) return role;
+  }
+  return null;
+}
+
+async function moveMemberToEventVoice(interaction, event) {
+  if (!event.voice_channel_id) return { moved: false, reason: 'missing_voice' };
+  const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+  if (!member?.voice?.channel) return { moved: false, reason: 'not_in_voice' };
+  await member.voice.setChannel(event.voice_channel_id).catch(() => {});
+  return { moved: true };
 }
 
 async function startEvent(interaction, eventId) {
@@ -433,6 +483,7 @@ async function closeAllOpenSessions(eventId, leftAt) {
 module.exports = {
   approveEventPayment,
   addParticipantReview,
+  autoJoinRunningEvent,
   cancelEvent,
   createEventFromModal,
   deleteEventMessage,
@@ -440,6 +491,7 @@ module.exports = {
   finishEvent,
   joinEvent,
   refreshEventMessage,
+  refreshRunningEventMessages,
   removeParticipantReview,
   reviewComponents,
   reviewEmbed,

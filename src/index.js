@@ -8,6 +8,7 @@ const { migrate } = require('./database/migrate');
 const { backupDatabase } = require('./database/backup');
 const registration = require('./modules/registration/registration.service');
 const voice = require('./modules/voice/voice.service');
+const events = require('./modules/events/events.service');
 const { handleInteraction } = require('./interactions/router');
 
 migrate();
@@ -29,8 +30,11 @@ const client = new Client({
   partials: [Partials.Channel]
 });
 
-client.once('ready', () => {
+client.once('clientReady', () => {
   console.log(`Notag bot online como ${client.user.tag}`);
+  setInterval(() => {
+    events.refreshRunningEventMessages(client).catch((error) => console.error('Falha ao atualizar eventos em andamento:', error));
+  }, 60000);
 });
 
 client.on('error', (error) => {
