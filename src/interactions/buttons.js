@@ -81,7 +81,8 @@ async function handleButton(interaction) {
       if (!can(interaction.member, 'approvePayment')) {
         return interaction.reply({ content: 'Voce nao tem permissao para aprovar pagamento.', ephemeral: true });
       }
-      events.approveEventPayment({ eventId, actorId: interaction.user.id });
+      const transactions = events.approveEventPayment({ eventId, actorId: interaction.user.id });
+      await finance.notifyPositiveTransactions({ client: interaction.client, transactions });
       await interaction.message.edit({ content: `${interaction.message.content || ''}\n\nAprovado por <@${interaction.user.id}>.`, components: [] }).catch(() => {});
       return interaction.reply({ content: 'Pagamento aprovado e saldos depositados.', ephemeral: true });
     }
@@ -252,7 +253,8 @@ async function handleButton(interaction) {
     if (session.actorId !== interaction.user.id) {
       return interaction.reply({ content: 'Somente quem enviou a importacao pode confirmar.', ephemeral: true });
     }
-    csv.applyBalanceImport({ preview: session.preview, actorId: interaction.user.id });
+    const transactions = csv.applyBalanceImport({ preview: session.preview, actorId: interaction.user.id });
+    await finance.notifyPositiveTransactions({ client: interaction.client, transactions });
     await interaction.message.edit({ content: `Importacao aplicada. ${session.preview.found} saldos processados.`, components: [] }).catch(() => {});
     return interaction.reply({ content: 'CSV importado e saldos atualizados.', ephemeral: true });
   }

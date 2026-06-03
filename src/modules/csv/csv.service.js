@@ -117,10 +117,11 @@ function takeImportPreview(id) {
 
 const applyBalanceImport = transaction(({ preview, actorId }) => {
   backupDatabase('before_csv_import');
+  const transactions = [];
   for (const change of preview.changes) {
     const diff = change.after - change.before;
     if (diff !== 0) {
-      finance.applyBalanceTransaction({
+      const item = {
         type: 'csv_import',
         userId: change.userId,
         amount: diff,
@@ -128,7 +129,9 @@ const applyBalanceImport = transaction(({ preview, actorId }) => {
         referenceType: 'csv_import',
         referenceId: null,
         createdBy: actorId
-      });
+      };
+      finance.applyBalanceTransaction(item);
+      transactions.push(item);
     }
   }
   audit.createAuditLog({
@@ -142,6 +145,7 @@ const applyBalanceImport = transaction(({ preview, actorId }) => {
       totalAfter: preview.totalAfter
     }
   });
+  return transactions;
 });
 
 module.exports = {

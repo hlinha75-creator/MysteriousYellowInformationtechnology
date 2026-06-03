@@ -2,6 +2,7 @@ const { transaction } = require('../../database/connection');
 const { backupDatabase } = require('../../database/backup');
 const audit = require('../audit/audit.repository');
 const repo = require('./finance.repository');
+const { formatSilver } = require('../../utils/silver');
 
 function applyBalanceTransaction({ type, userId, amount, reason, referenceType, referenceId, createdBy }) {
   repo.ensureBalance(userId);
@@ -35,6 +36,33 @@ const applyManyTransactions = transaction((items) => {
   backupDatabase('before_finance_transaction');
   return items.map((item) => applyBalanceTransaction(item));
 });
+
+async function notifyPositiveTransactions({ client, transactions }) {
+  if (!client) return;
+  for (const item of transactions) {
+    if (item.amount <= 0) continue;
+    await notifyBalanceReceived({
+      client,
+      userId: item.userId,
+      amount: item.amount,
+      reason: item.reason
+    });
+  }
+}
+
+async function notifyBalanceReceived({ client, userId, amount, reason }) {
+  try {
+    const user = await client.users.fetch(userId);
+    await user.send(`Voce recebeu ${formatSilver(amount)} de prata no seu saldo.${reason ? ` Motivo: ${reason}` : ''}`);
+  } catch (error) {
+    audit.createAuditLog({
+      type: 'balance_dm_failed',
+      targetId: userId,
+      afterValue: amount,
+      reason: error.message
+    });
+  }
+}
 
 function requestWithdraw({ userId, amount, note }) {
   return repo.createWithdrawRequest({ userId, amount, note });
@@ -80,6 +108,7 @@ module.exports = {
   applyBalanceTransaction,
   applyManyTransactions,
   approveWithdraw,
+  notifyPositiveTransactions,
   payWithdraw,
   requestWithdraw
 };

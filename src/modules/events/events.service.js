@@ -309,8 +309,9 @@ const approveEventPayment = transaction(({ eventId, actorId }) => {
   if (!event || event.status !== 'pending_payment') throw new Error('Evento nao esta pendente de pagamento.');
   backupDatabase('before_event_payment');
   const participants = repo.listParticipants(eventId).filter((participant) => !participant.is_spectator && participant.payout_amount > 0);
+  const transactions = [];
   for (const participant of participants) {
-    finance.applyBalanceTransaction({
+    const item = {
       type: 'event_payout',
       userId: participant.discord_id,
       amount: participant.payout_amount,
@@ -318,7 +319,9 @@ const approveEventPayment = transaction(({ eventId, actorId }) => {
       referenceType: 'event',
       referenceId: String(event.id),
       createdBy: actorId
-    });
+    };
+    finance.applyBalanceTransaction(item);
+    transactions.push(item);
   }
   repo.updateEvent(eventId, { status: 'approved' });
   const review = repo.getReview(eventId);
@@ -334,6 +337,7 @@ const approveEventPayment = transaction(({ eventId, actorId }) => {
     });
   }
   audit.createAuditLog({ type: 'event_payment_approved', actorId, targetId: String(eventId), reason: event.event_code });
+  return transactions;
 });
 
 async function deleteEventMessage(client, eventId) {

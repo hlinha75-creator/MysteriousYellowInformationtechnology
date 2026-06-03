@@ -61,7 +61,7 @@ async function confirmDraft({ draftId, actorId, client }) {
 
   const amount = perMemberAmount(draft);
   const participants = Array.from(draft.participants);
-  finance.applyManyTransactions(participants.map((userId) => ({
+  const transactions = participants.map((userId) => ({
     type: 'quick_deposit',
     userId,
     amount,
@@ -69,7 +69,9 @@ async function confirmDraft({ draftId, actorId, client }) {
     referenceType: 'quick_deposit',
     referenceId: draft.id,
     createdBy: actorId
-  })));
+  }));
+  finance.applyManyTransactions(transactions);
+  await finance.notifyPositiveTransactions({ client, transactions });
 
   audit.createAuditLog({
     type: 'quick_deposit_confirmed',
