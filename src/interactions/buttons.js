@@ -1,4 +1,4 @@
-const { ActionRowBuilder, ModalBuilder, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const { can } = require('../config/permissions');
 const eventsRepo = require('../modules/events/events.repository');
 const events = require('../modules/events/events.service');
@@ -34,7 +34,7 @@ function canManageEvent(member, event) {
 }
 
 async function handleButton(interaction) {
-  const [scope, action, id] = interaction.customId.split(':');
+  const [scope, action, id, extra] = interaction.customId.split(':');
 
   if (interaction.customId === 'panel:create_event') {
     if (!can(interaction.member, 'createEvent')) {
@@ -80,12 +80,28 @@ async function handleButton(interaction) {
       return interaction.reply({ content: `Evento iniciado. Sala criada: ${voice.name}.`, ephemeral: true });
     }
     if (action === 'finish') {
-      return showModal(interaction, `event:loot:${eventId}`, 'Loot do Evento', [
-        textInput('lootTotal', 'Loot total'),
-        textInput('repair', 'Reparo'),
-        textInput('silverBags', 'Sacos de prata'),
-        textInput('taxPercent', 'Taxa % 0 a 100')
-      ]);
+      if (event.creator_id !== interaction.user.id) {
+        return interaction.reply({
+          content: 'Voce esta ciente que esse evento nao foi criado por voce e que vai interromper o evento do criador, neh?',
+          components: [
+            new ActionRowBuilder().addComponents(
+              new ButtonBuilder().setCustomId(`event:confirm_finish:${eventId}:${interaction.user.id}`).setLabel('Sim, finalizar').setStyle(ButtonStyle.Danger),
+              new ButtonBuilder().setCustomId(`event:abort_finish:${eventId}:${interaction.user.id}`).setLabel('Cancelar').setStyle(ButtonStyle.Secondary)
+            )
+          ],
+          ephemeral: true
+        });
+      }
+      return showLootModal(interaction, eventId);
+    }
+    if (action === 'confirm_finish') {
+      if (extra !== interaction.user.id) {
+        return interaction.reply({ content: 'Essa confirmacao nao foi criada para voce.', ephemeral: true });
+      }
+      return showLootModal(interaction, eventId);
+    }
+    if (action === 'abort_finish') {
+      return interaction.reply({ content: 'Finalizacao cancelada.', ephemeral: true });
     }
     if (action === 'approve') {
       if (!can(interaction.member, 'approvePayment')) {
@@ -99,7 +115,11 @@ async function handleButton(interaction) {
       await interaction.deferReply({ ephemeral: true });
       const transactions = events.approveEventPayment({ eventId, actorId: interaction.user.id });
       await finance.notifyPositiveTransactions({ client: interaction.client, transactions });
-      await interaction.message.edit({ content: `${interaction.message.content || ''}\n\nAprovado por <@${interaction.user.id}>.`, components: [] }).catch(() => {});
+      await interaction.message.edit({
+        content: `Evento #${eventId} finalizado por <@${interaction.user.id}>.`,
+        embeds: [events.reviewEmbed(eventId)],
+        components: []
+      }).catch(() => {});
       return interaction.editReply({ content: 'Pagamento aprovado e saldos depositados.' });
     }
     if (action === 'cancel') {
@@ -282,6 +302,15 @@ async function handleButton(interaction) {
     await interaction.message.edit({ content: 'Importacao cancelada.', components: [] }).catch(() => {});
     return interaction.reply({ content: 'Importacao cancelada.', ephemeral: true });
   }
+}
+
+function showLootModal(interaction, eventId) {
+  return showModal(interaction, `event:loot:${eventId}`, 'Loot do Evento', [
+    textInput('lootTotal', 'Loot total'),
+    textInput('repair', 'Reparo'),
+    textInput('silverBags', 'Sacos de prata'),
+    textInput('taxPercent', 'Taxa % 0 a 100')
+  ]);
 }
 
 module.exports = {

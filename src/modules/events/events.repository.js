@@ -145,6 +145,12 @@ function getReview(eventId) {
   return getDatabase().prepare('SELECT * FROM event_reviews WHERE event_id = ?').get(eventId);
 }
 
+function markReviewApproved({ eventId, approvedBy }) {
+  return getDatabase()
+    .prepare("UPDATE event_reviews SET status = 'approved', approved_by = ?, approved_at = CURRENT_TIMESTAMP WHERE event_id = ?")
+    .run(approvedBy, eventId);
+}
+
 module.exports = {
   closeOpenVoiceSession,
   createEvent,
@@ -157,6 +163,7 @@ module.exports = {
   getReview,
   listActiveEvents,
   listParticipants,
+  markReviewApproved,
   refreshParticipantSeconds,
   removeParticipant,
   setParticipantPayout,

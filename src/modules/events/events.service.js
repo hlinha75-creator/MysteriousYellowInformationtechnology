@@ -374,18 +374,7 @@ const approveEventPayment = transaction(({ eventId, actorId }) => {
     transactions.push(item);
   }
   repo.updateEvent(eventId, { status: 'approved' });
-  const review = repo.getReview(eventId);
-  if (review) {
-    repo.upsertReview({
-      eventId,
-      lootTotal: review.loot_total,
-      repair: review.repair,
-      silverBags: review.silver_bags,
-      taxPercent: review.tax_percent,
-      netLoot: review.net_loot,
-      status: 'approved'
-    });
-  }
+  repo.markReviewApproved({ eventId, approvedBy: actorId });
   audit.createAuditLog({ type: 'event_payment_approved', actorId, targetId: String(eventId), reason: event.event_code });
   return transactions;
 });
@@ -406,7 +395,10 @@ function reviewEmbed(eventId) {
     const seconds = participant.manual_seconds ?? participant.calculated_seconds ?? 0;
     return `<@${participant.discord_id}> | ${roleLabel(participant.role)} | ${formatDuration(seconds)} | ${formatSilver(participant.payout_amount)}`;
   });
-  const help = event.status === 'pending_payment'
+  const finalizedBy = review?.approved_by ? `<@${review.approved_by}>` : 'desconhecido';
+  const help = event.status === 'approved'
+    ? `Finalizado por ${finalizedBy}.`
+    : event.status === 'pending_payment'
     ? 'Aguardando staff/tesoureiro/adm aprovar o pagamento.'
     : [
       'Editar membro: escolha alguem na lista e ajuste funcao/tempo.',
@@ -416,11 +408,11 @@ function reviewEmbed(eventId) {
     ].join('\n');
 
   return new EmbedBuilder()
-    .setTitle(event.status === 'pending_payment' ? 'Pagamento pendente' : 'Revisao de participacao')
+    .setTitle(event.status === 'approved' ? 'Evento finalizado' : event.status === 'pending_payment' ? 'Pagamento pendente' : 'Revisao de participacao')
     .setDescription(`**${event.title}**\n${event.event_code}`)
     .addFields(
       { name: 'Loot liquido', value: formatSilver(review?.net_loot || 0), inline: true },
-      { name: 'Como ajustar', value: help, inline: false },
+      { name: event.status === 'approved' ? 'Status' : 'Como ajustar', value: help, inline: false },
       { name: 'Participantes', value: lines.length ? lines.slice(0, 20).join('\n') : 'Nenhum participante com tempo contabilizado.', inline: false }
     )
     .setColor(0xd69e2e)
