@@ -1,0 +1,23 @@
+{
+  "name": "notag-bot",
+  "version": "1.0.0",
+  "description": "Bot Discord da guild Notag para eventos, loot split, registro e saldos.",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node --no-warnings src/index.js",
+    "deploy:commands": "node --no-warnings scripts/deployCommands.js",
+    "clear:commands": "node --no-warnings scripts/clearCommands.js",
+    "backup:db": "node --no-warnings scripts/backupDatabase.js",
+    "restore:db": "node --no-warnings scripts/restoreDatabase.js"
+  },
+  "dependencies": {
+    "@discordjs/builders": "^1.8.2",
+    "better-sqlite3": "^11.9.1",
+    "discord.js": "^14.15.3",
+    "dotenv": "^16.4.5"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

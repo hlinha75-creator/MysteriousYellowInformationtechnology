@@ -1,0 +1,52 @@
+const { getDatabase } = require('../../database/connection');
+
+function upsertUser({ discordId, discordName, albionName, registrationStatus }) {
+  getDatabase()
+    .prepare(`
+      INSERT INTO users (discord_id, discord_name, albion_name, registration_status, updated_at)
+      VALUES (@discordId, @discordName, @albionName, @registrationStatus, CURRENT_TIMESTAMP)
+      ON CONFLICT(discord_id) DO UPDATE SET
+        discord_name = excluded.discord_name,
+        albion_name = COALESCE(excluded.albion_name, users.albion_name),
+        registration_status = excluded.registration_status,
+        updated_at = CURRENT_TIMESTAMP
+    `)
+    .run({
+      discordId,
+      discordName,
+      albionName: albionName || null,
+      registrationStatus: registrationStatus || 'unregistered'
+    });
+}
+
+function getUser(discordId) {
+  return getDatabase().prepare('SELECT * FROM users WHERE discord_id = ?').get(discordId);
+}
+
+function createRegistration({ discordId, albionName }) {
+  return getDatabase()
+    .prepare('INSERT INTO registrations (discord_id, albion_name) VALUES (?, ?)')
+    .run(discordId, albionName);
+}
+
+function getRegistration(id) {
+  return getDatabase().prepare('SELECT * FROM registrations WHERE id = ?').get(id);
+}
+
+function updateRegistration({ id, status, reviewedBy, note }) {
+  return getDatabase()
+    .prepare(`
+      UPDATE registrations
+      SET status = ?, reviewed_by = ?, review_note = ?, reviewed_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `)
+    .run(status, reviewedBy, note || null, id);
+}
+
+module.exports = {
+  createRegistration,
+  getRegistration,
+  getUser,
+  updateRegistration,
+  upsertUser
+};

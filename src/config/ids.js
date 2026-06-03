@@ -1,0 +1,32 @@
+module.exports = {
+  guildId: process.env.GUILD_ID || '1480232409105699030',
+  clientId: process.env.CLIENT_ID || '1465328470312747181',
+  roles: {
+    adm: '1481251362447823010',
+    staff: '1481251363013791754',
+    treasurer: '1481251364523741376',
+    caller: '1481251363705851954',
+    recruiter: '1481251365064806451',
+    member: '1481251365131911314',
+    guest: '1481251365857525782',
+    noTag: '1495210632839172107'
+  },
+  channels: {
+    createEvent: '1481397653316178022',
+    participate: '1481397657065754797',
+    deposit: '1481251393967886518',
+    finance: '1481318081145077812',
+    consultBalance: '1481284047526166731',
+    bankLogs: '1481251396413296773',
+    guildBalances: '1481251411726438435',
+    adminPanel: '1486152824067719258',
+    archive: '1499357332231163924',
+    register: '1492707388552253525',
+    registrationRequests: '1482334949540626462',
+    waitingVoice: '1492707400485179664'
+  },
+  categories: {
+    activeEvents: '1481251398246203402',
+    closedEvents: '1511385037864570970'
+  }
+};
