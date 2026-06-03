@@ -35,6 +35,9 @@ client.once('clientReady', () => {
   setInterval(() => {
     events.refreshRunningEventMessages(client).catch((error) => console.error('Falha ao atualizar eventos em andamento:', error));
   }, 60000);
+  setInterval(() => {
+    events.checkEventStartWarnings(client).catch((error) => console.error('Falha ao verificar avisos de eventos:', error));
+  }, 30000);
 });
 
 client.on('error', (error) => {

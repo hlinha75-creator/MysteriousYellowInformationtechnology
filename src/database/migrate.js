@@ -160,6 +160,19 @@ const migrations = [
         );
       `);
     }
+  },
+  {
+    version: 2,
+    name: 'event_warning_role',
+    up(db) {
+      const columns = db.prepare('PRAGMA table_info(events)').all().map((column) => column.name);
+      if (!columns.includes('warning_role_id')) {
+        db.exec('ALTER TABLE events ADD COLUMN warning_role_id TEXT');
+      }
+      if (!columns.includes('warning_sent')) {
+        db.exec('ALTER TABLE events ADD COLUMN warning_sent INTEGER NOT NULL DEFAULT 0');
+      }
+    }
   }
 ];
 

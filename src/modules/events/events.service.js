@@ -16,10 +16,10 @@ const { formatSilver } = require('../../utils/silver');
 const { backupDatabase } = require('../../database/backup');
 
 const roles = [
-  { label: 'Tank', value: 'tank' },
-  { label: 'Healer', value: 'healer' },
-  { label: 'Suporte', value: 'support' },
-  { label: 'DPS', value: 'dps' }
+  { label: '🛡️ Tank', value: 'tank' },
+  { label: '💚 Healer', value: 'healer' },
+  { label: '🌀 Suporte', value: 'support' },
+  { label: '⚔️ DPS', value: 'dps' }
 ];
 
 function eventEmbed(event, participants = []) {
@@ -27,7 +27,6 @@ function eventEmbed(event, participants = []) {
   const elapsed = event.started_at ? formatDuration(Math.floor((Date.now() - Date.parse(event.started_at)) / 1000)) : '0m';
   const embed = new EmbedBuilder()
     .setTitle(event.title)
-    .setFooter({ text: event.event_code })
     .setColor(event.status === 'running' ? 0x38a169 : event.status === 'cancelled' ? 0xe53e3e : 0x3182ce)
     .setTimestamp(new Date());
 
@@ -36,7 +35,7 @@ function eventEmbed(event, participants = []) {
       .setDescription(`**${event.description || 'Evento em andamento'}**\nEm andamento | ${event.location || 'Local nao informado'} | ${event.scheduled_time || 'Horario nao informado'}`)
       .addFields(
         { name: 'Tempo em andamento', value: elapsed, inline: true },
-        { name: 'Vagas', value: `T ${count('tank')}/${event.tank_slots} | H ${count('healer')}/${event.healer_slots} | S ${count('support')}/${event.support_slots} | DPS ${count('dps')}/${event.dps_slots}`, inline: false },
+        { name: 'Vagas', value: `${roleLabel('tank')} ${count('tank')}/${event.tank_slots} | ${roleLabel('healer')} ${count('healer')}/${event.healer_slots} | ${roleLabel('support')} ${count('support')}/${event.support_slots} | ${roleLabel('dps')} ${count('dps')}/${event.dps_slots}`, inline: false },
         { name: 'Voz', value: event.voice_channel_id ? `<#${event.voice_channel_id}>` : 'Sala em criacao', inline: true },
         { name: 'Criador', value: `<@${event.creator_id}>`, inline: true }
       );
@@ -45,14 +44,13 @@ function eventEmbed(event, participants = []) {
   return embed
     .setDescription(`**${event.description || 'Sem descricao.'}**`)
     .addFields(
-      { name: 'Codigo', value: event.event_code, inline: true },
       { name: 'Status', value: event.status, inline: true },
       { name: 'Local', value: event.location || 'Nao informado', inline: true },
       { name: 'Horario UTC-3', value: event.scheduled_time || 'Nao informado', inline: true },
-      { name: 'Tanks', value: roleOccupants(participants, 'tank', event.tank_slots), inline: false },
-      { name: 'Healers', value: roleOccupants(participants, 'healer', event.healer_slots), inline: false },
-      { name: 'Suportes', value: roleOccupants(participants, 'support', event.support_slots), inline: false },
-      { name: 'DPS', value: roleOccupants(participants, 'dps', event.dps_slots), inline: false },
+      { name: roleLabel('tank'), value: roleOccupants(participants, 'tank', event.tank_slots), inline: false },
+      { name: roleLabel('healer'), value: roleOccupants(participants, 'healer', event.healer_slots), inline: false },
+      { name: roleLabel('support'), value: roleOccupants(participants, 'support', event.support_slots), inline: false },
+      { name: roleLabel('dps'), value: roleOccupants(participants, 'dps', event.dps_slots), inline: false },
       { name: 'Criador', value: `<@${event.creator_id}>`, inline: true }
     );
 }
@@ -82,6 +80,7 @@ function eventComponents(event) {
     ? [
       new ButtonBuilder().setCustomId(`event:auto_join:${event.id}`).setLabel('Quero participar').setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId(`event:spectate:${event.id}`).setLabel('Assistir').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`event:pause:${event.id}`).setLabel('Pausar participação').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId(`event:finish:${event.id}`).setLabel('Finalizar').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId(`event:cancel:${event.id}`).setLabel('Cancelar').setStyle(ButtonStyle.Danger)
     ]
@@ -154,6 +153,23 @@ async function joinEvent(interaction, eventId, role) {
   await refreshEventMessage(interaction.client, eventId);
 }
 
+async function pauseParticipation(interaction, eventId) {
+  const event = repo.getEvent(eventId);
+  if (!event || event.status !== 'running') throw new Error('Evento nao esta em andamento.');
+  const participant = repo.getParticipant({ eventId, discordId: interaction.user.id });
+  if (!participant || participant.is_spectator) throw new Error('Voce nao esta participando deste evento.');
+  const now = new Date().toISOString();
+  closeParticipantOpenSession(eventId, interaction.user.id, now);
+  repo.refreshParticipantSeconds(eventId);
+  const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+  const waiting = await interaction.guild.channels.fetch(ids.channels.waitingVoice).catch(() => null);
+  if (member?.voice?.channelId === event.voice_channel_id && waiting) {
+    await member.voice.setChannel(waiting).catch(() => {});
+  }
+  audit.createAuditLog({ type: 'event_participation_paused', actorId: interaction.user.id, targetId: String(eventId), reason: 'Pausa manual' });
+  await refreshEventMessage(interaction.client, eventId);
+}
+
 async function spectateEvent(interaction, eventId) {
   const event = repo.getEvent(eventId);
   if (!event || event.status !== 'running') throw new Error('Evento nao esta em andamento.');
@@ -166,7 +182,8 @@ async function spectateEvent(interaction, eventId) {
 async function autoJoinRunningEvent(interaction, eventId) {
   const event = repo.getEvent(eventId);
   if (!event || event.status !== 'running') throw new Error('Evento nao esta em andamento.');
-  const role = firstAvailableRole(event, repo.listParticipants(eventId));
+  const existing = repo.getParticipant({ eventId, discordId: interaction.user.id });
+  const role = existing && !existing.is_spectator ? existing.role : firstAvailableRole(event, repo.listParticipants(eventId));
   if (!role) throw new Error('Nao ha vagas livres neste evento. Use Assistir se quiser acompanhar.');
   await joinEvent(interaction, eventId, role);
   return role;
@@ -208,6 +225,7 @@ async function startEvent(interaction, eventId) {
 
   const now = new Date().toISOString();
   repo.updateEvent(eventId, { status: 'running', voice_channel_id: voice.id, started_at: now });
+  await removeWarningRole(interaction.guild, repo.getEvent(eventId)).catch(() => {});
   const participants = repo.listParticipants(eventId).filter((participant) => !participant.is_spectator);
   for (const participant of participants) {
     const member = await interaction.guild.members.fetch(participant.discord_id).catch(() => null);
@@ -239,6 +257,7 @@ async function finishEvent(interaction, eventId) {
     }
   }
   await voice?.delete(`Evento ${event.event_code} finalizado`).catch(() => {});
+  await removeWarningRole(interaction.guild, repo.getEvent(eventId)).catch(() => {});
 
   audit.createAuditLog({ type: 'event_finished', actorId: interaction.user.id, targetId: String(eventId) });
   await deleteEventMessage(interaction.client, eventId);
@@ -250,6 +269,7 @@ async function cancelEvent(interaction, eventId, reason) {
   repo.updateEvent(eventId, { status: 'cancelled', cancel_reason: reason });
   const voice = event.voice_channel_id ? await interaction.guild.channels.fetch(event.voice_channel_id).catch(() => null) : null;
   await voice?.delete(`Evento cancelado: ${reason}`).catch(() => {});
+  await removeWarningRole(interaction.guild, event).catch(() => {});
   audit.createAuditLog({ type: 'event_cancelled', actorId: interaction.user.id, targetId: String(eventId), reason });
   await deleteEventMessage(interaction.client, eventId);
 }
@@ -450,10 +470,10 @@ function formatDuration(seconds) {
 
 function roleLabel(role) {
   const labels = {
-    tank: 'Tank',
-    healer: 'Healer',
-    support: 'Suporte',
-    dps: 'DPS',
+    tank: '🛡️ Tank',
+    healer: '💚 Healer',
+    support: '🌀 Suporte',
+    dps: '⚔️ DPS',
     spectator: 'Espectador'
   };
   return labels[role] || role;
@@ -464,12 +484,74 @@ async function closeAllOpenSessions(eventId, leftAt) {
   if (!event) return;
   const participants = repo.listParticipants(eventId);
   for (const participant of participants) {
-    const open = repo.getOpenVoiceSession({ eventId, discordId: participant.discord_id });
-    if (open) {
-      const seconds = Math.max(0, Math.floor((Date.parse(leftAt) - Date.parse(open.joined_at)) / 1000));
-      repo.closeOpenVoiceSession({ eventId, discordId: participant.discord_id, leftAt, seconds });
-    }
+    closeParticipantOpenSession(eventId, participant.discord_id, leftAt);
   }
+}
+
+function closeParticipantOpenSession(eventId, discordId, leftAt) {
+  const open = repo.getOpenVoiceSession({ eventId, discordId });
+  if (open) {
+    const seconds = Math.max(0, Math.floor((Date.parse(leftAt) - Date.parse(open.joined_at)) / 1000));
+    repo.closeOpenVoiceSession({ eventId, discordId, leftAt, seconds });
+  }
+}
+
+async function checkEventStartWarnings(client) {
+  const events = repo.listPendingWarningEvents();
+  for (const event of events) {
+    const startAt = parseUtcMinus3EventTime(event.scheduled_time);
+    if (!startAt) continue;
+    const msUntilStart = startAt.getTime() - Date.now();
+    if (msUntilStart > 60000 || msUntilStart < -60000) continue;
+    await sendEventStartWarning(client, event).catch((error) => console.error(`Falha ao avisar ${event.event_code}:`, error));
+  }
+}
+
+async function sendEventStartWarning(client, event) {
+  const guild = await client.guilds.fetch(ids.guildId);
+  const participants = repo.listParticipants(event.id).filter((participant) => !participant.is_spectator);
+  if (participants.length === 0) {
+    repo.updateEvent(event.id, { warning_sent: 1 });
+    return;
+  }
+
+  const role = await guild.roles.create({
+    name: `Evento ${event.event_code}`,
+    mentionable: true,
+    reason: `Aviso temporario do evento ${event.event_code}`
+  });
+
+  for (const participant of participants) {
+    const member = await guild.members.fetch(participant.discord_id).catch(() => null);
+    await member?.roles.add(role).catch(() => {});
+  }
+
+  repo.updateEvent(event.id, { warning_role_id: role.id, warning_sent: 1 });
+  const channel = await client.channels.fetch(ids.channels.participate);
+  await channel.send(`${role} falta 1 minuto para o evento **${event.title}** começar. O evento nao inicia automaticamente; aguardem o criador iniciar.`);
+  audit.createAuditLog({ type: 'event_start_warning_sent', targetId: String(event.id), afterValue: role.id, reason: event.event_code });
+}
+
+async function removeWarningRole(guild, event) {
+  if (!event?.warning_role_id) return;
+  const role = await guild.roles.fetch(event.warning_role_id).catch(() => null);
+  await role?.delete(`Removendo cargo temporario do evento ${event.event_code}`).catch(() => {});
+  repo.updateEvent(event.id, { warning_role_id: null });
+}
+
+function parseUtcMinus3EventTime(value) {
+  const text = String(value || '').trim();
+  const match = text.match(/(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+  const now = new Date();
+  const utcMinus3Now = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+  const year = utcMinus3Now.getUTCFullYear();
+  const month = utcMinus3Now.getUTCMonth();
+  const day = utcMinus3Now.getUTCDate();
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  const startUtc = new Date(Date.UTC(year, month, day, hour + 3, minute, 0));
+  return startUtc;
 }
 
 module.exports = {
@@ -477,11 +559,13 @@ module.exports = {
   addParticipantReview,
   autoJoinRunningEvent,
   cancelEvent,
+  checkEventStartWarnings,
   createEventFromModal,
   deleteEventMessage,
   editParticipantReview,
   finishEvent,
   joinEvent,
+  pauseParticipation,
   refreshEventMessage,
   refreshRunningEventMessages,
   removeParticipantReview,

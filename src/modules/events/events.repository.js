@@ -35,6 +35,12 @@ function listActiveEvents() {
   return getDatabase().prepare("SELECT * FROM events WHERE status = 'running'").all();
 }
 
+function listPendingWarningEvents() {
+  return getDatabase()
+    .prepare("SELECT * FROM events WHERE status = 'created' AND COALESCE(warning_sent, 0) = 0 AND scheduled_time IS NOT NULL")
+    .all();
+}
+
 function updateEvent(id, patch) {
   const entries = Object.entries(patch).filter(([, value]) => value !== undefined);
   if (entries.length === 0) return getEvent(id);
@@ -162,6 +168,7 @@ module.exports = {
   getParticipant,
   getReview,
   listActiveEvents,
+  listPendingWarningEvents,
   listParticipants,
   markReviewApproved,
   refreshParticipantSeconds,

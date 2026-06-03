@@ -1,5 +1,5 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-const { can } = require('../config/permissions');
+const { can, hasRole, isOwner } = require('../config/permissions');
 const eventsRepo = require('../modules/events/events.repository');
 const events = require('../modules/events/events.service');
 const financeRepo = require('../modules/finance/finance.repository');
@@ -31,6 +31,10 @@ function canManageEvent(member, event) {
   if (!event) return false;
   if (event.creator_id === member.id) return true;
   return can(member, 'assumeEvent');
+}
+
+function canForceStartFinish(member) {
+  return isOwner(member) || hasRole(member, 'staff') || hasRole(member, 'adm');
 }
 
 async function handleButton(interaction) {
@@ -72,15 +76,50 @@ async function handleButton(interaction) {
       const moveText = interaction.member?.voice?.channel ? ' Estou te movendo para a sala.' : ' Entre em uma call primeiro ou clique na sala do evento.';
       return interaction.reply({ content: `Voce entrou como espectador. Seu tempo nao sera contado.${moveText}${voiceText}`, ephemeral: true });
     }
+    if (action === 'pause') {
+      await events.pauseParticipation(interaction, eventId);
+      return interaction.reply({ content: 'Sua participacao foi pausada. Seu tempo parou de contar.', ephemeral: true });
+    }
     if (!canManageEvent(interaction.member, event)) {
       return interaction.reply({ content: 'Somente o criador ou alguem autorizado pode gerenciar este evento.', ephemeral: true });
     }
     if (action === 'start') {
+      if (event.creator_id !== interaction.user.id) {
+        if (!canForceStartFinish(interaction.member)) {
+          return interaction.reply({ content: 'Somente o criador do evento pode iniciar. Staff/ADM podem iniciar com confirmacao.', ephemeral: true });
+        }
+        return interaction.reply({
+          content: 'Voce esta ciente que esse evento nao foi criado por voce e que vai iniciar o evento do criador, neh?',
+          components: [
+            new ActionRowBuilder().addComponents(
+              new ButtonBuilder().setCustomId(`event:confirm_start:${eventId}:${interaction.user.id}`).setLabel('Sim, iniciar').setStyle(ButtonStyle.Danger),
+              new ButtonBuilder().setCustomId(`event:abort_start:${eventId}:${interaction.user.id}`).setLabel('Cancelar').setStyle(ButtonStyle.Secondary)
+            )
+          ],
+          ephemeral: true
+        });
+      }
       const voice = await events.startEvent(interaction, eventId);
       return interaction.reply({ content: `Evento iniciado. Sala criada: ${voice.name}.`, ephemeral: true });
     }
+    if (action === 'confirm_start') {
+      if (extra !== interaction.user.id) {
+        return interaction.reply({ content: 'Essa confirmacao nao foi criada para voce.', ephemeral: true });
+      }
+      if (!canForceStartFinish(interaction.member)) {
+        return interaction.reply({ content: 'Somente Staff/ADM podem confirmar inicio de evento de outro criador.', ephemeral: true });
+      }
+      const voice = await events.startEvent(interaction, eventId);
+      return interaction.reply({ content: `Evento iniciado. Sala criada: ${voice.name}.`, ephemeral: true });
+    }
+    if (action === 'abort_start') {
+      return interaction.reply({ content: 'Inicio cancelado.', ephemeral: true });
+    }
     if (action === 'finish') {
       if (event.creator_id !== interaction.user.id) {
+        if (!canForceStartFinish(interaction.member)) {
+          return interaction.reply({ content: 'Somente o criador do evento pode finalizar. Staff/ADM podem finalizar com confirmacao.', ephemeral: true });
+        }
         return interaction.reply({
           content: 'Voce esta ciente que esse evento nao foi criado por voce e que vai interromper o evento do criador, neh?',
           components: [
@@ -97,6 +136,9 @@ async function handleButton(interaction) {
     if (action === 'confirm_finish') {
       if (extra !== interaction.user.id) {
         return interaction.reply({ content: 'Essa confirmacao nao foi criada para voce.', ephemeral: true });
+      }
+      if (!canForceStartFinish(interaction.member)) {
+        return interaction.reply({ content: 'Somente Staff/ADM podem confirmar finalizacao de evento de outro criador.', ephemeral: true });
       }
       return showLootModal(interaction, eventId);
     }
