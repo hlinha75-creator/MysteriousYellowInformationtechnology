@@ -410,6 +410,7 @@ async function deleteEventMessage(client, eventId) {
 function reviewEmbed(eventId) {
   const event = repo.getEvent(eventId);
   const review = repo.getReview(eventId);
+  repo.refreshParticipantSeconds(eventId);
   const participants = repo.listParticipants(eventId).filter((participant) => !participant.is_spectator);
   const lines = participants.map((participant) => {
     const seconds = participant.manual_seconds ?? participant.calculated_seconds ?? 0;

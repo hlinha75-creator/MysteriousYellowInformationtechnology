@@ -1,4 +1,4 @@
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder } = require('discord.js');
 const { can, hasRole, isOwner } = require('../config/permissions');
 const eventsRepo = require('../modules/events/events.repository');
 const events = require('../modules/events/events.service');
@@ -63,7 +63,15 @@ async function handleButton(interaction) {
     const eventId = Number(id);
     const event = eventsRepo.getEvent(eventId);
     if (action === 'auto_join') {
-      const role = await events.autoJoinRunningEvent(interaction, eventId);
+      let role;
+      try {
+        role = await events.autoJoinRunningEvent(interaction, eventId);
+      } catch (error) {
+        if (error.message.includes('Nao ha vagas livres')) {
+          return interaction.reply({ content: 'Nao ha vagas livres neste evento. Use Assistir se quiser acompanhar.', ephemeral: true });
+        }
+        throw error;
+      }
       const updated = eventsRepo.getEvent(eventId);
       const voiceText = updated?.voice_channel_id ? ` Sala: <#${updated.voice_channel_id}>.` : '';
       const moveText = interaction.member?.voice?.channel ? ' Estou te movendo para a sala.' : ' Entre em uma call primeiro ou clique na sala do evento.';
@@ -212,25 +220,24 @@ async function handleButton(interaction) {
 
     if (action === 'edit') {
       return interaction.reply({
-        content: 'Escolha o membro que deseja editar:',
-        components: [participantSelect(eventId, interaction.message.id, 'edit')],
+        content: 'Escolha o membro que deseja editar usando a busca do Discord:',
+        components: [reviewUserSelect(eventId, interaction.message.id, 'edit', 'Buscar membro para editar')],
         ephemeral: true
       });
     }
 
     if (action === 'add') {
-      return showModal(interaction, `event_review:add_modal:${eventId}:${interaction.message.id}`, 'Adicionar membro ao split', [
-        textInput('userId', 'Membro', true, 'Ex: @Jogador ou 123456789012345678'),
-        textInput('role', 'Funcao', true, 'Ex: tank, healer, sup, suporte, dps, dano'),
-        textInput('minutes', 'Tempo contado em minutos', true, 'Ex: 60 para 1 hora'),
-        textInput('reason', 'Motivo da inclusao', false, 'Ex: entrou depois e nao clicou participar')
-      ]);
+      return interaction.reply({
+        content: 'Escolha o membro que deseja adicionar usando a busca do Discord:',
+        components: [reviewUserSelect(eventId, interaction.message.id, 'add', 'Buscar membro para adicionar')],
+        ephemeral: true
+      });
     }
 
     if (action === 'remove') {
       return interaction.reply({
-        content: 'Escolha o membro que deseja remover:',
-        components: [participantSelect(eventId, interaction.message.id, 'remove')],
+        content: 'Escolha o membro que deseja remover usando a busca do Discord:',
+        components: [reviewUserSelect(eventId, interaction.message.id, 'remove', 'Buscar membro para remover')],
         ephemeral: true
       });
     }
@@ -261,9 +268,51 @@ async function handleButton(interaction) {
 
   if (scope === 'finance' && action === 'approve_withdraw') {
     if (!can(interaction.member, 'approvePayment')) return interaction.reply({ content: 'Sem permissao.', ephemeral: true });
+    const request = financeRepo.getWithdrawRequest(Number(id));
+    if (!request) return interaction.reply({ content: 'Solicitacao de saque nao encontrada.', ephemeral: true });
+    if (request.status === 'approved') {
+      return interaction.reply({ content: 'Esse saque ja esta aprovado. Use Pagar saque quando o pagamento for feito.', ephemeral: true });
+    }
+    if (request.status === 'paid') {
+      await interaction.message.edit({ components: [] }).catch(() => {});
+      return interaction.reply({ content: 'Esse saque ja foi pago. Removi os botoes antigos.', ephemeral: true });
+    }
+    if (request.status !== 'requested') {
+      await interaction.message.edit({ components: [] }).catch(() => {});
+      return interaction.reply({ content: `Esse saque nao esta mais solicitando aprovacao. Status atual: ${request.status}.`, ephemeral: true });
+    }
     finance.approveWithdraw({ requestId: Number(id), actorId: interaction.user.id });
-    await interaction.message.edit({ content: `${interaction.message.content}\n\nAprovado por <@${interaction.user.id}>.`, components: interaction.message.components }).catch(() => {});
+    await interaction.message.edit({
+      content: `${interaction.message.content}\n\nAprovado por <@${interaction.user.id}>.`,
+      components: [
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId(`finance:pay_withdraw:${id}`).setLabel('Pagar saque').setStyle(ButtonStyle.Primary),
+          new ButtonBuilder().setCustomId(`finance:refuse_withdraw:${id}`).setLabel('Recusar saque').setStyle(ButtonStyle.Danger)
+        )
+      ]
+    }).catch(() => {});
     return interaction.reply({ content: 'Saque aprovado. O saldo ainda nao foi descontado; use Pagar saque quando pagar.', ephemeral: true });
+  }
+
+  if (scope === 'finance' && action === 'refuse_withdraw') {
+    if (!can(interaction.member, 'approvePayment')) return interaction.reply({ content: 'Sem permissao.', ephemeral: true });
+    const request = financeRepo.getWithdrawRequest(Number(id));
+    if (!request) return interaction.reply({ content: 'Solicitacao de saque nao encontrada.', ephemeral: true });
+    if (request.status === 'paid') {
+      await interaction.message.edit({ components: [] }).catch(() => {});
+      return interaction.reply({ content: 'Esse saque ja foi pago. Nao da para recusar depois do pagamento.', ephemeral: true });
+    }
+    if (request.status === 'refused') {
+      await interaction.message.edit({ components: [] }).catch(() => {});
+      return interaction.reply({ content: 'Esse saque ja foi recusado. Removi os botoes antigos.', ephemeral: true });
+    }
+    if (!['requested', 'approved'].includes(request.status)) {
+      await interaction.message.edit({ components: [] }).catch(() => {});
+      return interaction.reply({ content: `Esse saque nao pode mais ser recusado. Status atual: ${request.status}.`, ephemeral: true });
+    }
+    finance.refuseWithdraw({ requestId: Number(id), actorId: interaction.user.id });
+    await interaction.message.edit({ content: `${interaction.message.content}\n\nRecusado por <@${interaction.user.id}>.`, components: [] }).catch(() => {});
+    return interaction.reply({ content: 'Saque recusado. Nenhum saldo foi alterado.', ephemeral: true });
   }
 
   if (scope === 'finance' && action === 'pay_withdraw') {
@@ -359,34 +408,13 @@ module.exports = {
   handleButton
 };
 
-function participantSelect(eventId, reviewMessageId, mode) {
-  const participants = eventsRepo
-    .listParticipants(eventId)
-    .filter((participant) => !participant.is_spectator)
-    .slice(0, 25);
-
-  if (participants.length === 0) {
-    return new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId(`event_review_select:${mode}:${eventId}:${reviewMessageId}`)
-        .setPlaceholder('Nenhum participante encontrado')
-        .setDisabled(true)
-        .addOptions([{ label: 'Nenhum participante', value: 'none' }])
-    );
-  }
-
+function reviewUserSelect(eventId, reviewMessageId, mode, placeholder) {
   return new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder()
-      .setCustomId(`event_review_select:${mode}:${eventId}:${reviewMessageId}`)
-      .setPlaceholder('Selecione um participante')
-      .addOptions(participants.map((participant) => {
-        const seconds = participant.manual_seconds ?? participant.calculated_seconds ?? 0;
-        return {
-          label: `${roleLabel(participant.role)} - ${Math.round(seconds / 60)}min`,
-          description: participant.discord_id,
-          value: participant.discord_id
-        };
-      }))
+    new UserSelectMenuBuilder()
+      .setCustomId(`event_review_user_select:${mode}:${eventId}:${reviewMessageId}`)
+      .setPlaceholder(placeholder)
+      .setMinValues(1)
+      .setMaxValues(1)
   );
 }
 

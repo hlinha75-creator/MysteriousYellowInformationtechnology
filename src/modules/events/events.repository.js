@@ -74,6 +74,8 @@ function getParticipant({ eventId, discordId }) {
 }
 
 function startVoiceSession({ eventId, discordId, joinedAt }) {
+  const open = getOpenVoiceSession({ eventId, discordId });
+  if (open) return { changes: 0, lastInsertRowid: open.id };
   return getDatabase()
     .prepare('INSERT INTO event_voice_sessions (event_id, discord_id, joined_at) VALUES (?, ?, ?)')
     .run(eventId, discordId, joinedAt);
@@ -84,11 +86,7 @@ function closeOpenVoiceSession({ eventId, discordId, leftAt, seconds }) {
     .prepare(`
       UPDATE event_voice_sessions
       SET left_at = ?, seconds = ?
-      WHERE id = (
-        SELECT id FROM event_voice_sessions
-        WHERE event_id = ? AND discord_id = ? AND left_at IS NULL
-        ORDER BY id DESC LIMIT 1
-      )
+      WHERE event_id = ? AND discord_id = ? AND left_at IS NULL
     `)
     .run(leftAt, seconds, eventId, discordId);
 }
@@ -100,17 +98,45 @@ function getOpenVoiceSession({ eventId, discordId }) {
 }
 
 function refreshParticipantSeconds(eventId) {
-  getDatabase()
-    .prepare(`
-      UPDATE event_participants
-      SET calculated_seconds = COALESCE((
-        SELECT SUM(seconds) FROM event_voice_sessions
-        WHERE event_voice_sessions.event_id = event_participants.event_id
-          AND event_voice_sessions.discord_id = event_participants.discord_id
-      ), 0)
-      WHERE event_id = ? AND is_spectator = 0
-    `)
-    .run(eventId);
+  const db = getDatabase();
+  const event = getEvent(eventId);
+  if (!event?.started_at) return;
+
+  const eventStart = Date.parse(event.started_at);
+  const eventEnd = Date.parse(event.ended_at || new Date().toISOString());
+  const participants = listParticipants(eventId).filter((participant) => !participant.is_spectator);
+  const sessions = db
+    .prepare('SELECT * FROM event_voice_sessions WHERE event_id = ? ORDER BY discord_id, joined_at')
+    .all(eventId);
+
+  for (const participant of participants) {
+    const intervals = sessions
+      .filter((session) => session.discord_id === participant.discord_id)
+      .map((session) => {
+        const start = Math.max(eventStart, Date.parse(session.joined_at));
+        const end = Math.min(eventEnd, Date.parse(session.left_at || new Date().toISOString()));
+        return { start, end };
+      })
+      .filter((interval) => Number.isFinite(interval.start) && Number.isFinite(interval.end) && interval.end > interval.start)
+      .sort((a, b) => a.start - b.start);
+
+    let total = 0;
+    let current = null;
+    for (const interval of intervals) {
+      if (!current) {
+        current = { ...interval };
+      } else if (interval.start <= current.end) {
+        current.end = Math.max(current.end, interval.end);
+      } else {
+        total += current.end - current.start;
+        current = { ...interval };
+      }
+    }
+    if (current) total += current.end - current.start;
+
+    db.prepare('UPDATE event_participants SET calculated_seconds = ? WHERE event_id = ? AND discord_id = ?')
+      .run(Math.floor(total / 1000), eventId, participant.discord_id);
+  }
 }
 
 function setParticipantReview({ eventId, discordId, role, manualSeconds }) {

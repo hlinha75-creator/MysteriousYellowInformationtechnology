@@ -83,6 +83,23 @@ function approveWithdraw({ requestId, actorId }) {
   return request;
 }
 
+function refuseWithdraw({ requestId, actorId }) {
+  const request = repo.getWithdrawRequest(requestId);
+  if (!request) throw new Error('Solicitacao de saque nao encontrada.');
+  if (!['requested', 'approved'].includes(request.status)) {
+    throw new Error('Solicitacao de saque nao esta pendente.');
+  }
+  repo.updateWithdrawStatus({ id: request.id, status: 'refused', actorId });
+  audit.createAuditLog({
+    type: 'withdraw_refused',
+    actorId,
+    targetId: request.user_id,
+    afterValue: request.amount,
+    reason: `Saque #${request.id} recusado`
+  });
+  return request;
+}
+
 const payWithdraw = transaction(({ requestId, actorId }) => {
   backupDatabase('before_withdraw_payment');
   const request = repo.getWithdrawRequest(requestId);
@@ -108,6 +125,7 @@ module.exports = {
   applyBalanceTransaction,
   applyManyTransactions,
   approveWithdraw,
+  refuseWithdraw,
   notifyPositiveTransactions,
   payWithdraw,
   requestWithdraw

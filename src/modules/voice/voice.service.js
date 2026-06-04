@@ -1,6 +1,8 @@
 const repo = require('../events/events.repository');
 
 async function handleVoiceStateUpdate(oldState, newState) {
+  if (oldState.channelId === newState.channelId) return;
+
   const userId = newState.id || oldState.id;
   const now = new Date().toISOString();
 

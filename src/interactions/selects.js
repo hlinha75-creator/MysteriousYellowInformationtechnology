@@ -42,6 +42,51 @@ async function handleSelect(interaction) {
     }
   }
 
+  if (scope === 'event_review_user_select') {
+    const eventId = Number(id);
+    const event = eventsRepo.getEvent(eventId);
+    if (!event) throw new Error('Evento nao encontrado.');
+    if (event.creator_id !== interaction.user.id && !can(interaction.member, 'assumeEvent')) {
+      return interaction.reply({ content: 'Somente o criador ou alguem autorizado pode editar a revisao.', ephemeral: true });
+    }
+
+    const discordId = interaction.values[0];
+
+    if (action === 'add') {
+      return showModal(interaction, `event_review:add_modal:${eventId}:${messageId}`, 'Adicionar membro ao split', [
+        input('userId', 'Membro', discordId),
+        input('role', 'Funcao', '', 'Ex: tank, healer, sup, dps'),
+        input('minutes', 'Tempo contado em minutos', '', 'Ex: 75 para 1h15min'),
+        input('reason', 'Motivo da inclusao', '', 'Ex: entrou depois e nao clicou participar', false)
+      ]);
+    }
+
+    const participant = eventsRepo.getParticipant({ eventId, discordId });
+    if (!participant) {
+      return interaction.reply({
+        content: 'Esse membro ainda nao esta no split. Use Adicionar membro para colocar ele na revisao.',
+        ephemeral: true
+      });
+    }
+
+    if (action === 'edit') {
+      const seconds = participant.manual_seconds ?? participant.calculated_seconds ?? 0;
+      return showModal(interaction, `event_review:edit_modal:${eventId}:${messageId}`, 'Editar membro do split', [
+        input('userId', 'Membro', discordId),
+        input('role', 'Funcao', roleLabel(participant.role), 'Ex: tank, healer, sup, dps'),
+        input('minutes', 'Tempo contado em minutos', String(Math.round(seconds / 60)), 'Ex: 75 para 1h15min'),
+        input('reason', 'Motivo do ajuste', '', 'Ex: caiu da call e voltou', false)
+      ]);
+    }
+
+    if (action === 'remove') {
+      return showModal(interaction, `event_review:remove_modal:${eventId}:${messageId}`, 'Remover membro do split', [
+        input('userId', 'Membro', discordId),
+        input('reason', 'Motivo da remocao', '', 'Ex: estava como espectador', false)
+      ]);
+    }
+  }
+
   if (scope === 'deposit_select') {
     if (!can(interaction.member, 'approvePayment')) {
       return interaction.reply({ content: 'Sem permissao para editar deposito.', ephemeral: true });
