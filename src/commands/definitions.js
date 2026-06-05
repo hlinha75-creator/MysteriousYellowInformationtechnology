@@ -51,7 +51,11 @@ const commands = [
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addBooleanOption((option) => option
       .setName('aplicar')
-      .setDescription('Use sim para renomear de verdade. Sem isso, mostra so a previa.'))
+      .setDescription('Use sim para renomear de verdade. Sem isso, mostra so a previa.')),
+  new SlashCommandBuilder()
+    .setName('auditar_canais')
+    .setDescription('Lista todos os canais/categorias do servidor e marca os conhecidos pelo bot.')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
 ];
 
 module.exports = commands.map((command) => command.toJSON());

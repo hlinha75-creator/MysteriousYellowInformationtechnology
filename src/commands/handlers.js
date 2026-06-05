@@ -14,6 +14,7 @@ const { formatSilver } = require('../utils/silver');
 const albionVerification = require('../modules/albion/guildVerification.service');
 const ids = require('../config/ids');
 const { formatRenameResults, renameConfiguredChannels } = require('../modules/setup/channelRenamer');
+const { auditAttachment, auditGuildChannels, formatAuditSummary } = require('../modules/setup/channelAudit');
 
 function input(id, label, style = TextInputStyle.Short, required = true) {
   return new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setRequired(required);
@@ -157,6 +158,19 @@ async function handleCommand(interaction) {
     await interaction.deferReply({ ephemeral: true });
     const results = await renameConfiguredChannels(interaction.guild, ids, { apply });
     return interaction.editReply({ content: formatRenameResults(results, { apply }) });
+  }
+
+  if (interaction.commandName === 'auditar_canais') {
+    if (!can(interaction.member, 'approvePayment')) {
+      return interaction.reply({ content: 'Voce nao tem permissao para auditar canais.', ephemeral: true });
+    }
+
+    await interaction.deferReply({ ephemeral: true });
+    const rows = await auditGuildChannels(interaction.guild, ids);
+    return interaction.editReply({
+      content: formatAuditSummary(rows),
+      files: [auditAttachment(rows)]
+    });
   }
 
   if (interaction.commandName === 'evento') {
