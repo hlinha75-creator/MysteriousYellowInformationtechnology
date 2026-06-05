@@ -1,5 +1,5 @@
 const { AttachmentBuilder, ChannelType } = require('discord.js');
-const { names } = require('./channelRenamer');
+const { extraRenames, names } = require('./channelRenamer');
 
 function channelTypeName(type) {
   const labels = {
@@ -24,6 +24,11 @@ function configuredLookup(ids) {
       key,
       id,
       suggestedName: names.channels[key]
+    })),
+    ...extraRenames.map((item) => ({
+      key: item.key,
+      id: item.id,
+      suggestedName: item.name
     }))
   ];
   return new Map(entries.map((entry) => [entry.id, entry]));
