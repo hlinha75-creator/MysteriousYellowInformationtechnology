@@ -21,15 +21,19 @@ async function handleModal(interaction) {
     if (!can(interaction.member, 'createEvent')) {
       return interaction.reply({ content: 'Voce nao tem permissao para criar evento.', ephemeral: true });
     }
-    const slots = parseSlots(interaction.fields.getTextInputValue('slots'));
+    const title = fieldOrDefault(interaction, 'title', 'FastContent');
+    const description = fieldOrDefault(interaction, 'description', 'Pergunte na Call');
+    const location = fieldOrDefault(interaction, 'location', 'Pergunte na Call');
+    const scheduledTime = fieldOrDefault(interaction, 'scheduledTime', defaultUtcMinus3Time(10));
+    const slots = parseSlots(fieldOrDefault(interaction, 'slots', '1,1,1,17'));
     if (slots.length !== 4 || slots.some((value) => Number.isNaN(value) || value < 0)) {
       throw new Error('Use 4 numeros para vagas. Ex: 3,3,2,12 ou Tank 3 Healer 3 Sup 2 DPS 12.');
     }
     const event = await events.createEventFromModal(interaction, {
-      title: interaction.fields.getTextInputValue('title'),
-      description: interaction.fields.getTextInputValue('description'),
-      location: interaction.fields.getTextInputValue('location'),
-      scheduledTime: interaction.fields.getTextInputValue('scheduledTime'),
+      title,
+      description,
+      location,
+      scheduledTime,
       tankSlots: slots[0],
       healerSlots: slots[1],
       supportSlots: slots[2],
@@ -214,6 +218,18 @@ function cleanUserId(value) {
 function parseSlots(value) {
   const numbers = String(value || '').match(/\d+/g) || [];
   return numbers.slice(0, 4).map((number) => Number.parseInt(number, 10));
+}
+
+function fieldOrDefault(interaction, id, fallback) {
+  const value = interaction.fields.getTextInputValue(id).trim();
+  return value || fallback;
+}
+
+function defaultUtcMinus3Time(minutesAhead) {
+  const utcMinus3 = new Date(Date.now() + minutesAhead * 60 * 1000 - 3 * 60 * 60 * 1000);
+  const hours = String(utcMinus3.getUTCHours()).padStart(2, '0');
+  const minutes = String(utcMinus3.getUTCMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
 }
 
 function normalizeRole(value) {

@@ -48,11 +48,11 @@ async function handleButton(interaction) {
       return interaction.reply({ content: 'Voce nao tem permissao para criar evento.', ephemeral: true });
     }
     return showModal(interaction, 'event:create', 'Criar Evento', [
-      textInput('title', 'Titulo'),
-      textInput('description', 'Descricao'),
-      textInput('location', 'Local'),
-      textInput('scheduledTime', 'Horario UTC-3'),
-      textInput('slots', 'Vagas Tank, Healer, Sup, DPS ex: 3,3,2,12')
+      textInput('title', 'Titulo', false, 'Padrao: FastContent'),
+      textInput('description', 'Descricao', false, 'Padrao: Pergunte na Call'),
+      textInput('location', 'Local', false, 'Padrao: Pergunte na Call'),
+      textInput('scheduledTime', 'Horario UTC-3', false, 'Padrao: 10 minutos a frente'),
+      textInput('slots', 'Vagas Tank, Healer, Sup, DPS ex: 3,3,2,12', false, 'Padrao: 1,1,1,17')
     ]);
   }
 
