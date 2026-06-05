@@ -12,6 +12,8 @@ const financeRepo = require('../modules/finance/finance.repository');
 const csv = require('../modules/csv/csv.service');
 const { formatSilver } = require('../utils/silver');
 const albionVerification = require('../modules/albion/guildVerification.service');
+const ids = require('../config/ids');
+const { formatRenameResults, renameConfiguredChannels } = require('../modules/setup/channelRenamer');
 
 function input(id, label, style = TextInputStyle.Short, required = true) {
   return new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setRequired(required);
@@ -144,6 +146,17 @@ async function handleCommand(interaction) {
       ].join('\n').slice(0, 1900),
       files: [albionVerification.csvAttachment(results)]
     });
+  }
+
+  if (interaction.commandName === 'renomear_canais') {
+    if (!can(interaction.member, 'approvePayment')) {
+      return interaction.reply({ content: 'Voce nao tem permissao para renomear canais.', ephemeral: true });
+    }
+
+    const apply = interaction.options.getBoolean('aplicar') ?? false;
+    await interaction.deferReply({ ephemeral: true });
+    const results = await renameConfiguredChannels(interaction.guild, ids, { apply });
+    return interaction.editReply({ content: formatRenameResults(results, { apply }) });
   }
 
   if (interaction.commandName === 'evento') {

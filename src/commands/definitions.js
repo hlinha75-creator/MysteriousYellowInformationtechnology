@@ -44,7 +44,14 @@ const commands = [
     .setDescription('Verifica os membros do Discord contra a guild do Albion.')
     .addBooleanOption((option) => option
       .setName('avisar_nao_encontrados')
-      .setDescription('Envia DM pedindo confirmacao de nick para quem nao for encontrado.'))
+      .setDescription('Envia DM pedindo confirmacao de nick para quem nao for encontrado.')),
+  new SlashCommandBuilder()
+    .setName('renomear_canais')
+    .setDescription('Mostra ou aplica a padronizacao de nomes dos canais do bot.')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addBooleanOption((option) => option
+      .setName('aplicar')
+      .setDescription('Use sim para renomear de verdade. Sem isso, mostra so a previa.'))
 ];
 
 module.exports = commands.map((command) => command.toJSON());
