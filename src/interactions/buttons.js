@@ -362,12 +362,11 @@ async function handleButton(interaction) {
 
   if (interaction.customId === 'admin:remove_balance') {
     if (!can(interaction.member, 'withdrawBalance')) return interaction.reply({ content: 'Sem permissao.', ephemeral: true });
-    return showModal(interaction, 'admin:remove_balance_modal', 'Retirar Saldo', [
-      textInput('userId', 'ID ou mencao do membro'),
-      textInput('amount', 'Valor'),
-      textInput('reason', 'Motivo'),
-      textInput('confirmation', 'CONFIRMAR se ficar negativo', false)
-    ]);
+    return interaction.reply({
+      content: 'Escolha o membro que vai ter saldo retirado usando a busca do Discord:',
+      components: [adminRemoveBalanceUserSelect()],
+      ephemeral: true
+    });
   }
 
   if (scope === 'registration') {
@@ -451,6 +450,16 @@ function reviewUserSelect(eventId, reviewMessageId, mode, placeholder) {
     new UserSelectMenuBuilder()
       .setCustomId(`event_review_user_select:${mode}:${eventId}:${reviewMessageId}`)
       .setPlaceholder(placeholder)
+      .setMinValues(1)
+      .setMaxValues(1)
+  );
+}
+
+function adminRemoveBalanceUserSelect() {
+  return new ActionRowBuilder().addComponents(
+    new UserSelectMenuBuilder()
+      .setCustomId('admin_remove_balance_select:user')
+      .setPlaceholder('Buscar membro para retirar saldo')
       .setMinValues(1)
       .setMaxValues(1)
   );

@@ -87,6 +87,20 @@ async function handleSelect(interaction) {
     }
   }
 
+  if (scope === 'admin_remove_balance_select') {
+    if (!can(interaction.member, 'withdrawBalance')) {
+      return interaction.reply({ content: 'Sem permissao para retirar saldo.', ephemeral: true });
+    }
+
+    const discordId = interaction.values[0];
+    return showModal(interaction, 'admin:remove_balance_modal', 'Retirar Saldo', [
+      input('userId', 'Membro', discordId),
+      input('amount', 'Valor', '', 'Ex: 1000000 ou 1m'),
+      input('reason', 'Motivo', '', 'Ex: saque pago, ajuste manual'),
+      input('confirmation', 'CONFIRMAR se ficar negativo', '', 'Digite CONFIRMAR se o saldo ficar negativo', false)
+    ]);
+  }
+
   if (scope === 'deposit_select') {
     if (!can(interaction.member, 'approvePayment')) {
       return interaction.reply({ content: 'Sem permissao para editar deposito.', ephemeral: true });
