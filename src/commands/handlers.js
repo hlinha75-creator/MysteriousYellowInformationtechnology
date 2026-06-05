@@ -11,6 +11,7 @@ const { upsertSetupPanels } = require('../modules/setup/panels');
 const financeRepo = require('../modules/finance/finance.repository');
 const csv = require('../modules/csv/csv.service');
 const { formatSilver } = require('../utils/silver');
+const albionVerification = require('../modules/albion/guildVerification.service');
 
 function input(id, label, style = TextInputStyle.Short, required = true) {
   return new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setRequired(required);
@@ -97,6 +98,51 @@ async function handleCommand(interaction) {
           new ButtonBuilder().setCustomId(`csv:cancel_import:${sessionId}`).setLabel('Cancelar').setStyle(ButtonStyle.Secondary)
         )
       ]
+    });
+  }
+
+  if (interaction.commandName === 'verificar_membro') {
+    const user = interaction.options.getUser('membro') || interaction.user;
+    if (user.id !== interaction.user.id && !can(interaction.member, 'approveRegistration')) {
+      return interaction.reply({ content: 'Voce so pode verificar voce mesmo.', ephemeral: true });
+    }
+
+    await interaction.deferReply({ ephemeral: true });
+    const member = await interaction.guild.members.fetch(user.id);
+    const result = await albionVerification.verifyDiscordMember(member);
+    const player = result.player;
+    return interaction.editReply({
+      content: [
+        `Discord: <@${result.discordId}>`,
+        `Nome usado: ${result.guessedName || 'nao informado'}`,
+        `Albion: ${player?.name || 'nao encontrado'}`,
+        `Guild no Albion: ${player?.guildName || 'sem guild/nao encontrada'}`,
+        `Guild esperada: ${result.expectedGuild}`,
+        `Cargo Membro no Discord: ${result.hasMemberRole ? 'sim' : 'nao'}`,
+        `Status: ${result.status}`,
+        result.reason ? `Motivo: ${result.reason}` : null
+      ].filter(Boolean).join('\n')
+    });
+  }
+
+  if (interaction.commandName === 'verificar_guild') {
+    if (!can(interaction.member, 'approveRegistration')) {
+      return interaction.reply({ content: 'Voce nao tem permissao para verificar a guild inteira.', ephemeral: true });
+    }
+
+    const notifyMissing = interaction.options.getBoolean('avisar_nao_encontrados') ?? true;
+    await interaction.deferReply({ ephemeral: true });
+    const results = await albionVerification.verifyGuildMembers(interaction.guild, { notifyMissing });
+    return interaction.editReply({
+      content: [
+        albionVerification.summarizeResults(results),
+        '',
+        'Divergencias principais:',
+        albionVerification.importantLines(results),
+        '',
+        notifyMissing ? 'DM enviada para os nao encontrados quando possivel.' : 'DM para nao encontrados desativada nesta execucao.'
+      ].join('\n').slice(0, 1900),
+      files: [albionVerification.csvAttachment(results)]
     });
   }
 

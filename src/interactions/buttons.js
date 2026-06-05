@@ -1,13 +1,16 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder } = require('discord.js');
 const { can, hasRole, isOwner } = require('../config/permissions');
+const ids = require('../config/ids');
 const eventsRepo = require('../modules/events/events.repository');
 const events = require('../modules/events/events.service');
 const financeRepo = require('../modules/finance/finance.repository');
 const finance = require('../modules/finance/finance.service');
+const audit = require('../modules/audit/audit.repository');
 const csv = require('../modules/csv/csv.service');
 const deposit = require('../modules/deposit/deposit.service');
 const { formatSilver } = require('../utils/silver');
 const registration = require('../modules/registration/registration.service');
+const { safeSend } = require('../utils/discord');
 
 function textInput(id, label, required = true, placeholder = null, style = TextInputStyle.Short) {
   const component = new TextInputBuilder()
@@ -164,7 +167,7 @@ async function handleButton(interaction) {
       }
       await interaction.deferReply({ ephemeral: true });
       const transactions = events.approveEventPayment({ eventId, actorId: interaction.user.id });
-      await finance.notifyPositiveTransactions({ client: interaction.client, transactions });
+      await finance.notifyBalanceTransactions({ client: interaction.client, transactions });
       await interaction.message.edit({
         content: `Evento #${eventId} finalizado por <@${interaction.user.id}>.`,
         embeds: [events.reviewEmbed(eventId)],
@@ -261,9 +264,43 @@ async function handleButton(interaction) {
 
   if (interaction.customId === 'finance:withdraw') {
     return showModal(interaction, 'finance:withdraw_modal', 'Solicitar Saque', [
-      textInput('amount', 'Valor'),
+      textInput('amount', 'Valor em numeros', true, 'Ex: 1000000 sem ponto, virgula ou letra'),
       textInput('note', 'Observacao', false)
     ]);
+  }
+
+  if (scope === 'finance' && action === 'confirm_withdraw') {
+    const draft = finance.takeWithdrawDraft(id);
+    if (!draft) {
+      return interaction.update({ content: 'Essa confirmacao expirou. Abra o saque novamente.', components: [] });
+    }
+    if (draft.userId !== interaction.user.id) {
+      return interaction.reply({ content: 'Essa confirmacao de saque nao foi criada para voce.', ephemeral: true });
+    }
+    const request = finance.requestWithdraw({ userId: interaction.user.id, amount: draft.amount, note: draft.note });
+    audit.createAuditLog({
+      type: 'withdraw_requested',
+      actorId: interaction.user.id,
+      targetId: interaction.user.id,
+      afterValue: draft.amount,
+      reason: draft.note
+    });
+    await safeSend(interaction.client, ids.channels.finance, {
+      content: `Saque solicitado: #${request.lastInsertRowid} por <@${interaction.user.id}> no valor de ${formatSilver(draft.amount)}.`,
+      components: [
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId(`finance:approve_withdraw:${request.lastInsertRowid}`).setLabel('Aprovar saque').setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId(`finance:pay_withdraw:${request.lastInsertRowid}`).setLabel('Pagar saque').setStyle(ButtonStyle.Primary),
+          new ButtonBuilder().setCustomId(`finance:refuse_withdraw:${request.lastInsertRowid}`).setLabel('Recusar saque').setStyle(ButtonStyle.Danger)
+        )
+      ]
+    });
+    return interaction.update({ content: `Saque solicitado para a staff: ${formatSilver(draft.amount)}.`, components: [] });
+  }
+
+  if (scope === 'finance' && action === 'cancel_withdraw') {
+    finance.takeWithdrawDraft(id);
+    return interaction.update({ content: 'Solicitacao de saque cancelada. Nada foi enviado para a staff.', components: [] });
   }
 
   if (scope === 'finance' && action === 'approve_withdraw') {
@@ -317,7 +354,8 @@ async function handleButton(interaction) {
 
   if (scope === 'finance' && action === 'pay_withdraw') {
     if (!can(interaction.member, 'approvePayment')) return interaction.reply({ content: 'Sem permissao.', ephemeral: true });
-    finance.payWithdraw({ requestId: Number(id), actorId: interaction.user.id });
+    const transaction = finance.payWithdraw({ requestId: Number(id), actorId: interaction.user.id });
+    await finance.notifyBalanceTransactions({ client: interaction.client, transactions: [transaction] });
     await interaction.message.edit({ content: `${interaction.message.content}\n\nPago por <@${interaction.user.id}>.`, components: [] }).catch(() => {});
     return interaction.reply({ content: 'Saque pago e saldo descontado.', ephemeral: true });
   }
@@ -383,7 +421,7 @@ async function handleButton(interaction) {
       return interaction.reply({ content: 'Somente quem enviou a importacao pode confirmar.', ephemeral: true });
     }
     const transactions = csv.applyBalanceImport({ preview: session.preview, actorId: interaction.user.id });
-    await finance.notifyPositiveTransactions({ client: interaction.client, transactions });
+    await finance.notifyBalanceTransactions({ client: interaction.client, transactions });
     await interaction.message.edit({ content: `Importacao aplicada. ${session.preview.found} saldos processados.`, components: [] }).catch(() => {});
     return interaction.reply({ content: 'CSV importado e saldos atualizados.', ephemeral: true });
   }

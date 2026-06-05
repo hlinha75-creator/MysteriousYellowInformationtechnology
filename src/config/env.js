@@ -12,5 +12,7 @@ module.exports = {
   token: process.env.DISCORD_TOKEN,
   requireEnv,
   databasePath: process.env.DATABASE_PATH || './data/notag.sqlite',
-  nodeEnv: process.env.NODE_ENV || 'development'
+  nodeEnv: process.env.NODE_ENV || 'development',
+  albionGuildName: process.env.ALBION_GUILD_NAME || 'NoTag',
+  albionApiBaseUrl: process.env.ALBION_API_BASE_URL || 'https://gameinfo.albiononline.com/api/gameinfo'
 };

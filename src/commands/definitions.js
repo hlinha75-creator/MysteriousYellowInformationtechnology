@@ -34,7 +34,17 @@ const commands = [
   new SlashCommandBuilder()
     .setName('importar')
     .setDescription('Importa CSV de saldos. Use o painel/fluxo com confirmacao.')
-    .addAttachmentOption((option) => option.setName('arquivo').setDescription('CSV de saldos').setRequired(true))
+    .addAttachmentOption((option) => option.setName('arquivo').setDescription('CSV de saldos').setRequired(true)),
+  new SlashCommandBuilder()
+    .setName('verificar_membro')
+    .setDescription('Verifica se um membro do Discord esta na guild do Albion.')
+    .addUserOption((option) => option.setName('membro').setDescription('Membro para verificar.')),
+  new SlashCommandBuilder()
+    .setName('verificar_guild')
+    .setDescription('Verifica os membros do Discord contra a guild do Albion.')
+    .addBooleanOption((option) => option
+      .setName('avisar_nao_encontrados')
+      .setDescription('Envia DM pedindo confirmacao de nick para quem nao for encontrado.'))
 ];
 
 module.exports = commands.map((command) => command.toJSON());

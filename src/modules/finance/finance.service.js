@@ -4,6 +4,8 @@ const audit = require('../audit/audit.repository');
 const repo = require('./finance.repository');
 const { formatSilver } = require('../../utils/silver');
 
+const withdrawDrafts = new Map();
+
 function applyBalanceTransaction({ type, userId, amount, reason, referenceType, referenceId, createdBy }) {
   repo.ensureBalance(userId);
   const beforeBalance = repo.getBalance(userId);
@@ -29,7 +31,7 @@ function applyBalanceTransaction({ type, userId, amount, reason, referenceType, 
     reason,
     metadata: { amount, referenceType, referenceId }
   });
-  return { beforeBalance, afterBalance };
+  return { type, userId, amount, reason, referenceType, referenceId, createdBy, beforeBalance, afterBalance };
 }
 
 const applyManyTransactions = transaction((items) => {
@@ -37,23 +39,29 @@ const applyManyTransactions = transaction((items) => {
   return items.map((item) => applyBalanceTransaction(item));
 });
 
-async function notifyPositiveTransactions({ client, transactions }) {
+async function notifyBalanceTransactions({ client, transactions }) {
   if (!client) return;
   for (const item of transactions) {
-    if (item.amount <= 0) continue;
-    await notifyBalanceReceived({
+    if (!item.amount) continue;
+    await notifyBalanceChange({
       client,
       userId: item.userId,
       amount: item.amount,
-      reason: item.reason
+      reason: item.reason,
+      balance: item.afterBalance ?? repo.getBalance(item.userId)
     });
   }
 }
 
-async function notifyBalanceReceived({ client, userId, amount, reason }) {
+async function notifyPositiveTransactions({ client, transactions }) {
+  return notifyBalanceTransactions({ client, transactions });
+}
+
+async function notifyBalanceChange({ client, userId, amount, reason, balance }) {
   try {
     const user = await client.users.fetch(userId);
-    await user.send(`Voce recebeu ${formatSilver(amount)} de prata no seu saldo.${reason ? ` Motivo: ${reason}` : ''}`);
+    const direction = amount > 0 ? 'Entrou' : 'Saiu';
+    await user.send(`${direction} ${formatSilver(Math.abs(amount))} de prata no seu saldo.${reason ? ` Motivo: ${reason}.` : ''} Saldo atual: ${formatSilver(balance)}.`);
   } catch (error) {
     audit.createAuditLog({
       type: 'balance_dm_failed',
@@ -62,6 +70,18 @@ async function notifyBalanceReceived({ client, userId, amount, reason }) {
       reason: error.message
     });
   }
+}
+
+function createWithdrawDraft({ userId, amount, note, rawAmount }) {
+  const id = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  withdrawDrafts.set(id, { id, userId, amount, note, rawAmount, createdAt: Date.now() });
+  return withdrawDrafts.get(id);
+}
+
+function takeWithdrawDraft(id) {
+  const draft = withdrawDrafts.get(id);
+  withdrawDrafts.delete(id);
+  return draft;
 }
 
 function requestWithdraw({ userId, amount, note }) {
@@ -125,8 +145,11 @@ module.exports = {
   applyBalanceTransaction,
   applyManyTransactions,
   approveWithdraw,
+  createWithdrawDraft,
   refuseWithdraw,
+  notifyBalanceTransactions,
   notifyPositiveTransactions,
   payWithdraw,
-  requestWithdraw
+  requestWithdraw,
+  takeWithdrawDraft
 };

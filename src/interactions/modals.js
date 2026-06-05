@@ -4,7 +4,6 @@ const events = require('../modules/events/events.service');
 const eventsRepo = require('../modules/events/events.repository');
 const registration = require('../modules/registration/registration.service');
 const finance = require('../modules/finance/finance.service');
-const audit = require('../modules/audit/audit.repository');
 const { parseSilver, formatSilver } = require('../utils/silver');
 const { safeSend, baseEmbed } = require('../utils/discord');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
@@ -125,21 +124,27 @@ async function handleModal(interaction) {
   }
 
   if (interaction.customId === 'finance:withdraw_modal') {
-    const amount = parseSilver(interaction.fields.getTextInputValue('amount'));
+    const rawAmount = interaction.fields.getTextInputValue('amount');
+    const amount = parseWithdrawAmount(rawAmount);
     const note = interaction.fields.getTextInputValue('note');
-    const request = finance.requestWithdraw({ userId: interaction.user.id, amount, note });
-    audit.createAuditLog({ type: 'withdraw_requested', actorId: interaction.user.id, targetId: interaction.user.id, afterValue: amount, reason: note });
-    await safeSend(interaction.client, ids.channels.finance, {
-      content: `Saque solicitado: #${request.lastInsertRowid} por <@${interaction.user.id}> no valor de ${formatSilver(amount)}.`,
+    const draft = finance.createWithdrawDraft({ userId: interaction.user.id, amount, note, rawAmount });
+    const balance = financeRepo.getBalance(interaction.user.id);
+    return interaction.reply({
+      content: [
+        'Confira seu pedido de saque antes de enviar para a staff:',
+        `Digitado: \`${rawAmount}\``,
+        `Valor do saque: **${formatSilver(amount)}**`,
+        `Seu saldo atual: **${formatSilver(balance)}**`,
+        'Confirma que esse valor esta correto?'
+      ].join('\n'),
       components: [
         new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId(`finance:approve_withdraw:${request.lastInsertRowid}`).setLabel('Aprovar saque').setStyle(ButtonStyle.Success),
-          new ButtonBuilder().setCustomId(`finance:pay_withdraw:${request.lastInsertRowid}`).setLabel('Pagar saque').setStyle(ButtonStyle.Primary),
-          new ButtonBuilder().setCustomId(`finance:refuse_withdraw:${request.lastInsertRowid}`).setLabel('Recusar saque').setStyle(ButtonStyle.Danger)
+          new ButtonBuilder().setCustomId(`finance:confirm_withdraw:${draft.id}`).setLabel('Confirmar saque').setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId(`finance:cancel_withdraw:${draft.id}`).setLabel('Cancelar').setStyle(ButtonStyle.Danger)
         )
-      ]
+      ],
+      ephemeral: true
     });
-    return interaction.reply({ content: `Saque solicitado: ${formatSilver(amount)}.`, ephemeral: true });
   }
 
   if (interaction.customId === 'deposit:create_modal') {
@@ -185,6 +190,15 @@ async function handleModal(interaction) {
       referenceType: 'admin_panel',
       referenceId: null,
       createdBy: interaction.user.id
+    });
+    await finance.notifyBalanceTransactions({
+      client: interaction.client,
+      transactions: [{
+        userId: targetId,
+        amount: -amount,
+        reason,
+        afterBalance: after
+      }]
     });
     await safeSend(interaction.client, ids.channels.bankLogs, {
       content: `Saldo retirado de <@${targetId}>: -${formatSilver(amount)} por <@${interaction.user.id}>. Motivo: ${reason}`
@@ -242,6 +256,18 @@ function parseMinutes(value) {
   const minutes = Number.parseFloat(text);
   if (Number.isNaN(minutes)) throw new Error('Tempo invalido. Use minutos. Ex: 75 para 1h15min.');
   return minutes;
+}
+
+function parseWithdrawAmount(value) {
+  const text = String(value || '').trim().replace(/\s+/g, '');
+  if (!/^\d+$/.test(text)) {
+    throw new Error('Valor de saque invalido. Digite somente numeros, sem ponto, virgula, letra ou simbolo. Ex: 1000000');
+  }
+  const amount = Number.parseInt(text, 10);
+  if (!Number.isSafeInteger(amount) || amount <= 0) {
+    throw new Error('Valor de saque invalido. Digite um numero inteiro maior que zero.');
+  }
+  return amount;
 }
 
 async function updateReviewMessage(interaction, eventId, messageId) {

@@ -71,7 +71,7 @@ async function confirmDraft({ draftId, actorId, client }) {
     createdBy: actorId
   }));
   finance.applyManyTransactions(transactions);
-  await finance.notifyPositiveTransactions({ client, transactions });
+  await finance.notifyBalanceTransactions({ client, transactions });
 
   audit.createAuditLog({
     type: 'quick_deposit_confirmed',
