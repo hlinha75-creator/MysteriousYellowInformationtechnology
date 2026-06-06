@@ -36,6 +36,7 @@ function eventEmbed(event, participants = []) {
       .addFields(
         { name: 'Tempo em andamento', value: elapsed, inline: true },
         { name: 'Vagas', value: `${roleLabel('tank')} ${count('tank')}/${event.tank_slots} | ${roleLabel('healer')} ${count('healer')}/${event.healer_slots} | ${roleLabel('support')} ${count('support')}/${event.support_slots} | ${roleLabel('dps')} ${count('dps')}/${event.dps_slots}`, inline: false },
+        { name: 'Participantes', value: runningParticipantsSummary(participants), inline: false },
         { name: 'Voz', value: event.voice_channel_id ? `<#${event.voice_channel_id}>` : 'Sala em criacao', inline: true },
         { name: 'Criador', value: `<@${event.creator_id}>`, inline: true }
       );
@@ -61,6 +62,32 @@ function roleOccupants(participants, role, slots) {
   const value = users.length > 0 ? users.join(', ') : 'Vazio';
   const text = `${header} - ${value}`;
   return text.length > 1024 ? `${text.slice(0, 1018)}...` : text;
+}
+
+function runningParticipantsSummary(participants) {
+  const order = { tank: 1, healer: 2, support: 3, dps: 4, spectator: 5 };
+  const lines = participants
+    .slice()
+    .sort((a, b) => (order[a.role] || 99) - (order[b.role] || 99))
+    .map((participant) => {
+      const role = participant.is_spectator ? 'spectator' : participant.role;
+      return `<@${participant.discord_id}> - ${roleLabel(role)}`;
+    });
+
+  if (lines.length === 0) return 'Nenhum participante ainda.';
+
+  const visible = [];
+  let totalLength = 0;
+  for (const line of lines) {
+    const nextLength = totalLength + line.length + (visible.length > 0 ? 1 : 0);
+    if (nextLength > 950) break;
+    visible.push(line);
+    totalLength = nextLength;
+  }
+
+  const hidden = lines.length - visible.length;
+  if (hidden > 0) visible.push(`... e mais ${hidden}`);
+  return visible.join('\n');
 }
 
 function eventComponents(event) {
@@ -225,7 +252,9 @@ async function startEvent(interaction, eventId) {
 
   const now = new Date().toISOString();
   repo.updateEvent(eventId, { status: 'running', voice_channel_id: voice.id, started_at: now });
-  await removeWarningRole(interaction.guild, repo.getEvent(eventId)).catch(() => {});
+  const startedEvent = repo.getEvent(eventId);
+  await deleteWarningMessage(interaction.client, startedEvent).catch(() => {});
+  await removeWarningRole(interaction.guild, startedEvent).catch(() => {});
   const participants = repo.listParticipants(eventId).filter((participant) => !participant.is_spectator);
   for (const participant of participants) {
     const member = await interaction.guild.members.fetch(participant.discord_id).catch(() => null);
@@ -257,7 +286,9 @@ async function finishEvent(interaction, eventId) {
     }
   }
   await voice?.delete(`Evento ${event.event_code} finalizado`).catch(() => {});
-  await removeWarningRole(interaction.guild, repo.getEvent(eventId)).catch(() => {});
+  const reviewedEvent = repo.getEvent(eventId);
+  await deleteWarningMessage(interaction.client, reviewedEvent).catch(() => {});
+  await removeWarningRole(interaction.guild, reviewedEvent).catch(() => {});
 
   audit.createAuditLog({ type: 'event_finished', actorId: interaction.user.id, targetId: String(eventId) });
   await deleteEventMessage(interaction.client, eventId);
@@ -269,6 +300,7 @@ async function cancelEvent(interaction, eventId, reason) {
   repo.updateEvent(eventId, { status: 'cancelled', cancel_reason: reason });
   const voice = event.voice_channel_id ? await interaction.guild.channels.fetch(event.voice_channel_id).catch(() => null) : null;
   await voice?.delete(`Evento cancelado: ${reason}`).catch(() => {});
+  await deleteWarningMessage(interaction.client, event).catch(() => {});
   await removeWarningRole(interaction.guild, event).catch(() => {});
   audit.createAuditLog({ type: 'event_cancelled', actorId: interaction.user.id, targetId: String(eventId), reason });
   await deleteEventMessage(interaction.client, eventId);
@@ -527,10 +559,18 @@ async function sendEventStartWarning(client, event) {
     await member?.roles.add(role).catch(() => {});
   }
 
-  repo.updateEvent(event.id, { warning_role_id: role.id, warning_sent: 1 });
   const channel = await client.channels.fetch(ids.channels.participate);
-  await channel.send(`${role} falta 1 minuto para o evento **${event.title}** começar. O evento nao inicia automaticamente; aguardem o criador iniciar.`);
+  const message = await channel.send(`${role} falta 1 minuto para o evento **${event.title}** começar. O evento nao inicia automaticamente; aguardem o criador iniciar.`);
+  repo.updateEvent(event.id, { warning_role_id: role.id, warning_message_id: message.id, warning_sent: 1 });
   audit.createAuditLog({ type: 'event_start_warning_sent', targetId: String(event.id), afterValue: role.id, reason: event.event_code });
+}
+
+async function deleteWarningMessage(client, event) {
+  if (!event?.warning_message_id) return;
+  const channel = await client.channels.fetch(ids.channels.participate).catch(() => null);
+  const message = await channel?.messages.fetch(event.warning_message_id).catch(() => null);
+  await message?.delete().catch(() => {});
+  repo.updateEvent(event.id, { warning_message_id: null });
 }
 
 async function removeWarningRole(guild, event) {

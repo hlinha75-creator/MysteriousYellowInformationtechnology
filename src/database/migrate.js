@@ -173,6 +173,16 @@ const migrations = [
         db.exec('ALTER TABLE events ADD COLUMN warning_sent INTEGER NOT NULL DEFAULT 0');
       }
     }
+  },
+  {
+    version: 3,
+    name: 'event_warning_message',
+    up(db) {
+      const columns = db.prepare('PRAGMA table_info(events)').all().map((column) => column.name);
+      if (!columns.includes('warning_message_id')) {
+        db.exec('ALTER TABLE events ADD COLUMN warning_message_id TEXT');
+      }
+    }
   }
 ];
 
