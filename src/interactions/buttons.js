@@ -8,6 +8,7 @@ const finance = require('../modules/finance/finance.service');
 const audit = require('../modules/audit/audit.repository');
 const csv = require('../modules/csv/csv.service');
 const deposit = require('../modules/deposit/deposit.service');
+const polls = require('../modules/polls/polls.service');
 const { formatSilver } = require('../utils/silver');
 const registration = require('../modules/registration/registration.service');
 const { safeSend } = require('../utils/discord');
@@ -60,6 +61,34 @@ async function handleButton(interaction) {
     return showModal(interaction, 'registration:submit', 'Registro Albion', [
       textInput('albionName', 'Nome do personagem no Albion')
     ]);
+  }
+
+  if (scope === 'poll') {
+    const pollId = Number(id);
+
+    if (action === 'close') {
+      const poll = await polls.closePoll({ interaction, pollId });
+      return interaction.reply({
+        content: `Enquete #${poll.id} fechada. Quer criar um evento no horario mais votado?`,
+        components: polls.closeDecisionComponents(poll.id),
+        ephemeral: true
+      });
+    }
+
+    if (action === 'create_event') {
+      const event = await polls.createEventFromPoll({ interaction, pollId });
+      return interaction.update({
+        content: `Evento ${event.event_code} criado pelo resultado da enquete.`,
+        components: []
+      });
+    }
+
+    if (action === 'no_event') {
+      return interaction.update({
+        content: 'Enquete encerrada sem criar evento.',
+        components: []
+      });
+    }
   }
 
   if (scope === 'event') {

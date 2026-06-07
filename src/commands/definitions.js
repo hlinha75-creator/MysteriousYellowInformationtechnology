@@ -20,6 +20,9 @@ const commands = [
     .setName('registro')
     .setDescription('Abre registro de nome em jogo.'),
   new SlashCommandBuilder()
+    .setName('enquete')
+    .setDescription('Cria uma enquete no canal de eventos.'),
+  new SlashCommandBuilder()
     .setName('exportar')
     .setDescription('Exporta dados em CSV.')
     .addStringOption((option) => option

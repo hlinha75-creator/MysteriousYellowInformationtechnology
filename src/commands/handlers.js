@@ -15,6 +15,7 @@ const albionVerification = require('../modules/albion/guildVerification.service'
 const ids = require('../config/ids');
 const { formatRenameResults, renameConfiguredChannels } = require('../modules/setup/channelRenamer');
 const { auditAttachment, auditGuildChannels, formatAuditSummary } = require('../modules/setup/channelAudit');
+const polls = require('../modules/polls/polls.service');
 
 function input(id, label, style = TextInputStyle.Short, required = true) {
   return new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setRequired(required);
@@ -49,6 +50,18 @@ async function handleCommand(interaction) {
   if (interaction.commandName === 'registro') {
     return interaction.showModal(modal('registration:submit', 'Registro Albion', [
       input('albionName', 'Nome do personagem no Albion')
+    ]));
+  }
+
+  if (interaction.commandName === 'enquete') {
+    if (!can(interaction.member, 'createPoll')) {
+      return interaction.reply({ content: 'Voce nao tem permissao para criar enquete.', ephemeral: true });
+    }
+    return interaction.showModal(modal('poll:create', 'Criar Enquete', [
+      input('question', 'Pergunta', TextInputStyle.Short, false)
+        .setPlaceholder(polls.defaultQuestion),
+      input('options', 'Opcoes separadas por virgula', TextInputStyle.Paragraph, false)
+        .setPlaceholder(polls.defaultOptions.join(', '))
     ]));
   }
 

@@ -2,6 +2,7 @@ const { ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = req
 const events = require('../modules/events/events.service');
 const eventsRepo = require('../modules/events/events.repository');
 const deposit = require('../modules/deposit/deposit.service');
+const polls = require('../modules/polls/polls.service');
 const { can } = require('../config/permissions');
 
 async function handleSelect(interaction) {
@@ -10,6 +11,14 @@ async function handleSelect(interaction) {
     const role = interaction.values[0];
     await events.joinEvent(interaction, Number(id), role);
     return interaction.reply({ content: `Voce entrou como ${role}.`, ephemeral: true });
+  }
+
+  if (scope === 'poll' && action === 'vote') {
+    const selected = await polls.vote({ interaction, pollId: Number(id), options: interaction.values });
+    return interaction.reply({
+      content: selected.length ? `Seu voto agora: ${selected.join(', ')}.` : 'Seu voto foi limpo.',
+      ephemeral: true
+    });
   }
 
   if (scope === 'event_review_select') {

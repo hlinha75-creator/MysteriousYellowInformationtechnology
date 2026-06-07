@@ -9,6 +9,7 @@ const { safeSend, baseEmbed } = require('../utils/discord');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const financeRepo = require('../modules/finance/finance.repository');
 const deposit = require('../modules/deposit/deposit.service');
+const polls = require('../modules/polls/polls.service');
 
 function intField(fields, name) {
   const value = Number.parseInt(fields.getTextInputValue(name), 10);
@@ -17,6 +18,14 @@ function intField(fields, name) {
 }
 
 async function handleModal(interaction) {
+  if (interaction.customId === 'poll:create') {
+    if (!can(interaction.member, 'createPoll')) {
+      return interaction.reply({ content: 'Voce nao tem permissao para criar enquete.', ephemeral: true });
+    }
+    const poll = await polls.createPollFromModal(interaction);
+    return interaction.reply({ content: `Enquete #${poll.id} criada no canal de eventos.`, ephemeral: true });
+  }
+
   if (interaction.customId === 'event:create') {
     if (!can(interaction.member, 'createEvent')) {
       return interaction.reply({ content: 'Voce nao tem permissao para criar evento.', ephemeral: true });

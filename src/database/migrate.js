@@ -183,6 +183,34 @@ const migrations = [
         db.exec('ALTER TABLE events ADD COLUMN warning_message_id TEXT');
       }
     }
+  },
+  {
+    version: 4,
+    name: 'polls',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS polls (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          creator_id TEXT NOT NULL,
+          question TEXT NOT NULL,
+          options_json TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'open',
+          channel_id TEXT,
+          message_id TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          closed_at TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS poll_votes (
+          poll_id INTEGER NOT NULL,
+          user_id TEXT NOT NULL,
+          options_json TEXT NOT NULL,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (poll_id, user_id),
+          FOREIGN KEY (poll_id) REFERENCES polls(id) ON DELETE CASCADE
+        );
+      `);
+    }
   }
 ];
 
