@@ -211,6 +211,51 @@ const migrations = [
         );
       `);
     }
+  },
+  {
+    version: 5,
+    name: 'auctions',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS auctions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          item_name TEXT NOT NULL,
+          item_details TEXT,
+          image_url TEXT,
+          pickup_info TEXT,
+          starting_bid INTEGER NOT NULL DEFAULT 0,
+          min_increment INTEGER NOT NULL DEFAULT 0,
+          current_bid INTEGER NOT NULL DEFAULT 0,
+          current_winner_id TEXT,
+          status TEXT NOT NULL DEFAULT 'open',
+          channel_id TEXT,
+          message_id TEXT,
+          created_by TEXT NOT NULL,
+          closed_by TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          closed_at TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS auction_bids (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          auction_id INTEGER NOT NULL,
+          user_id TEXT NOT NULL,
+          amount INTEGER NOT NULL,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (auction_id) REFERENCES auctions(id) ON DELETE CASCADE
+        );
+      `);
+    }
+  },
+  {
+    version: 6,
+    name: 'auction_pickup_info',
+    up(db) {
+      const columns = db.prepare('PRAGMA table_info(auctions)').all().map((column) => column.name);
+      if (!columns.includes('pickup_info')) {
+        db.exec('ALTER TABLE auctions ADD COLUMN pickup_info TEXT');
+      }
+    }
   }
 ];
 

@@ -9,6 +9,8 @@ const audit = require('../modules/audit/audit.repository');
 const csv = require('../modules/csv/csv.service');
 const deposit = require('../modules/deposit/deposit.service');
 const polls = require('../modules/polls/polls.service');
+const auctions = require('../modules/auctions/auctions.service');
+const auctionsRepo = require('../modules/auctions/auctions.repository');
 const { formatSilver } = require('../utils/silver');
 const registration = require('../modules/registration/registration.service');
 const { safeSend } = require('../utils/discord');
@@ -61,6 +63,54 @@ async function handleButton(interaction) {
     return showModal(interaction, 'registration:submit', 'Registro Albion', [
       textInput('albionName', 'Nome do personagem no Albion')
     ]);
+  }
+
+  if (interaction.customId === 'panel:create_auction') {
+    if (!can(interaction.member, 'createAuction')) {
+      return interaction.reply({ content: 'Voce precisa ser membro para criar leilao.', ephemeral: true });
+    }
+    return showModal(interaction, 'auction:create', 'Criar Leilao', [
+      textInput('itemName', 'Item'),
+      textInput('startingBid', 'Lance inicial', true, 'Ex: 10m'),
+      textInput('minIncrement', 'Incremento minimo', true, 'Ex: 500k'),
+      textInput('imageUrl', 'Link da imagem', false, 'Ex: https://prnt.sc/Lgy687wcbXnK'),
+      textInput('pickupInfo', 'Retirada: local e responsavel', false, 'Ex: Bau da ilha da guild. Pegar com @Lucas', TextInputStyle.Paragraph)
+    ]);
+  }
+
+  if (scope === 'auction') {
+    const auctionId = Number(id);
+    const auction = auctionsRepo.getAuction(auctionId);
+    if (!auction) return interaction.reply({ content: 'Leilao nao encontrado.', ephemeral: true });
+
+    if (action === 'bid') {
+      if (auction.status !== 'open') {
+        return interaction.reply({ content: 'Este leilao ja foi encerrado.', ephemeral: true });
+      }
+      return showModal(interaction, `auction:bid_modal:${auctionId}`, `Lance Leilao #${auctionId}`, [
+        textInput('amount', 'Valor do lance', true, 'Ex: 12m')
+      ]);
+    }
+
+    if (action === 'close') {
+      if (auction.created_by !== interaction.user.id && !can(interaction.member, 'approvePayment')) {
+        return interaction.reply({ content: 'Somente o criador ou staff/tesouraria pode encerrar este leilao.', ephemeral: true });
+      }
+      const closed = auctions.closeAuction({ auctionId, actorId: interaction.user.id });
+      await auctions.refreshAuctionMessage(interaction.client, closed);
+      const winner = closed.current_winner_id
+        ? `Vencedor: <@${closed.current_winner_id}> por ${formatSilver(closed.current_bid)}.${closed.pickup_info ? `\nRetirada: ${closed.pickup_info}` : ''}`
+        : 'Leilao encerrado sem lances.';
+      if (closed.current_winner_id) {
+        const user = await interaction.client.users.fetch(closed.current_winner_id).catch(() => null);
+        await user?.send([
+          `Voce venceu o leilao #${closed.id}: ${closed.item_name}.`,
+          `Lance vencedor: ${formatSilver(closed.current_bid)}.`,
+          closed.pickup_info ? `Retirada: ${closed.pickup_info}` : 'Combine a retirada com o criador do leilao.'
+        ].join('\n')).catch(() => {});
+      }
+      return interaction.reply({ content: winner, ephemeral: true });
+    }
   }
 
   if (scope === 'poll') {
@@ -228,17 +278,15 @@ async function handleButton(interaction) {
     if (action === 'confirm') {
       await interaction.deferReply({ ephemeral: true });
       const result = await deposit.confirmDraft({ draftId: id, actorId: interaction.user.id, client: interaction.client });
-      await interaction.message.edit({
-        content: `Deposito confirmado por <@${interaction.user.id}>. ${result.participants.length} membro(s) receberam ${formatSilver(result.amount)}.`,
-        embeds: [],
-        components: []
+      await clearSourceMessage(interaction, 'Deposito aplicado.');
+      return interaction.editReply({
+        content: `Deposito aplicado nos saldos. ${result.participants.length} membro(s) receberam ${formatSilver(result.amount)}.`
       });
-      return interaction.editReply({ content: 'Deposito aplicado nos saldos.' });
     }
 
     if (action === 'cancel') {
       deposit.cancelDraft(id);
-      await interaction.message.edit({ content: 'Deposito cancelado.', embeds: [], components: [] });
+      await clearSourceMessage(interaction, 'Deposito cancelado.');
       return interaction.reply({ content: 'Deposito cancelado.', ephemeral: true });
     }
   }
@@ -306,6 +354,10 @@ async function handleButton(interaction) {
     if (draft.userId !== interaction.user.id) {
       return interaction.reply({ content: 'Essa confirmacao de saque nao foi criada para voce.', ephemeral: true });
     }
+    const currentBalance = financeRepo.getBalance(interaction.user.id);
+    const negativeWarning = draft.amount > currentBalance
+      ? `\n\nATENCAO: saldo atual ${formatSilver(currentBalance)}. Se pagar este saque, o membro ficara com ${formatSilver(currentBalance - draft.amount)}.`
+      : '';
     const request = finance.requestWithdraw({ userId: interaction.user.id, amount: draft.amount, note: draft.note });
     audit.createAuditLog({
       type: 'withdraw_requested',
@@ -315,7 +367,7 @@ async function handleButton(interaction) {
       reason: draft.note
     });
     await safeSend(interaction.client, ids.channels.finance, {
-      content: `Saque solicitado: #${request.lastInsertRowid} por <@${interaction.user.id}> no valor de ${formatSilver(draft.amount)}.`,
+      content: `Saque solicitado: #${request.lastInsertRowid} por <@${interaction.user.id}> no valor de ${formatSilver(draft.amount)}.${negativeWarning}`,
       components: [
         new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId(`finance:approve_withdraw:${request.lastInsertRowid}`).setLabel('Aprovar saque').setStyle(ButtonStyle.Success),
@@ -468,6 +520,12 @@ function showLootModal(interaction, eventId) {
     textInput('silverBags', 'Sacos de prata'),
     textInput('taxPercent', 'Taxa % 0 a 100')
   ]);
+}
+
+async function clearSourceMessage(interaction, fallbackContent) {
+  await interaction.message.delete().catch(async () => {
+    await interaction.message.edit({ content: fallbackContent, embeds: [], components: [] }).catch(() => {});
+  });
 }
 
 module.exports = {

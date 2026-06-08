@@ -35,7 +35,8 @@ const panels = [
     components: [
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('finance:balance').setLabel('Consultar').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('finance:withdraw').setLabel('Sacar').setStyle(ButtonStyle.Primary)
+        new ButtonBuilder().setCustomId('finance:withdraw').setLabel('Sacar').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('panel:create_auction').setLabel('Criar leilao').setStyle(ButtonStyle.Success)
       )
     ]
   },

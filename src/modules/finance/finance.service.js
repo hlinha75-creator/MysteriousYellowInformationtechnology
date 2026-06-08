@@ -48,6 +48,7 @@ async function notifyBalanceTransactions({ client, transactions }) {
       userId: item.userId,
       amount: item.amount,
       reason: item.reason,
+      beforeBalance: item.beforeBalance,
       balance: item.afterBalance ?? repo.getBalance(item.userId)
     });
   }
@@ -57,11 +58,12 @@ async function notifyPositiveTransactions({ client, transactions }) {
   return notifyBalanceTransactions({ client, transactions });
 }
 
-async function notifyBalanceChange({ client, userId, amount, reason, balance }) {
+async function notifyBalanceChange({ client, userId, amount, reason, beforeBalance, balance }) {
   try {
     const user = await client.users.fetch(userId);
     const direction = amount > 0 ? 'Entrou' : 'Saiu';
-    await user.send(`${direction} ${formatSilver(Math.abs(amount))} de prata no seu saldo.${reason ? ` Motivo: ${reason}.` : ''} Saldo atual: ${formatSilver(balance)}.`);
+    const beforeText = beforeBalance == null ? '' : ` Saldo anterior: ${formatSilver(beforeBalance)}.`;
+    await user.send(`${direction} ${formatSilver(Math.abs(amount))} de prata no seu saldo.${reason ? ` Motivo: ${reason}.` : ''}${beforeText} Saldo atual: ${formatSilver(balance)}.`);
   } catch (error) {
     audit.createAuditLog({
       type: 'balance_dm_failed',

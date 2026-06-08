@@ -10,6 +10,7 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const financeRepo = require('../modules/finance/finance.repository');
 const deposit = require('../modules/deposit/deposit.service');
 const polls = require('../modules/polls/polls.service');
+const auctions = require('../modules/auctions/auctions.service');
 
 function intField(fields, name) {
   const value = Number.parseInt(fields.getTextInputValue(name), 10);
@@ -18,6 +19,41 @@ function intField(fields, name) {
 }
 
 async function handleModal(interaction) {
+  if (interaction.customId === 'auction:create') {
+    if (!can(interaction.member, 'createAuction')) {
+      return interaction.reply({ content: 'Voce precisa ser membro para criar leilao.', ephemeral: true });
+    }
+    await interaction.deferReply({ ephemeral: true });
+    const imageUrl = fieldOrDefault(interaction, 'imageUrl', '');
+    if (imageUrl && !/^https?:\/\/\S+$/i.test(imageUrl)) {
+      throw new Error('Link da imagem invalido. Use um link com http:// ou https://.');
+    }
+    const itemName = interaction.fields.getTextInputValue('itemName').trim();
+    const startingBid = parseSilver(interaction.fields.getTextInputValue('startingBid'));
+    const minIncrement = parseSilver(interaction.fields.getTextInputValue('minIncrement'));
+    if (!itemName) throw new Error('Informe o nome do item.');
+    if (startingBid <= 0) throw new Error('O lance inicial precisa ser maior que zero.');
+    if (minIncrement <= 0) throw new Error('O incremento minimo precisa ser maior que zero.');
+    const auction = await auctions.createAuctionFromModal(interaction, {
+      itemName,
+      startingBid,
+      minIncrement,
+      imageUrl,
+      pickupInfo: fieldOrDefault(interaction, 'pickupInfo', '')
+    });
+    return interaction.editReply({ content: `Leilao #${auction.id} criado no canal <#${ids.channels.consultBalance}>.` });
+  }
+
+  if (interaction.customId.startsWith('auction:bid_modal:')) {
+    const auctionId = Number(interaction.customId.split(':')[2]);
+    await interaction.deferReply({ ephemeral: true });
+    const amount = parseSilver(interaction.fields.getTextInputValue('amount'));
+    if (amount <= 0) throw new Error('O lance precisa ser maior que zero.');
+    const auction = auctions.placeBid({ auctionId, userId: interaction.user.id, amount });
+    await auctions.refreshAuctionMessage(interaction.client, auction);
+    return interaction.editReply({ content: `Lance registrado: ${formatSilver(amount)}.` });
+  }
+
   if (interaction.customId === 'poll:create') {
     if (!can(interaction.member, 'createPoll')) {
       return interaction.reply({ content: 'Voce nao tem permissao para criar enquete.', ephemeral: true });
@@ -177,7 +213,7 @@ async function handleModal(interaction) {
       content: 'Deposito criado. Selecione os participantes abaixo usando a busca do Discord.',
       embeds: [deposit.draftEmbed(draft)],
       components: deposit.draftComponents(draft.id),
-      ephemeral: false
+      ephemeral: true
     });
   }
 

@@ -65,6 +65,19 @@ async function handleCommand(interaction) {
     ]));
   }
 
+  if (interaction.commandName === 'leilao') {
+    if (!can(interaction.member, 'createAuction')) {
+      return interaction.reply({ content: 'Voce precisa ser membro para criar leilao.', ephemeral: true });
+    }
+    return interaction.showModal(modal('auction:create', 'Criar Leilao', [
+      input('itemName', 'Item'),
+      input('startingBid', 'Lance inicial', TextInputStyle.Short, true).setPlaceholder('Ex: 10m'),
+      input('minIncrement', 'Incremento minimo', TextInputStyle.Short, true).setPlaceholder('Ex: 500k'),
+      input('imageUrl', 'Link da imagem', TextInputStyle.Short, false).setPlaceholder('Ex: https://prnt.sc/Lgy687wcbXnK'),
+      input('pickupInfo', 'Retirada: local e responsavel', TextInputStyle.Paragraph, false).setPlaceholder('Ex: Bau da ilha da guild. Pegar com @Lucas')
+    ]));
+  }
+
   if (interaction.commandName === 'exportar') {
     if (!can(interaction.member, 'importCsv')) {
       return interaction.reply({ content: 'Voce nao tem permissao para exportar.', ephemeral: true });

@@ -20,6 +20,7 @@ async function submitRegistration({ interaction, albionName }) {
     registrationStatus: 'pending'
   });
   const result = repo.createRegistration({ discordId: member.id, albionName });
+  await applyAlbionNickname(member, albionName);
   await member.roles.remove(ids.roles.noTag).catch(() => {});
   await member.roles.add(ids.roles.guest).catch(() => {});
   audit.createAuditLog({
@@ -30,6 +31,17 @@ async function submitRegistration({ interaction, albionName }) {
     reason: 'Registro enviado'
   });
   return result.lastInsertRowid;
+}
+
+async function applyAlbionNickname(member, albionName) {
+  if (!member?.setNickname) return;
+
+  const nickname = String(albionName || '').trim().slice(0, 32);
+  if (!nickname || member.nickname === nickname) return;
+
+  await member
+    .setNickname(nickname, 'Nick do Albion informado no registro')
+    .catch((error) => console.error(`Falha ao renomear ${member.id} para ${nickname}:`, error));
 }
 
 async function approveRegistration({ guild, registrationId, actorId, asMember, note }) {

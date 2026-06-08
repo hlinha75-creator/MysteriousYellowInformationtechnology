@@ -422,8 +422,8 @@ const approveEventPayment = transaction(({ eventId, actorId }) => {
       referenceId: String(event.id),
       createdBy: actorId
     };
-    finance.applyBalanceTransaction(item);
-    transactions.push(item);
+    const result = finance.applyBalanceTransaction(item);
+    transactions.push(result);
   }
   repo.updateEvent(eventId, { status: 'approved' });
   repo.markReviewApproved({ eventId, approvedBy: actorId });
