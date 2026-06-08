@@ -1,4 +1,4 @@
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder } = require('discord.js');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder } = require('discord.js');
 const { can, hasRole, isOwner } = require('../config/permissions');
 const ids = require('../config/ids');
 const eventsRepo = require('../modules/events/events.repository');
@@ -69,13 +69,12 @@ async function handleButton(interaction) {
     if (!can(interaction.member, 'createAuction')) {
       return interaction.reply({ content: 'Voce precisa ser membro para criar leilao.', ephemeral: true });
     }
-    return showModal(interaction, 'auction:create', 'Criar Leilao', [
-      textInput('itemName', 'Item'),
-      textInput('startingBid', 'Lance inicial', true, 'Ex: 10m'),
-      textInput('minIncrement', 'Incremento minimo', true, 'Ex: 500k'),
-      textInput('imageUrl', 'Link da imagem', false, 'Ex: https://prnt.sc/Lgy687wcbXnK'),
-      textInput('pickupInfo', 'Retirada: local e responsavel', false, 'Ex: Bau da ilha da guild. Pegar com @Lucas', TextInputStyle.Paragraph)
-    ]);
+    const draft = auctions.createDraft({});
+    return interaction.reply({
+      content: 'Escolha em qual canal de texto o leilao sera postado:',
+      components: [auctionChannelSelect(draft.id)],
+      ephemeral: true
+    });
   }
 
   if (scope === 'auction') {
@@ -549,6 +548,17 @@ function adminRemoveBalanceUserSelect() {
       .setPlaceholder('Buscar membro para retirar saldo')
       .setMinValues(1)
       .setMaxValues(1)
+  );
+}
+
+function auctionChannelSelect(draftId) {
+  return new ActionRowBuilder().addComponents(
+    new ChannelSelectMenuBuilder()
+      .setCustomId(`auction_channel_select:create:${draftId}`)
+      .setPlaceholder('Selecionar canal do leilao')
+      .setMinValues(1)
+      .setMaxValues(1)
+      .addChannelTypes(ChannelType.GuildText)
   );
 }
 

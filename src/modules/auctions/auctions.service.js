@@ -5,6 +5,20 @@ const audit = require('../audit/audit.repository');
 const repo = require('./auctions.repository');
 const { formatSilver } = require('../../utils/silver');
 
+const drafts = new Map();
+
+function createDraft({ imageUrl }) {
+  const id = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  drafts.set(id, { id, imageUrl: imageUrl || null, createdAt: Date.now() });
+  return drafts.get(id);
+}
+
+function takeDraft(id) {
+  const draft = drafts.get(id);
+  drafts.delete(id);
+  return draft;
+}
+
 function auctionEmbed(auction) {
   const isOpen = auction.status === 'open';
   const embed = new EmbedBuilder()
@@ -55,7 +69,8 @@ async function createAuctionFromModal(interaction, data) {
     createdBy: interaction.user.id
   });
   const auction = repo.getAuction(Number(result.lastInsertRowid));
-  const channel = await interaction.client.channels.fetch(ids.channels.consultBalance);
+  const channel = await interaction.client.channels.fetch(data.channelId || ids.channels.consultBalance);
+  if (!channel?.isTextBased()) throw new Error('Canal de leilao invalido.');
   const content = auction.image_url && !isDirectImageUrl(auction.image_url) ? auction.image_url : null;
   const message = await channel.send({
     content,
@@ -135,6 +150,8 @@ module.exports = {
   auctionEmbed,
   closeAuction,
   createAuctionFromModal,
+  createDraft,
   placeBid,
-  refreshAuctionMessage
+  refreshAuctionMessage,
+  takeDraft
 };

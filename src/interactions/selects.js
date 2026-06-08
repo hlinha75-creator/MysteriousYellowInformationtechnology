@@ -7,6 +7,20 @@ const { can } = require('../config/permissions');
 
 async function handleSelect(interaction) {
   const [scope, action, id, messageId] = interaction.customId.split(':');
+  if (scope === 'auction_channel_select') {
+    if (!can(interaction.member, 'createAuction')) {
+      return interaction.reply({ content: 'Voce precisa ser membro para criar leilao.', ephemeral: true });
+    }
+    const channelId = interaction.values[0];
+    return showModal(interaction, `auction:create:${channelId}:${id}`, 'Criar Leilao', [
+      input('itemName', 'Item'),
+      input('startingBid', 'Lance inicial', '', 'Ex: 10m'),
+      input('minIncrement', 'Incremento minimo', '', 'Ex: 500k'),
+      input('imageUrl', 'Link da imagem', '', 'Ex: https://prnt.sc/Lgy687wcbXnK', false),
+      input('pickupInfo', 'Retirada: local e responsavel', '', 'Ex: Bau da ilha da guild. Pegar com @Lucas', false).setStyle(TextInputStyle.Paragraph)
+    ]);
+  }
+
   if (scope === 'event' && action === 'join') {
     const role = interaction.values[0];
     await events.joinEvent(interaction, Number(id), role);

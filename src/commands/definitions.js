@@ -24,7 +24,10 @@ const commands = [
     .setDescription('Cria uma enquete no canal de eventos.'),
   new SlashCommandBuilder()
     .setName('leilao')
-    .setDescription('Cria um leilao de item para membros da guild.'),
+    .setDescription('Cria um leilao de item para membros da guild.')
+    .addAttachmentOption((option) => option
+      .setName('imagem')
+      .setDescription('Imagem do item do leilao. Opcional.')),
   new SlashCommandBuilder()
     .setName('exportar')
     .setDescription('Exporta dados em CSV.')

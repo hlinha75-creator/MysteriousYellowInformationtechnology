@@ -19,12 +19,14 @@ function intField(fields, name) {
 }
 
 async function handleModal(interaction) {
-  if (interaction.customId === 'auction:create') {
+  if (interaction.customId.startsWith('auction:create:')) {
     if (!can(interaction.member, 'createAuction')) {
       return interaction.reply({ content: 'Voce precisa ser membro para criar leilao.', ephemeral: true });
     }
     await interaction.deferReply({ ephemeral: true });
-    const imageUrl = fieldOrDefault(interaction, 'imageUrl', '');
+    const [, , channelId, draftId] = interaction.customId.split(':');
+    const draft = auctions.takeDraft(draftId);
+    const imageUrl = fieldOrDefault(interaction, 'imageUrl', '') || draft?.imageUrl || '';
     if (imageUrl && !/^https?:\/\/\S+$/i.test(imageUrl)) {
       throw new Error('Link da imagem invalido. Use um link com http:// ou https://.');
     }
@@ -39,9 +41,10 @@ async function handleModal(interaction) {
       startingBid,
       minIncrement,
       imageUrl,
-      pickupInfo: fieldOrDefault(interaction, 'pickupInfo', '')
+      pickupInfo: fieldOrDefault(interaction, 'pickupInfo', ''),
+      channelId
     });
-    return interaction.editReply({ content: `Leilao #${auction.id} criado no canal <#${ids.channels.consultBalance}>.` });
+    return interaction.editReply({ content: `Leilao #${auction.id} criado no canal <#${channelId}>.` });
   }
 
   if (interaction.customId.startsWith('auction:bid_modal:')) {

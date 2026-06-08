@@ -8,7 +8,7 @@ async function handleInteraction(interaction) {
   try {
     if (interaction.isChatInputCommand()) return await handleCommand(interaction);
     if (interaction.isButton()) return await handleButton(interaction);
-    if (interaction.isStringSelectMenu() || interaction.isUserSelectMenu()) return await handleSelect(interaction);
+    if (interaction.isStringSelectMenu() || interaction.isUserSelectMenu() || interaction.isChannelSelectMenu()) return await handleSelect(interaction);
     if (interaction.isModalSubmit()) {
       if (interaction.customId.startsWith('event:cancel_modal:')) {
         const eventId = Number(interaction.customId.split(':')[2]);

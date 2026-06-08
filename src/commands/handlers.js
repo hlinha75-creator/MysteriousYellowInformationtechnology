@@ -2,6 +2,8 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  ChannelSelectMenuBuilder,
+  ChannelType,
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle
@@ -16,6 +18,7 @@ const ids = require('../config/ids');
 const { formatRenameResults, renameConfiguredChannels } = require('../modules/setup/channelRenamer');
 const { auditAttachment, auditGuildChannels, formatAuditSummary } = require('../modules/setup/channelAudit');
 const polls = require('../modules/polls/polls.service');
+const auctions = require('../modules/auctions/auctions.service');
 
 function input(id, label, style = TextInputStyle.Short, required = true) {
   return new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setRequired(required);
@@ -69,13 +72,13 @@ async function handleCommand(interaction) {
     if (!can(interaction.member, 'createAuction')) {
       return interaction.reply({ content: 'Voce precisa ser membro para criar leilao.', ephemeral: true });
     }
-    return interaction.showModal(modal('auction:create', 'Criar Leilao', [
-      input('itemName', 'Item'),
-      input('startingBid', 'Lance inicial', TextInputStyle.Short, true).setPlaceholder('Ex: 10m'),
-      input('minIncrement', 'Incremento minimo', TextInputStyle.Short, true).setPlaceholder('Ex: 500k'),
-      input('imageUrl', 'Link da imagem', TextInputStyle.Short, false).setPlaceholder('Ex: https://prnt.sc/Lgy687wcbXnK'),
-      input('pickupInfo', 'Retirada: local e responsavel', TextInputStyle.Paragraph, false).setPlaceholder('Ex: Bau da ilha da guild. Pegar com @Lucas')
-    ]));
+    const image = interaction.options.getAttachment('imagem');
+    const draft = auctions.createDraft({ imageUrl: image?.url });
+    return interaction.reply({
+      content: 'Escolha em qual canal de texto o leilao sera postado:',
+      components: [auctionChannelSelect(draft.id)],
+      ephemeral: true
+    });
   }
 
   if (interaction.commandName === 'exportar') {
@@ -210,3 +213,14 @@ module.exports = {
   input,
   modal
 };
+
+function auctionChannelSelect(draftId) {
+  return new ActionRowBuilder().addComponents(
+    new ChannelSelectMenuBuilder()
+      .setCustomId(`auction_channel_select:create:${draftId}`)
+      .setPlaceholder('Selecionar canal do leilao')
+      .setMinValues(1)
+      .setMaxValues(1)
+      .addChannelTypes(ChannelType.GuildText)
+  );
+}
