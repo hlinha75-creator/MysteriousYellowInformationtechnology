@@ -29,6 +29,16 @@ const commands = [
       .setName('imagem')
       .setDescription('Imagem do item do leilao. Opcional.')),
   new SlashCommandBuilder()
+    .setName('objetivo')
+    .setDescription('Avisa um objetivo temporario no chat notag.')
+    .addStringOption((option) => option
+      .setName('alerta')
+      .setDescription('Formato: tipo, mapa, tempo. Ex: orb roxa, ho loch, 5min')
+      .setRequired(true))
+    .addAttachmentOption((option) => option
+      .setName('imagem')
+      .setDescription('Print do objetivo. Opcional.')),
+  new SlashCommandBuilder()
     .setName('exportar')
     .setDescription('Exporta dados em CSV.')
     .addStringOption((option) => option

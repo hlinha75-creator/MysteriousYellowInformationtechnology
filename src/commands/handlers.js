@@ -19,6 +19,7 @@ const { formatRenameResults, renameConfiguredChannels } = require('../modules/se
 const { auditAttachment, auditGuildChannels, formatAuditSummary } = require('../modules/setup/channelAudit');
 const polls = require('../modules/polls/polls.service');
 const auctions = require('../modules/auctions/auctions.service');
+const objectives = require('../modules/objectives/objectives.service');
 
 function input(id, label, style = TextInputStyle.Short, required = true) {
   return new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setRequired(required);
@@ -78,6 +79,17 @@ async function handleCommand(interaction) {
       content: 'Escolha em qual canal de texto o leilao sera postado:',
       components: [auctionChannelSelect(draft.id)],
       ephemeral: true
+    });
+  }
+
+  if (interaction.commandName === 'objetivo') {
+    if (!can(interaction.member, 'createObjective')) {
+      return interaction.reply({ content: 'Voce precisa ser membro para avisar objetivo.', ephemeral: true });
+    }
+    await interaction.deferReply({ ephemeral: true });
+    const result = await objectives.createObjective(interaction);
+    return interaction.editReply({
+      content: `Objetivo avisado em <#${result.message.channelId}>. A mensagem sera apagada quando o tempo acabar.`
     });
   }
 

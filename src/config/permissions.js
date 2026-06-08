@@ -3,6 +3,7 @@ const ids = require('./ids');
 const groups = {
   createEvent: ['caller', 'staff', 'adm', 'recruiter'],
   createAuction: ['member', 'caller', 'staff', 'adm', 'recruiter', 'treasurer'],
+  createObjective: ['member', 'caller', 'staff', 'adm', 'recruiter', 'treasurer'],
   createPoll: ['member', 'caller', 'staff', 'adm', 'recruiter', 'treasurer'],
   approvePayment: ['staff', 'adm', 'treasurer'],
   importCsv: ['staff', 'adm', 'treasurer'],
