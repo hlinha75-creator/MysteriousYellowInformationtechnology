@@ -9,6 +9,7 @@ const { backupDatabase } = require('./database/backup');
 const registration = require('./modules/registration/registration.service');
 const voice = require('./modules/voice/voice.service');
 const events = require('./modules/events/events.service');
+const auctions = require('./modules/auctions/auctions.service');
 const { handleInteraction } = require('./interactions/router');
 
 migrate();
@@ -38,6 +39,9 @@ client.once('clientReady', () => {
   setInterval(() => {
     events.checkEventStartWarnings(client).catch((error) => console.error('Falha ao verificar avisos de eventos:', error));
   }, 30000);
+  setInterval(() => {
+    auctions.refreshOpenAuctions(client).catch((error) => console.error('Falha ao atualizar leiloes:', error));
+  }, 60000);
 });
 
 client.on('error', (error) => {

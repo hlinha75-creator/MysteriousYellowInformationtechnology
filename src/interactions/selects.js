@@ -16,7 +16,7 @@ async function handleSelect(interaction) {
       input('itemName', 'Item'),
       input('startingBid', 'Lance inicial', '', 'Ex: 10m'),
       input('minIncrement', 'Incremento minimo', '', 'Ex: 500k'),
-      input('imageUrl', 'Link da imagem', '', 'Ex: https://prnt.sc/Lgy687wcbXnK', false),
+      input('duration', 'Tempo limite', '', 'Padrao: 24h. Ex: 12h, 2d, 90min', false),
       input('pickupInfo', 'Retirada: local e responsavel', '', 'Ex: Bau da ilha da guild. Pegar com @Lucas', false).setStyle(TextInputStyle.Paragraph)
     ]);
   }

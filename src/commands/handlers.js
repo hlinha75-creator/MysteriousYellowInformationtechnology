@@ -74,6 +74,9 @@ async function handleCommand(interaction) {
       return interaction.reply({ content: 'Voce precisa ser membro para criar leilao.', ephemeral: true });
     }
     const image = interaction.options.getAttachment('imagem');
+    if (image && !auctions.isImageAttachment(image)) {
+      return interaction.reply({ content: 'O anexo precisa ser uma imagem.', ephemeral: true });
+    }
     const draft = auctions.createDraft({ imageUrl: image?.url });
     return interaction.reply({
       content: 'Escolha em qual canal de texto o leilao sera postado:',

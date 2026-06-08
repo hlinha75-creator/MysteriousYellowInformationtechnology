@@ -26,13 +26,10 @@ async function handleModal(interaction) {
     await interaction.deferReply({ ephemeral: true });
     const [, , channelId, draftId] = interaction.customId.split(':');
     const draft = auctions.takeDraft(draftId);
-    const imageUrl = fieldOrDefault(interaction, 'imageUrl', '') || draft?.imageUrl || '';
-    if (imageUrl && !/^https?:\/\/\S+$/i.test(imageUrl)) {
-      throw new Error('Link da imagem invalido. Use um link com http:// ou https://.');
-    }
     const itemName = interaction.fields.getTextInputValue('itemName').trim();
     const startingBid = parseSilver(interaction.fields.getTextInputValue('startingBid'));
     const minIncrement = parseSilver(interaction.fields.getTextInputValue('minIncrement'));
+    const durationMs = auctions.parseDurationMs(fieldOrDefault(interaction, 'duration', '24h'));
     if (!itemName) throw new Error('Informe o nome do item.');
     if (startingBid <= 0) throw new Error('O lance inicial precisa ser maior que zero.');
     if (minIncrement <= 0) throw new Error('O incremento minimo precisa ser maior que zero.');
@@ -40,8 +37,9 @@ async function handleModal(interaction) {
       itemName,
       startingBid,
       minIncrement,
-      imageUrl,
+      imageUrl: draft?.imageUrl,
       pickupInfo: fieldOrDefault(interaction, 'pickupInfo', ''),
+      durationMs,
       channelId
     });
     return interaction.editReply({ content: `Leilao #${auction.id} criado no canal <#${channelId}>.` });

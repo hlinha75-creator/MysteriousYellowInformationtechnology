@@ -86,6 +86,12 @@ async function handleButton(interaction) {
       if (auction.status !== 'open') {
         return interaction.reply({ content: 'Este leilao ja foi encerrado.', ephemeral: true });
       }
+      if (auctions.isExpired(auction)) {
+        const closed = auctions.closeAuction({ auctionId, actorId: interaction.client.user?.id || 'system' });
+        await auctions.refreshAuctionMessage(interaction.client, closed);
+        if (closed.current_winner_id) await auctions.notifyWinner(interaction.client, closed);
+        return interaction.reply({ content: 'Este leilao acabou de encerrar pelo tempo limite.', ephemeral: true });
+      }
       return showModal(interaction, `auction:bid_modal:${auctionId}`, `Lance Leilao #${auctionId}`, [
         textInput('amount', 'Valor do lance', true, 'Ex: 12m')
       ]);
@@ -101,12 +107,7 @@ async function handleButton(interaction) {
         ? `Vencedor: <@${closed.current_winner_id}> por ${formatSilver(closed.current_bid)}.${closed.pickup_info ? `\nRetirada: ${closed.pickup_info}` : ''}`
         : 'Leilao encerrado sem lances.';
       if (closed.current_winner_id) {
-        const user = await interaction.client.users.fetch(closed.current_winner_id).catch(() => null);
-        await user?.send([
-          `Voce venceu o leilao #${closed.id}: ${closed.item_name}.`,
-          `Lance vencedor: ${formatSilver(closed.current_bid)}.`,
-          closed.pickup_info ? `Retirada: ${closed.pickup_info}` : 'Combine a retirada com o criador do leilao.'
-        ].join('\n')).catch(() => {});
+        await auctions.notifyWinner(interaction.client, closed);
       }
       return interaction.reply({ content: winner, ephemeral: true });
     }

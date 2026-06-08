@@ -227,6 +227,7 @@ const migrations = [
           min_increment INTEGER NOT NULL DEFAULT 0,
           current_bid INTEGER NOT NULL DEFAULT 0,
           current_winner_id TEXT,
+          ends_at TEXT,
           status TEXT NOT NULL DEFAULT 'open',
           channel_id TEXT,
           message_id TEXT,
@@ -255,6 +256,17 @@ const migrations = [
       if (!columns.includes('pickup_info')) {
         db.exec('ALTER TABLE auctions ADD COLUMN pickup_info TEXT');
       }
+    }
+  },
+  {
+    version: 7,
+    name: 'auction_ends_at',
+    up(db) {
+      const columns = db.prepare('PRAGMA table_info(auctions)').all().map((column) => column.name);
+      if (!columns.includes('ends_at')) {
+        db.exec('ALTER TABLE auctions ADD COLUMN ends_at TEXT');
+      }
+      db.exec("UPDATE auctions SET ends_at = datetime(created_at, '+24 hours') WHERE ends_at IS NULL");
     }
   }
 ];

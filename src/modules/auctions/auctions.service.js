@@ -6,6 +6,9 @@ const repo = require('./auctions.repository');
 const { formatSilver } = require('../../utils/silver');
 
 const drafts = new Map();
+const DEFAULT_DURATION_MS = 24 * 60 * 60 * 1000;
+const MIN_DURATION_MS = 60 * 1000;
+const MAX_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 
 function createDraft({ imageUrl }) {
   const id = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -21,26 +24,24 @@ function takeDraft(id) {
 
 function auctionEmbed(auction) {
   const isOpen = auction.status === 'open';
+  const remainingMs = getRemainingMs(auction);
   const embed = new EmbedBuilder()
     .setTitle(`Leilao #${auction.id}: ${auction.item_name}`)
     .setColor(isOpen ? 0xd69e2e : 0x718096)
     .addFields(
-      { name: 'Status', value: isOpen ? 'Aberto' : 'Encerrado', inline: true },
       { name: 'Lance atual', value: formatSilver(auction.current_bid), inline: true },
-      { name: 'Incremento minimo', value: formatSilver(auction.min_increment), inline: true },
+      { name: 'Tempo restante', value: isOpen ? formatRemaining(remainingMs) : 'Encerrado', inline: true },
       { name: 'Maior lance', value: auction.current_winner_id ? `<@${auction.current_winner_id}>` : 'Ninguem ainda', inline: true },
+      { name: 'Incremento minimo', value: formatSilver(auction.min_increment), inline: true },
       { name: 'Criado por', value: `<@${auction.created_by}>`, inline: true }
     )
-    .setTimestamp(new Date(auction.created_at));
+    .setTimestamp(auction.ends_at ? new Date(auction.ends_at) : new Date(auction.created_at));
 
   if (auction.pickup_info) {
     embed.addFields({ name: 'Retirada', value: auction.pickup_info });
   }
   if (auction.image_url) {
-    embed.addFields({ name: 'Imagem', value: auction.image_url });
-    if (isDirectImageUrl(auction.image_url)) {
-      embed.setImage(auction.image_url);
-    }
+    embed.setImage(auction.image_url);
   }
   if (!isOpen && auction.current_winner_id) {
     embed.addFields({ name: 'Vencedor', value: `<@${auction.current_winner_id}> por ${formatSilver(auction.current_bid)}` });
@@ -66,14 +67,13 @@ async function createAuctionFromModal(interaction, data) {
     pickupInfo: data.pickupInfo,
     startingBid: data.startingBid,
     minIncrement: data.minIncrement,
+    endsAt: new Date(Date.now() + (data.durationMs || DEFAULT_DURATION_MS)).toISOString(),
     createdBy: interaction.user.id
   });
   const auction = repo.getAuction(Number(result.lastInsertRowid));
   const channel = await interaction.client.channels.fetch(data.channelId || ids.channels.consultBalance);
   if (!channel?.isTextBased()) throw new Error('Canal de leilao invalido.');
-  const content = auction.image_url && !isDirectImageUrl(auction.image_url) ? auction.image_url : null;
   const message = await channel.send({
-    content,
     embeds: [auctionEmbed(auction)],
     components: auctionComponents(auction)
   });
@@ -92,6 +92,9 @@ const placeBid = transaction(({ auctionId, userId, amount }) => {
   const auction = repo.getAuction(auctionId);
   if (!auction) throw new Error('Leilao nao encontrado.');
   if (auction.status !== 'open') throw new Error('Este leilao ja foi encerrado.');
+  if (isExpired(auction)) {
+    throw new Error('Este leilao acabou pelo tempo limite.');
+  }
   if (auction.current_winner_id === userId) throw new Error('Voce ja tem o maior lance neste leilao.');
 
   const minimum = auction.current_winner_id
@@ -141,8 +144,81 @@ function closeAuction({ auctionId, actorId }) {
   return repo.getAuction(auctionId);
 }
 
-function isDirectImageUrl(url) {
-  return /^https?:\/\/\S+\.(png|jpe?g|gif|webp)(\?\S*)?$/i.test(String(url || '').trim());
+async function refreshOpenAuctions(client) {
+  const openAuctions = repo.listOpenAuctions();
+  for (const auction of openAuctions) {
+    const current = isExpired(auction)
+      ? closeAuction({ auctionId: auction.id, actorId: client.user?.id || 'system' })
+      : auction;
+    await refreshAuctionMessage(client, current);
+    if (current.status !== 'open' && current.current_winner_id) {
+      await notifyWinner(client, current);
+    }
+  }
+}
+
+async function notifyWinner(client, auction) {
+  const user = await client.users.fetch(auction.current_winner_id).catch(() => null);
+  await user?.send(winnerMessage(auction)).catch(() => {});
+}
+
+function winnerMessage(auction) {
+  return [
+    `Voce venceu o leilao #${auction.id}: ${auction.item_name}.`,
+    `Lance vencedor: ${formatSilver(auction.current_bid)}.`,
+    auction.pickup_info ? `Retirada: ${auction.pickup_info}` : 'Combine a retirada com o criador do leilao.'
+  ].join('\n');
+}
+
+function getRemainingMs(auction) {
+  const endsAt = auction.ends_at ? new Date(auction.ends_at).getTime() : Date.now();
+  return Math.max(0, endsAt - Date.now());
+}
+
+function isExpired(auction) {
+  return auction.ends_at && getRemainingMs(auction) <= 0;
+}
+
+function formatRemaining(ms) {
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  }
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+function parseDurationMs(value) {
+  const text = String(value || '').trim().toLowerCase().replace(/\s+/g, '');
+  if (!text) return DEFAULT_DURATION_MS;
+  const match = text.match(/^(\d{1,3})(d|dia|dias|h|hora|horas|m|min|minuto|minutos)?$/);
+  if (!match) {
+    throw new Error('Tempo invalido. Use algo como 24h, 2d ou 90min.');
+  }
+
+  const amount = Number(match[1]);
+  const unit = match[2] || 'h';
+  const durationMs = unit.startsWith('d')
+    ? amount * 24 * 60 * 60 * 1000
+    : unit.startsWith('m')
+      ? amount * 60 * 1000
+      : amount * 60 * 60 * 1000;
+
+  if (durationMs < MIN_DURATION_MS) {
+    throw new Error('O tempo minimo do leilao e 1 minuto.');
+  }
+  if (durationMs > MAX_DURATION_MS) {
+    throw new Error('O tempo maximo do leilao e 7 dias.');
+  }
+  return durationMs;
+}
+
+function isImageAttachment(attachment) {
+  if (!attachment) return false;
+  if (attachment.contentType?.startsWith('image/')) return true;
+  return /\.(png|jpe?g|gif|webp)(\?\S*)?$/i.test(attachment.url || '');
 }
 
 module.exports = {
@@ -151,7 +227,14 @@ module.exports = {
   closeAuction,
   createAuctionFromModal,
   createDraft,
+  formatRemaining,
+  isImageAttachment,
+  isExpired,
+  parseDurationMs,
   placeBid,
+  refreshOpenAuctions,
   refreshAuctionMessage,
-  takeDraft
+  takeDraft,
+  notifyWinner,
+  winnerMessage
 };

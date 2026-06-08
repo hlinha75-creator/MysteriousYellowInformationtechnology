@@ -1,12 +1,12 @@
 const { getDatabase } = require('../../database/connection');
 
-function createAuction({ itemName, imageUrl, pickupInfo, startingBid, minIncrement, createdBy }) {
+function createAuction({ itemName, imageUrl, pickupInfo, startingBid, minIncrement, endsAt, createdBy }) {
   return getDatabase()
     .prepare(`
       INSERT INTO auctions
-        (item_name, image_url, pickup_info, starting_bid, min_increment, current_bid, created_by)
+        (item_name, image_url, pickup_info, starting_bid, min_increment, current_bid, ends_at, created_by)
       VALUES
-        (@itemName, @imageUrl, @pickupInfo, @startingBid, @minIncrement, @startingBid, @createdBy)
+        (@itemName, @imageUrl, @pickupInfo, @startingBid, @minIncrement, @startingBid, @endsAt, @createdBy)
     `)
     .run({
       itemName,
@@ -14,6 +14,7 @@ function createAuction({ itemName, imageUrl, pickupInfo, startingBid, minIncreme
       pickupInfo: pickupInfo || null,
       startingBid,
       minIncrement,
+      endsAt,
       createdBy
     });
 }
@@ -46,6 +47,12 @@ function closeAuction({ id, closedBy }) {
     .run(closedBy, id);
 }
 
+function listOpenAuctions() {
+  return getDatabase()
+    .prepare("SELECT * FROM auctions WHERE status = 'open' ORDER BY id ASC")
+    .all();
+}
+
 function listBids(auctionId, limit = 5) {
   return getDatabase()
     .prepare('SELECT * FROM auction_bids WHERE auction_id = ? ORDER BY amount DESC, id ASC LIMIT ?')
@@ -57,6 +64,7 @@ module.exports = {
   createAuction,
   getAuction,
   insertBid,
+  listOpenAuctions,
   listBids,
   updateAuctionMessage,
   updateCurrentBid
