@@ -18,6 +18,7 @@ module.exports = {
     finance: '1481318081145077812',
     consultBalance: '1481284047526166731',
     bankLogs: '1481251396413296773',
+    dpsMeter: '1482081003143958568',
     guildBalances: '1481251411726438435',
     adminPanel: '1486152824067719258',
     archive: '1499357332231163924',

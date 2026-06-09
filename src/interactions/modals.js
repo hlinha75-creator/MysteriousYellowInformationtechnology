@@ -126,14 +126,13 @@ async function handleModal(interaction) {
       lootTotal: parseSilver(interaction.fields.getTextInputValue('lootTotal')),
       repair: parseSilver(interaction.fields.getTextInputValue('repair')),
       silverBags: parseSilver(interaction.fields.getTextInputValue('silverBags')),
-      taxPercent: intField(interaction.fields, 'taxPercent')
+      taxPercent: intField(interaction.fields, 'taxPercent'),
+      evidenceNotes: interaction.fields.getTextInputValue('evidenceNotes').trim()
     });
-    await safeSend(interaction.client, ids.channels.finance, {
-      content: `Evento #${eventId} em revisao. Loot liquido: ${formatSilver(result.netLoot)}.`,
-      embeds: [events.reviewEmbed(eventId)],
-      components: events.reviewComponents(eventId, 'review')
+    const reviewChannel = await events.createPostEventReviewSpace(interaction, eventId);
+    return interaction.editReply({
+      content: `Revisao criada em <#${reviewChannel.id}>. Loot liquido: ${formatSilver(result.netLoot)}. Anexe o CSV do loot logger nesse canal e ajuste a participacao antes de enviar ao financeiro.`
     });
-    return interaction.editReply({ content: `Revisao criada. Loot liquido: ${formatSilver(result.netLoot)}. Ajuste a participacao antes de enviar ao financeiro.` });
   }
 
   if (interaction.customId.startsWith('event_review:')) {

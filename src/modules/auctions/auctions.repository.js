@@ -41,6 +41,12 @@ function updateCurrentBid({ id, userId, amount }) {
     .run(amount, userId, id);
 }
 
+function updateImage({ id, imageUrl }) {
+  return getDatabase()
+    .prepare('UPDATE auctions SET image_url = ? WHERE id = ?')
+    .run(imageUrl || null, id);
+}
+
 function closeAuction({ id, closedBy }) {
   return getDatabase()
     .prepare("UPDATE auctions SET status = 'closed', closed_by = ?, closed_at = CURRENT_TIMESTAMP WHERE id = ?")
@@ -66,6 +72,7 @@ module.exports = {
   insertBid,
   listOpenAuctions,
   listBids,
+  updateImage,
   updateAuctionMessage,
   updateCurrentBid
 };

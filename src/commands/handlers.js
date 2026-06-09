@@ -20,6 +20,7 @@ const { auditAttachment, auditGuildChannels, formatAuditSummary } = require('../
 const polls = require('../modules/polls/polls.service');
 const auctions = require('../modules/auctions/auctions.service');
 const objectives = require('../modules/objectives/objectives.service');
+const dailyReport = require('../modules/reports/dailyReport.service');
 
 function input(id, label, style = TextInputStyle.Short, required = true) {
   return new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setRequired(required);
@@ -74,9 +75,26 @@ async function handleCommand(interaction) {
       return interaction.reply({ content: 'Voce precisa ser membro para criar leilao.', ephemeral: true });
     }
     const image = interaction.options.getAttachment('imagem');
+    const auctionId = interaction.options.getInteger('codigo');
     if (image && !auctions.isImageAttachment(image)) {
       return interaction.reply({ content: 'O anexo precisa ser uma imagem.', ephemeral: true });
     }
+
+    if (auctionId) {
+      if (!image) {
+        return interaction.reply({ content: 'Anexe uma imagem para atualizar este leilao.', ephemeral: true });
+      }
+      await interaction.deferReply({ ephemeral: true });
+      const auction = await auctions.updateAuctionImage({
+        client: interaction.client,
+        auctionId,
+        imageUrl: image.url,
+        actorId: interaction.user.id,
+        member: interaction.member
+      });
+      return interaction.editReply({ content: `Imagem do leilao #${auction.id} atualizada.` });
+    }
+
     const draft = auctions.createDraft({ imageUrl: image?.url });
     return interaction.reply({
       content: 'Escolha em qual canal de texto o leilao sera postado:',
@@ -101,11 +119,16 @@ async function handleCommand(interaction) {
       return interaction.reply({ content: 'Voce nao tem permissao para exportar.', ephemeral: true });
     }
     const type = interaction.options.getString('tipo');
+    const date = interaction.options.getString('data');
     const attachment = type === 'balances'
       ? csv.balancesAttachment()
       : type === 'transactions'
         ? csv.transactionsAttachment()
-        : csv.auditAttachment();
+        : type === 'voice'
+          ? csv.voiceAttachment()
+          : type === 'voice_daily'
+            ? csv.voiceDailyAttachment(date || undefined)
+            : csv.auditAttachment();
     return interaction.reply({ content: 'Exportacao gerada.', files: [attachment], ephemeral: true });
   }
 
@@ -148,27 +171,25 @@ async function handleCommand(interaction) {
     });
   }
 
-  if (interaction.commandName === 'verificar_membro') {
-    const user = interaction.options.getUser('membro') || interaction.user;
-    if (user.id !== interaction.user.id && !can(interaction.member, 'approveRegistration')) {
-      return interaction.reply({ content: 'Voce so pode verificar voce mesmo.', ephemeral: true });
+  if (interaction.commandName === 'relatorio_diario') {
+    if (!can(interaction.member, 'importCsv')) {
+      return interaction.reply({ content: 'Voce nao tem permissao para gerar relatorio diario.', ephemeral: true });
     }
 
     await interaction.deferReply({ ephemeral: true });
-    const member = await interaction.guild.members.fetch(user.id);
-    const result = await albionVerification.verifyDiscordMember(member);
-    const player = result.player;
-    return interaction.editReply({
-      content: [
-        `Discord: <@${result.discordId}>`,
-        `Nome usado: ${result.guessedName || 'nao informado'}`,
-        `Albion: ${player?.name || 'nao encontrado'}`,
-        `Guild no Albion: ${player?.guildName || 'sem guild/nao encontrada'}`,
-        `Guild esperada: ${result.expectedGuild}`,
-        `Cargo Membro no Discord: ${result.hasMemberRole ? 'sim' : 'nao'}`,
-        `Status: ${result.status}`,
-        result.reason ? `Motivo: ${result.reason}` : null
-      ].filter(Boolean).join('\n')
+    const result = await dailyReport.buildDailyReport({
+      currentAttachment: interaction.options.getAttachment('atual'),
+      previousAttachment: interaction.options.getAttachment('anterior'),
+      voiceAttachment: interaction.options.getAttachment('voz'),
+      dateText: interaction.options.getString('data')
+    });
+    return interaction.editReply({ content: result.content, files: result.files });
+  }
+
+  if (interaction.commandName === 'verificar_membro') {
+    return interaction.reply({
+      content: 'A verificacao por API foi removida. Use /verificar_guild com o arquivo exportado do jogo.',
+      ephemeral: true
     });
   }
 
@@ -177,20 +198,55 @@ async function handleCommand(interaction) {
       return interaction.reply({ content: 'Voce nao tem permissao para verificar a guild inteira.', ephemeral: true });
     }
 
-    const notifyMissing = interaction.options.getBoolean('avisar_nao_encontrados') ?? true;
+    const attachment = interaction.options.getAttachment('arquivo');
+    if (!attachment?.url) {
+      return interaction.reply({ content: 'Anexe o arquivo exportado do jogo.', ephemeral: true });
+    }
+
     await interaction.deferReply({ ephemeral: true });
-    const results = await albionVerification.verifyGuildMembers(interaction.guild, { notifyMissing });
+    const response = await fetch(attachment.url);
+    if (!response.ok) throw new Error('Nao consegui baixar o arquivo anexado.');
+    const text = await response.text();
+    const result = await albionVerification.analyzeGuildFromText(interaction.guild, text, interaction.user.id);
     return interaction.editReply({
       content: [
-        albionVerification.summarizeResults(results),
+        albionVerification.summarizeAnalysis(result),
         '',
-        'Divergencias principais:',
-        albionVerification.importantLines(results),
-        '',
-        notifyMissing ? 'DM enviada para os nao encontrados quando possivel.' : 'DM para nao encontrados desativada nesta execucao.'
+        'Principais pendencias:',
+        albionVerification.importantLines(result)
       ].join('\n').slice(0, 1900),
-      files: [albionVerification.csvAttachment(results)]
+      files: albionVerification.analysisAttachments(result)
     });
+  }
+
+  if (interaction.commandName === 'aplicar_verificacao_guild') {
+    if (!can(interaction.member, 'approveRegistration')) {
+      return interaction.reply({ content: 'Voce nao tem permissao para aplicar verificacao de guild.', ephemeral: true });
+    }
+
+    const verificationId = interaction.options.getInteger('codigo');
+    const action = interaction.options.getString('acao');
+    await interaction.deferReply({ ephemeral: true });
+
+    if (action === 'renomear_parecidos') {
+      const results = await albionVerification.applySimilarRenames(interaction.guild, verificationId, interaction.user.id);
+      const renamed = results.filter((row) => row.resultado === 'renomeado').length;
+      return interaction.editReply({
+        content: `Verificacao #${verificationId}: ${renamed}/${results.length} membros renomeados.`,
+        files: [albionVerification.actionAttachment(results, `verificacao_${verificationId}_renomes.csv`)]
+      });
+    }
+
+    if (action === 'perguntar_nao_encontrados') {
+      const results = await albionVerification.askMissingMembers(interaction.guild, verificationId);
+      const sent = results.filter((row) => row.resultado === 'dm_enviada').length;
+      return interaction.editReply({
+        content: `Verificacao #${verificationId}: DM enviada para ${sent}/${results.length} membros nao encontrados.`,
+        files: [albionVerification.actionAttachment(results, `verificacao_${verificationId}_dms.csv`)]
+      });
+    }
+
+    return interaction.editReply({ content: 'Acao desconhecida.' });
   }
 
   if (interaction.commandName === 'renomear_canais') {

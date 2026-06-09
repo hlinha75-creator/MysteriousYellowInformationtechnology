@@ -4,6 +4,7 @@ const {
   ButtonStyle,
   ChannelType,
   EmbedBuilder,
+  PermissionFlagsBits,
   StringSelectMenuBuilder
 } = require('discord.js');
 const ids = require('../../config/ids');
@@ -306,12 +307,13 @@ async function cancelEvent(interaction, eventId, reason) {
   await deleteEventMessage(interaction.client, eventId);
 }
 
-function saveLootReview({ eventId, lootTotal, repair, silverBags, taxPercent }) {
+function saveLootReview({ eventId, lootTotal, repair, silverBags, taxPercent, evidenceNotes }) {
   const netLoot = calculateNetLoot({ lootTotal, repair, silverBags, taxPercent });
   repo.refreshParticipantSeconds(eventId);
 
   transaction(() => {
     repo.upsertReview({ eventId, lootTotal, repair, silverBags, taxPercent, netLoot, status: 'review' });
+    repo.updateReviewMetadata(eventId, { evidence_notes: evidenceNotes || null });
     recalculatePayouts(eventId);
     repo.updateEvent(eventId, { status: 'review' });
   })();
@@ -320,9 +322,121 @@ function saveLootReview({ eventId, lootTotal, repair, silverBags, taxPercent }) 
     type: 'event_review_submitted',
     targetId: String(eventId),
     afterValue: formatSilver(netLoot),
-    metadata: { lootTotal, repair, silverBags, taxPercent }
+    metadata: { lootTotal, repair, silverBags, taxPercent, evidenceNotes }
   });
   return { netLoot };
+}
+
+async function createPostEventReviewSpace(interaction, eventId) {
+  const event = repo.getEvent(eventId);
+  if (!event) throw new Error('Evento nao encontrado.');
+  const reviewChannel = await createReviewChannel(interaction.guild, eventId);
+  const dpsMessage = await postDpsMeterSummary(interaction.client, eventId);
+  repo.updateReviewMetadata(eventId, {
+    review_channel_id: reviewChannel.id,
+    dps_message_id: dpsMessage?.id || null
+  });
+  await reviewChannel.send({
+    content: [
+      `Revisao do evento ${event.event_code}.`,
+      'Anexe aqui o CSV do loot logger e prints complementares se precisar.',
+      'Depois ajuste a participacao e clique em Enviar Financeiro.'
+    ].join('\n'),
+    embeds: [reviewEmbed(eventId)],
+    components: reviewComponents(eventId, 'review')
+  });
+  return reviewChannel;
+}
+
+async function createReviewChannel(guild, eventId) {
+  const event = repo.getEvent(eventId);
+  const participants = repo.listParticipants(eventId).filter((participant) => !participant.is_spectator);
+  const creator = await guild.members.fetch(event.creator_id).catch(() => null);
+  const creatorName = creator?.displayName || `criador-${event.creator_id.slice(-4)}`;
+  const name = reviewChannelName(creatorName, event.scheduled_time || event.event_code);
+  const overwrites = [
+    {
+      id: guild.roles.everyone.id,
+      deny: [PermissionFlagsBits.ViewChannel]
+    },
+    ...reviewStaffRoleIds().map((roleId) => ({
+      id: roleId,
+      allow: [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.ReadMessageHistory,
+        PermissionFlagsBits.AttachFiles
+      ]
+    })),
+    {
+      id: event.creator_id,
+      allow: [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.ReadMessageHistory,
+        PermissionFlagsBits.AttachFiles
+      ]
+    },
+    ...participants.map((participant) => ({
+      id: participant.discord_id,
+      allow: [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.ReadMessageHistory,
+        PermissionFlagsBits.AttachFiles
+      ]
+    }))
+  ];
+
+  return guild.channels.create({
+    name,
+    type: ChannelType.GuildText,
+    parent: ids.categories.activeEvents,
+    permissionOverwrites: dedupeOverwrites(overwrites),
+    reason: `Revisao do evento ${event.event_code}`
+  });
+}
+
+async function postDpsMeterSummary(client, eventId) {
+  const channel = await client.channels.fetch(ids.channels.dpsMeter).catch(() => null);
+  if (!channel) return null;
+  const participants = repo.listParticipants(eventId).filter((participant) => !participant.is_spectator);
+  const mentions = participants.map((participant) => `<@${participant.discord_id}>`).join(' ');
+  return channel.send({
+    content: mentions || undefined,
+    embeds: [dpsMeterEmbed(eventId)],
+    allowedMentions: { users: participants.map((participant) => participant.discord_id) }
+  });
+}
+
+async function moveReviewChannelToClosed(client, eventId) {
+  const review = repo.getReview(eventId);
+  if (!review?.review_channel_id) return null;
+  const channel = await client.channels.fetch(review.review_channel_id).catch(() => null);
+  if (!channel) return null;
+  await channel.setParent(ids.categories.closedEvents, { lockPermissions: false }).catch(() => {});
+  await channel.permissionOverwrites.edit(channel.guild.roles.everyone.id, { ViewChannel: false }).catch(() => {});
+  return channel;
+}
+
+async function scheduleReviewChannelDeletion(client, eventId, hours = 24) {
+  const review = repo.getReview(eventId);
+  if (!review?.review_channel_id) return;
+  const deleteAfter = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+  repo.updateReviewMetadata(eventId, { review_channel_delete_after: deleteAfter });
+  await cleanupExpiredReviewChannels(client);
+}
+
+async function cleanupExpiredReviewChannels(client) {
+  const expired = repo.listExpiredReviewChannels(new Date().toISOString());
+  for (const review of expired) {
+    const channel = await client.channels.fetch(review.review_channel_id).catch(() => null);
+    await channel?.delete(`Revisao ${review.event_code} expirada apos 24h`).catch(() => {});
+    repo.updateReviewMetadata(review.event_id, {
+      review_channel_id: null,
+      review_channel_delete_after: null
+    });
+  }
 }
 
 function recalculatePayouts(eventId) {
@@ -465,6 +579,7 @@ function reviewEmbed(eventId) {
     .setDescription(`**${event.title}**\n${event.event_code}`)
     .addFields(
       { name: 'Loot liquido', value: formatSilver(review?.net_loot || 0), inline: true },
+      { name: 'Evidencias', value: review?.evidence_notes || 'Anexe/cole DPS meter, fama total e CSV do loot logger no canal de revisao.', inline: false },
       { name: event.status === 'approved' ? 'Status' : 'Como ajustar', value: help, inline: false },
       { name: 'Participantes', value: lines.length ? lines.slice(0, 20).join('\n') : 'Nenhum participante com tempo contabilizado.', inline: false }
     )
@@ -499,6 +614,53 @@ function formatDuration(seconds) {
   const minutes = Math.floor((value % 3600) / 60);
   if (hours > 0) return `${hours}h${String(minutes).padStart(2, '0')}m`;
   return `${minutes}m`;
+}
+
+function dpsMeterEmbed(eventId) {
+  const event = repo.getEvent(eventId);
+  const review = repo.getReview(eventId);
+  repo.refreshParticipantSeconds(eventId);
+  const participants = repo.listParticipants(eventId).filter((participant) => !participant.is_spectator);
+  const lines = participants.map((participant) => {
+    const seconds = participant.manual_seconds ?? participant.calculated_seconds ?? 0;
+    return `<@${participant.discord_id}> | ${roleLabel(participant.role)} | ${formatDuration(seconds)}`;
+  });
+  return new EmbedBuilder()
+    .setTitle(`Resumo DPS/Fama - ${event.title}`)
+    .setDescription(event.event_code)
+    .addFields(
+      { name: 'Criador', value: `<@${event.creator_id}>`, inline: true },
+      { name: 'Horario', value: event.scheduled_time || 'Nao informado', inline: true },
+      { name: 'Loot liquido', value: formatSilver(review?.net_loot || 0), inline: true },
+      { name: 'Evidencias', value: review?.evidence_notes || 'Aguardando prints/links/CSV no canal de revisao.', inline: false },
+      { name: 'Participantes', value: lines.length ? lines.slice(0, 30).join('\n') : 'Nenhum participante.', inline: false }
+    )
+    .setColor(0x805ad5)
+    .setTimestamp(new Date());
+}
+
+function reviewChannelName(creatorName, timeText) {
+  const raw = `${creatorName}-${timeText}`.toLowerCase();
+  return raw
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 80) || 'evento-pendente';
+}
+
+function reviewStaffRoleIds() {
+  return [ids.roles.staff, ids.roles.adm, ids.roles.treasurer].filter(Boolean);
+}
+
+function dedupeOverwrites(overwrites) {
+  const seen = new Set();
+  return overwrites.filter((overwrite) => {
+    if (!overwrite.id || seen.has(overwrite.id)) return false;
+    seen.add(overwrite.id);
+    return true;
+  });
 }
 
 function roleLabel(role) {
@@ -601,6 +763,8 @@ module.exports = {
   autoJoinRunningEvent,
   cancelEvent,
   checkEventStartWarnings,
+  cleanupExpiredReviewChannels,
+  createPostEventReviewSpace,
   createEventFromModal,
   deleteEventMessage,
   editParticipantReview,
@@ -613,6 +777,8 @@ module.exports = {
   reviewComponents,
   reviewEmbed,
   saveLootReview,
+  scheduleReviewChannelDeletion,
+  moveReviewChannelToClosed,
   submitEventToFinance,
   spectateEvent,
   startEvent

@@ -252,6 +252,7 @@ async function handleButton(interaction) {
         embeds: [events.reviewEmbed(eventId)],
         components: []
       }).catch(() => {});
+      await events.scheduleReviewChannelDeletion(interaction.client, eventId, 24);
       return interaction.editReply({ content: 'Pagamento aprovado e saldos depositados.' });
     }
     if (action === 'cancel') {
@@ -325,10 +326,16 @@ async function handleButton(interaction) {
     if (action === 'submit') {
       await interaction.deferReply({ ephemeral: true });
       events.submitEventToFinance({ eventId, actorId: interaction.user.id });
-      await interaction.message.edit({
-        content: `Evento #${eventId} enviado para aprovacao financeira.`,
+      const reviewChannel = await events.moveReviewChannelToClosed(interaction.client, eventId);
+      await safeSend(interaction.client, ids.channels.finance, {
+        content: `Evento #${eventId} enviado para aprovacao financeira.${reviewChannel ? ` Revisao: <#${reviewChannel.id}>` : ''}`,
         embeds: [events.reviewEmbed(eventId)],
         components: events.reviewComponents(eventId, 'finance')
+      });
+      await interaction.message.edit({
+        content: `Evento #${eventId} enviado para aprovacao financeira.${reviewChannel ? ` Canal movido para finalizados: <#${reviewChannel.id}>` : ''}`,
+        embeds: [events.reviewEmbed(eventId)],
+        components: []
       });
       return interaction.editReply({ content: 'Evento enviado ao financeiro para aprovacao.' });
     }
@@ -518,7 +525,8 @@ function showLootModal(interaction, eventId) {
     textInput('lootTotal', 'Loot total'),
     textInput('repair', 'Reparo'),
     textInput('silverBags', 'Sacos de prata'),
-    textInput('taxPercent', 'Taxa % 0 a 100')
+    textInput('taxPercent', 'Taxa % 0 a 100'),
+    textInput('evidenceNotes', 'DPS/Fama links ou obs', false, 'CSV do loot logger: anexe no canal de revisao', TextInputStyle.Paragraph)
   ]);
 }
 

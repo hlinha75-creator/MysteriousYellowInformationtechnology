@@ -177,10 +177,33 @@ function getReview(eventId) {
   return getDatabase().prepare('SELECT * FROM event_reviews WHERE event_id = ?').get(eventId);
 }
 
+function updateReviewMetadata(eventId, patch) {
+  const entries = Object.entries(patch).filter(([, value]) => value !== undefined);
+  if (entries.length === 0) return getReview(eventId);
+  const setSql = entries.map(([key]) => `${key} = @${key}`).join(', ');
+  getDatabase()
+    .prepare(`UPDATE event_reviews SET ${setSql} WHERE event_id = @eventId`)
+    .run({ eventId, ...Object.fromEntries(entries) });
+  return getReview(eventId);
+}
+
 function markReviewApproved({ eventId, approvedBy }) {
   return getDatabase()
     .prepare("UPDATE event_reviews SET status = 'approved', approved_by = ?, approved_at = CURRENT_TIMESTAMP WHERE event_id = ?")
     .run(approvedBy, eventId);
+}
+
+function listExpiredReviewChannels(nowIso) {
+  return getDatabase()
+    .prepare(`
+      SELECT er.*, e.event_code, e.title
+      FROM event_reviews er
+      JOIN events e ON e.id = er.event_id
+      WHERE er.review_channel_id IS NOT NULL
+        AND er.review_channel_delete_after IS NOT NULL
+        AND er.review_channel_delete_after <= ?
+    `)
+    .all(nowIso);
 }
 
 module.exports = {
@@ -194,6 +217,7 @@ module.exports = {
   getParticipant,
   getReview,
   listActiveEvents,
+  listExpiredReviewChannels,
   listPendingWarningEvents,
   listParticipants,
   markReviewApproved,
@@ -204,5 +228,6 @@ module.exports = {
   startVoiceSession,
   updateEvent,
   upsertParticipant,
-  upsertReview
+  upsertReview,
+  updateReviewMetadata
 };

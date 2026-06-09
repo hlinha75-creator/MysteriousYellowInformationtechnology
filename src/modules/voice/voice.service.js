@@ -1,10 +1,28 @@
 const repo = require('../events/events.repository');
+const voiceRepo = require('./voice.repository');
 
 async function handleVoiceStateUpdate(oldState, newState) {
   if (oldState.channelId === newState.channelId) return;
 
   const userId = newState.id || oldState.id;
   const now = new Date().toISOString();
+  const member = newState.member || oldState.member;
+
+  if (oldState.channelId) {
+    voiceRepo.closeOpenSession({ discordId: userId, leftAt: now });
+  }
+
+  if (newState.channelId) {
+    voiceRepo.startSession({
+      discordId: userId,
+      discordName: member?.user?.tag || member?.displayName || userId,
+      channelId: newState.channelId,
+      channelName: newState.channel?.name || '',
+      categoryId: newState.channel?.parentId || '',
+      categoryName: newState.channel?.parent?.name || '',
+      joinedAt: now
+    });
+  }
 
   if (oldState.channelId) {
     const oldEvent = repo.getEventByVoiceChannel(oldState.channelId);
@@ -43,7 +61,12 @@ function markRunningEventsForReview() {
   return activeEvents.length;
 }
 
+function closeOpenVoiceSessionsOnStartup() {
+  return voiceRepo.closeAllOpenSessions(new Date().toISOString()).changes;
+}
+
 module.exports = {
+  closeOpenVoiceSessionsOnStartup,
   handleVoiceStateUpdate,
   markRunningEventsForReview
 };

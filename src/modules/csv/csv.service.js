@@ -7,6 +7,7 @@ const audit = require('../audit/audit.repository');
 const financeRepo = require('../finance/finance.repository');
 const registrationRepo = require('../registration/registration.repository');
 const finance = require('../finance/finance.service');
+const voiceRepo = require('../voice/voice.repository');
 
 const importPreviews = new Map();
 
@@ -36,6 +37,135 @@ function auditAttachment() {
   const rows = audit.listAuditLogs(5000);
   const csv = toCsv(rows, ['id', 'type', 'actor_id', 'target_id', 'before_value', 'after_value', 'reason', 'metadata', 'created_at']);
   return new AttachmentBuilder(Buffer.from(csv, 'utf8'), { name: 'audit-logs.csv' });
+}
+
+function voiceAttachment() {
+  const rows = voiceRepo.listSessions(20000).map((row) => ({
+    ...row,
+    weekday: weekdayName(row.joined_at),
+    joined_hour: hourOfDay(row.joined_at),
+    duration_minutes: Math.round((row.seconds / 60) * 100) / 100
+  }));
+  const columns = [
+    'id',
+    'discord_id',
+    'discord_name',
+    'albion_name',
+    'channel_id',
+    'channel_name',
+    'category_id',
+    'category_name',
+    'joined_at',
+    'left_at',
+    'seconds',
+    'duration_minutes',
+    'weekday',
+    'joined_hour'
+  ];
+  const csv = toCsv(rows, columns);
+  return new AttachmentBuilder(Buffer.from(csv, 'utf8'), { name: 'voice-sessions.csv' });
+}
+
+function voiceDailyAttachment(dateText = todayIsoDate()) {
+  dateText = normalizeIsoDate(dateText);
+  const sessions = voiceRepo.listSessions(50000).filter((session) => dateInSaoPaulo(session.joined_at) === dateText);
+  const byMember = new Map();
+
+  for (const session of sessions) {
+    const key = session.discord_id;
+    const item = byMember.get(key) || {
+      date: dateText,
+      discord_id: session.discord_id,
+      discord_name: session.discord_name || '',
+      albion_name: session.albion_name || '',
+      voice_sessions: 0,
+      voice_seconds: 0,
+      voice_minutes: 0,
+      first_joined_at: session.joined_at,
+      last_left_at: session.left_at || '',
+      top_channels: new Map(),
+      favorite_hours: new Map(),
+      weekday: weekdayName(session.joined_at)
+    };
+
+    item.voice_sessions += 1;
+    item.voice_seconds += session.seconds;
+    item.voice_minutes = Math.round((item.voice_seconds / 60) * 100) / 100;
+    if (session.joined_at < item.first_joined_at) item.first_joined_at = session.joined_at;
+    if ((session.left_at || '') > item.last_left_at) item.last_left_at = session.left_at || '';
+    incrementMap(item.top_channels, session.channel_name || 'Sem canal', session.seconds);
+    incrementMap(item.favorite_hours, hourOfDay(session.joined_at), session.seconds);
+    byMember.set(key, item);
+  }
+
+  const rows = [...byMember.values()].map((item) => ({
+    ...item,
+    top_channels: topKeys(item.top_channels, 5).join('|'),
+    favorite_hours: topKeys(item.favorite_hours, 5).join('|')
+  }));
+
+  const columns = [
+    'date',
+    'discord_id',
+    'discord_name',
+    'albion_name',
+    'voice_sessions',
+    'voice_seconds',
+    'voice_minutes',
+    'first_joined_at',
+    'last_left_at',
+    'weekday',
+    'top_channels',
+    'favorite_hours'
+  ];
+  const csv = toCsv(rows, columns);
+  return new AttachmentBuilder(Buffer.from(csv, 'utf8'), { name: `voice-daily-${dateText}.csv` });
+}
+
+function todayIsoDate() {
+  return formatSaoPauloDate(new Date());
+}
+
+function normalizeIsoDate(dateText) {
+  const normalized = String(dateText || '').trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(normalized) ? normalized : todayIsoDate();
+}
+
+function dateInSaoPaulo(dateText) {
+  const date = new Date(dateText);
+  if (Number.isNaN(date.getTime())) return todayIsoDate();
+  return formatSaoPauloDate(date);
+}
+
+function formatSaoPauloDate(date) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function incrementMap(map, key, value) {
+  map.set(key, (map.get(key) || 0) + value);
+}
+
+function topKeys(map, limit) {
+  return [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, limit).map(([key]) => key);
+}
+
+function weekdayName(dateText) {
+  const date = new Date(dateText);
+  if (Number.isNaN(date.getTime())) return '';
+  return ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'][date.getDay()];
+}
+
+function hourOfDay(dateText) {
+  const date = new Date(dateText);
+  if (Number.isNaN(date.getTime())) return '';
+  return String(date.getHours()).padStart(2, '0');
 }
 
 function previewBalanceImport(csvText) {
@@ -155,5 +285,7 @@ module.exports = {
   saveImportPreview,
   previewBalanceImport,
   takeImportPreview,
-  transactionsAttachment
+  transactionsAttachment,
+  voiceAttachment,
+  voiceDailyAttachment
 };

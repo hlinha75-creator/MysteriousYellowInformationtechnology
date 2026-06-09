@@ -1,6 +1,7 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const ids = require('../../config/ids');
 const { transaction } = require('../../database/connection');
+const { can } = require('../../config/permissions');
 const audit = require('../audit/audit.repository');
 const repo = require('./auctions.repository');
 const { formatSilver } = require('../../utils/silver');
@@ -26,16 +27,22 @@ function auctionEmbed(auction) {
   const isOpen = auction.status === 'open';
   const remainingMs = getRemainingMs(auction);
   const embed = new EmbedBuilder()
-    .setTitle(`Leilao #${auction.id}: ${auction.item_name}`)
-    .setColor(isOpen ? 0xd69e2e : 0x718096)
+    .setAuthor({ name: 'NOTAG Leiloes' })
+    .setTitle(`${isOpen ? 'LEILAO ABERTO' : 'LEILAO ENCERRADO'} #${auction.id}`)
+    .setDescription([
+      `**Item:** ${auction.item_name}`,
+      isOpen ? 'Maior lance valido no fim do prazo vence.' : 'Resultado final do leilao.'
+    ].join('\n'))
+    .setColor(isOpen ? 0xf6ad55 : 0x718096)
     .addFields(
-      { name: 'Lance atual', value: formatSilver(auction.current_bid), inline: true },
-      { name: 'Tempo restante', value: isOpen ? formatRemaining(remainingMs) : 'Encerrado', inline: true },
-      { name: 'Maior lance', value: auction.current_winner_id ? `<@${auction.current_winner_id}>` : 'Ninguem ainda', inline: true },
+      { name: 'LANCE ATUAL', value: `**${formatSilver(auction.current_bid)}**`, inline: true },
+      { name: 'TEMPO RESTANTE', value: isOpen ? `**${formatRemaining(remainingMs)}**` : '**Encerrado**', inline: true },
+      { name: 'MAIOR LANCE', value: auction.current_winner_id ? `<@${auction.current_winner_id}>` : 'Ninguem ainda', inline: true },
       { name: 'Incremento minimo', value: formatSilver(auction.min_increment), inline: true },
       { name: 'Criado por', value: `<@${auction.created_by}>`, inline: true }
     )
-    .setTimestamp(auction.ends_at ? new Date(auction.ends_at) : new Date(auction.created_at));
+    .setTimestamp(auction.ends_at ? new Date(auction.ends_at) : new Date(auction.created_at))
+    .setFooter({ text: isOpen ? 'Leilao encerra automaticamente no prazo.' : 'Leilao finalizado.' });
 
   if (auction.pickup_info) {
     embed.addFields({ name: 'Retirada', value: auction.pickup_info });
@@ -53,8 +60,8 @@ function auctionComponents(auction) {
   const buttons = [];
   if (auction.status === 'open') {
     buttons.push(
-      new ButtonBuilder().setCustomId(`auction:bid:${auction.id}`).setLabel('Dar lance').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId(`auction:close:${auction.id}`).setLabel('Encerrar').setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId(`auction:bid:${auction.id}`).setLabel('Dar lance').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`auction:close:${auction.id}`).setLabel('Encerrar leilao').setStyle(ButtonStyle.Secondary)
     );
   }
   return buttons.length ? [new ActionRowBuilder().addComponents(...buttons)] : [];
@@ -126,6 +133,26 @@ async function refreshAuctionMessage(client, auction) {
     embeds: [auctionEmbed(auction)],
     components: auctionComponents(auction)
   });
+}
+
+async function updateAuctionImage({ client, auctionId, imageUrl, actorId, member }) {
+  const auction = repo.getAuction(auctionId);
+  if (!auction) throw new Error('Leilao nao encontrado.');
+  if (auction.created_by !== actorId && !can(member, 'approvePayment')) {
+    throw new Error('Somente o criador ou staff/tesouraria pode alterar a imagem deste leilao.');
+  }
+
+  repo.updateImage({ id: auctionId, imageUrl });
+  const updated = repo.getAuction(auctionId);
+  await refreshAuctionMessage(client, updated);
+  audit.createAuditLog({
+    type: 'auction_image_updated',
+    actorId,
+    targetId: auction.created_by,
+    reason: `Leilao #${auctionId}`,
+    metadata: { auctionId, imageUrl }
+  });
+  return updated;
 }
 
 function closeAuction({ auctionId, actorId }) {
@@ -236,5 +263,6 @@ module.exports = {
   refreshAuctionMessage,
   takeDraft,
   notifyWinner,
+  updateAuctionImage,
   winnerMessage
 };

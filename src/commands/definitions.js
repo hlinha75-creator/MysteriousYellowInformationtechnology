@@ -25,6 +25,9 @@ const commands = [
   new SlashCommandBuilder()
     .setName('leilao')
     .setDescription('Cria um leilao de item para membros da guild.')
+    .addIntegerOption((option) => option
+      .setName('codigo')
+      .setDescription('Codigo do leilao para trocar a imagem depois. Opcional.'))
     .addAttachmentOption((option) => option
       .setName('imagem')
       .setDescription('Imagem do item do leilao. Opcional.')),
@@ -48,12 +51,33 @@ const commands = [
       .addChoices(
         { name: 'Saldos', value: 'balances' },
         { name: 'Financeiro', value: 'transactions' },
-        { name: 'Auditoria', value: 'audit' }
-      )),
+        { name: 'Auditoria', value: 'audit' },
+        { name: 'Voz diaria', value: 'voice_daily' },
+        { name: 'Voz bruta', value: 'voice' }
+      ))
+    .addStringOption((option) => option
+      .setName('data')
+      .setDescription('Data para Voz diaria no formato AAAA-MM-DD. Sem preencher, usa hoje.')),
   new SlashCommandBuilder()
     .setName('importar')
     .setDescription('Importa CSV de saldos. Use o painel/fluxo com confirmacao.')
     .addAttachmentOption((option) => option.setName('arquivo').setDescription('CSV de saldos').setRequired(true)),
+  new SlashCommandBuilder()
+    .setName('relatorio_diario')
+    .setDescription('Gera relatorio diario comparando membros Albion e voz Discord.')
+    .addAttachmentOption((option) => option
+      .setName('atual')
+      .setDescription('Arquivo atual de membros do Albion.')
+      .setRequired(true))
+    .addAttachmentOption((option) => option
+      .setName('anterior')
+      .setDescription('Arquivo anterior de membros do Albion para comparar.'))
+    .addAttachmentOption((option) => option
+      .setName('voz')
+      .setDescription('CSV diario de voz gerado pelo bot.'))
+    .addStringOption((option) => option
+      .setName('data')
+      .setDescription('Data do relatorio no formato AAAA-MM-DD.')),
   new SlashCommandBuilder()
     .setName('verificar_membro')
     .setDescription('Verifica se um membro do Discord esta na guild do Albion.')
@@ -61,9 +85,25 @@ const commands = [
   new SlashCommandBuilder()
     .setName('verificar_guild')
     .setDescription('Verifica os membros do Discord contra a guild do Albion.')
-    .addBooleanOption((option) => option
-      .setName('avisar_nao_encontrados')
-      .setDescription('Envia DM pedindo confirmacao de nick para quem nao for encontrado.')),
+    .addAttachmentOption((option) => option
+      .setName('arquivo')
+      .setDescription('Arquivo exportado do jogo com a coluna Character Name.')
+      .setRequired(true)),
+  new SlashCommandBuilder()
+    .setName('aplicar_verificacao_guild')
+    .setDescription('Aplica uma verificacao de guild ja analisada.')
+    .addIntegerOption((option) => option
+      .setName('codigo')
+      .setDescription('Codigo da verificacao gerado no relatorio.')
+      .setRequired(true))
+    .addStringOption((option) => option
+      .setName('acao')
+      .setDescription('Acao para aplicar.')
+      .setRequired(true)
+      .addChoices(
+        { name: 'Renomear parecidos', value: 'renomear_parecidos' },
+        { name: 'Perguntar nao encontrados', value: 'perguntar_nao_encontrados' }
+      )),
   new SlashCommandBuilder()
     .setName('renomear_canais')
     .setDescription('Mostra ou aplica a padronizacao de nomes dos canais do bot.')

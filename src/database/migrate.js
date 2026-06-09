@@ -268,6 +268,83 @@ const migrations = [
       }
       db.exec("UPDATE auctions SET ends_at = datetime(created_at, '+24 hours') WHERE ends_at IS NULL");
     }
+  },
+  {
+    version: 8,
+    name: 'voice_sessions',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS voice_sessions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          discord_id TEXT NOT NULL,
+          discord_name TEXT,
+          channel_id TEXT NOT NULL,
+          channel_name TEXT,
+          category_id TEXT,
+          category_name TEXT,
+          joined_at TEXT NOT NULL,
+          left_at TEXT,
+          seconds INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_voice_sessions_discord_id_joined_at
+          ON voice_sessions (discord_id, joined_at);
+
+        CREATE INDEX IF NOT EXISTS idx_voice_sessions_channel_id_joined_at
+          ON voice_sessions (channel_id, joined_at);
+      `);
+    }
+  },
+  {
+    version: 9,
+    name: 'event_review_channels',
+    up(db) {
+      const columns = db.prepare('PRAGMA table_info(event_reviews)').all().map((column) => column.name);
+      if (!columns.includes('evidence_notes')) {
+        db.exec('ALTER TABLE event_reviews ADD COLUMN evidence_notes TEXT');
+      }
+      if (!columns.includes('review_channel_id')) {
+        db.exec('ALTER TABLE event_reviews ADD COLUMN review_channel_id TEXT');
+      }
+      if (!columns.includes('dps_message_id')) {
+        db.exec('ALTER TABLE event_reviews ADD COLUMN dps_message_id TEXT');
+      }
+      if (!columns.includes('review_channel_delete_after')) {
+        db.exec('ALTER TABLE event_reviews ADD COLUMN review_channel_delete_after TEXT');
+      }
+    }
+  },
+  {
+    version: 10,
+    name: 'guild_verification_csv',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS guild_verifications (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          guild_id TEXT NOT NULL,
+          created_by TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'reported',
+          source_names_json TEXT NOT NULL,
+          matches_json TEXT NOT NULL,
+          missing_json TEXT NOT NULL,
+          issues_json TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          applied_at TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS guild_verification_pending_replies (
+          discord_id TEXT PRIMARY KEY,
+          guild_id TEXT NOT NULL,
+          verification_id INTEGER NOT NULL,
+          source_names_json TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          answered_at TEXT,
+          status TEXT NOT NULL DEFAULT 'pending',
+          FOREIGN KEY (verification_id) REFERENCES guild_verifications(id)
+        );
+      `);
+    }
   }
 ];
 
