@@ -1,4 +1,4 @@
-const { ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const { ActionRowBuilder, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const events = require('../modules/events/events.service');
 const eventsRepo = require('../modules/events/events.repository');
 const deposit = require('../modules/deposit/deposit.service');
@@ -9,7 +9,7 @@ async function handleSelect(interaction) {
   const [scope, action, id, messageId] = interaction.customId.split(':');
   if (scope === 'auction_channel_select') {
     if (!can(interaction.member, 'createAuction')) {
-      return interaction.reply({ content: 'Voce precisa ser membro para criar leilao.', ephemeral: true });
+      return interaction.reply({ content: 'Voce precisa ser membro para criar leilao.', flags: MessageFlags.Ephemeral });
     }
     const channelId = interaction.values[0];
     return showModal(interaction, `auction:create:${channelId}:${id}`, 'Criar Leilao', [
@@ -24,14 +24,14 @@ async function handleSelect(interaction) {
   if (scope === 'event' && action === 'join') {
     const role = interaction.values[0];
     await events.joinEvent(interaction, Number(id), role);
-    return interaction.reply({ content: `Voce entrou como ${role}.`, ephemeral: true });
+    return interaction.reply({ content: `Voce entrou como ${role}.`, flags: MessageFlags.Ephemeral });
   }
 
   if (scope === 'poll' && action === 'vote') {
     const selected = await polls.vote({ interaction, pollId: Number(id), options: interaction.values });
     return interaction.reply({
       content: selected.length ? `Seu voto agora: ${selected.join(', ')}.` : 'Seu voto foi limpo.',
-      ephemeral: true
+      flags: MessageFlags.Ephemeral
     });
   }
 
@@ -40,7 +40,7 @@ async function handleSelect(interaction) {
     const event = eventsRepo.getEvent(eventId);
     if (!event) throw new Error('Evento nao encontrado.');
     if (event.creator_id !== interaction.user.id && !can(interaction.member, 'assumeEvent')) {
-      return interaction.reply({ content: 'Somente o criador ou alguem autorizado pode editar a revisao.', ephemeral: true });
+      return interaction.reply({ content: 'Somente o criador ou alguem autorizado pode editar a revisao.', flags: MessageFlags.Ephemeral });
     }
 
     const discordId = interaction.values[0];
@@ -70,7 +70,7 @@ async function handleSelect(interaction) {
     const event = eventsRepo.getEvent(eventId);
     if (!event) throw new Error('Evento nao encontrado.');
     if (event.creator_id !== interaction.user.id && !can(interaction.member, 'assumeEvent')) {
-      return interaction.reply({ content: 'Somente o criador ou alguem autorizado pode editar a revisao.', ephemeral: true });
+      return interaction.reply({ content: 'Somente o criador ou alguem autorizado pode editar a revisao.', flags: MessageFlags.Ephemeral });
     }
 
     const discordId = interaction.values[0];
@@ -88,7 +88,7 @@ async function handleSelect(interaction) {
     if (!participant) {
       return interaction.reply({
         content: 'Esse membro ainda nao esta no split. Use Adicionar membro para colocar ele na revisao.',
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       });
     }
 
@@ -112,7 +112,7 @@ async function handleSelect(interaction) {
 
   if (scope === 'admin_remove_balance_select') {
     if (!can(interaction.member, 'withdrawBalance')) {
-      return interaction.reply({ content: 'Sem permissao para retirar saldo.', ephemeral: true });
+      return interaction.reply({ content: 'Sem permissao para retirar saldo.', flags: MessageFlags.Ephemeral });
     }
 
     const discordId = interaction.values[0];
@@ -126,7 +126,7 @@ async function handleSelect(interaction) {
 
   if (scope === 'deposit_select') {
     if (!can(interaction.member, 'approvePayment')) {
-      return interaction.reply({ content: 'Sem permissao para editar deposito.', ephemeral: true });
+      return interaction.reply({ content: 'Sem permissao para editar deposito.', flags: MessageFlags.Ephemeral });
     }
 
     const draft = deposit.addParticipants({ draftId: id, userIds: interaction.values });

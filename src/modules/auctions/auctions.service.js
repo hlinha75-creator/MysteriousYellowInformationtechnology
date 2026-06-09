@@ -11,6 +11,12 @@ const DEFAULT_DURATION_MS = 24 * 60 * 60 * 1000;
 const MIN_DURATION_MS = 60 * 1000;
 const MAX_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 
+function userError(message) {
+  const error = new Error(message);
+  error.isUserFacing = true;
+  return error;
+}
+
 function createDraft({ imageUrl }) {
   const id = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   drafts.set(id, { id, imageUrl: imageUrl || null, createdAt: Date.now() });
@@ -97,18 +103,18 @@ async function createAuctionFromModal(interaction, data) {
 
 const placeBid = transaction(({ auctionId, userId, amount }) => {
   const auction = repo.getAuction(auctionId);
-  if (!auction) throw new Error('Leilao nao encontrado.');
-  if (auction.status !== 'open') throw new Error('Este leilao ja foi encerrado.');
+  if (!auction) throw userError('Leilao nao encontrado.');
+  if (auction.status !== 'open') throw userError('Este leilao ja foi encerrado.');
   if (isExpired(auction)) {
-    throw new Error('Este leilao acabou pelo tempo limite.');
+    throw userError('Este leilao acabou pelo tempo limite.');
   }
-  if (auction.current_winner_id === userId) throw new Error('Voce ja tem o maior lance neste leilao.');
+  if (auction.current_winner_id === userId) throw userError('Voce ja tem o maior lance neste leilao.');
 
   const minimum = auction.current_winner_id
     ? auction.current_bid + auction.min_increment
     : auction.current_bid;
   if (amount < minimum) {
-    throw new Error(`Lance minimo atual: ${formatSilver(minimum)}.`);
+    throw userError(`Lance minimo atual: ${formatSilver(minimum)}.`);
   }
 
   repo.insertBid({ auctionId, userId, amount });

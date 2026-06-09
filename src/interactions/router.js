@@ -3,6 +3,7 @@ const { handleButton } = require('./buttons');
 const { handleModal } = require('./modals');
 const { handleSelect } = require('./selects');
 const events = require('../modules/events/events.service');
+const { MessageFlags } = require('discord.js');
 
 async function handleInteraction(interaction) {
   try {
@@ -14,17 +15,24 @@ async function handleInteraction(interaction) {
         const eventId = Number(interaction.customId.split(':')[2]);
         const reason = interaction.fields.getTextInputValue('reason');
         await events.cancelEvent(interaction, eventId, reason);
-        return interaction.reply({ content: 'Evento cancelado.', ephemeral: true });
+        return interaction.reply({ content: 'Evento cancelado.', flags: MessageFlags.Ephemeral });
       }
       return await handleModal(interaction);
     }
   } catch (error) {
     if (error.code === 10062 || error.code === 40060) return;
-    console.error('Erro em interaction:', error);
-    const payload = { content: `Erro: ${error.message}`, ephemeral: true };
+    const message = error.message || 'Erro inesperado.';
+    if (!isUserFacingError(error)) {
+      console.error('Erro em interaction:', error);
+    }
+    const payload = { content: `Erro: ${message}`, flags: MessageFlags.Ephemeral };
     if (interaction.deferred || interaction.replied) return interaction.followUp(payload).catch(() => {});
     return interaction.reply(payload).catch(() => {});
   }
+}
+
+function isUserFacingError(error) {
+  return error?.isUserFacing === true;
 }
 
 module.exports = {
