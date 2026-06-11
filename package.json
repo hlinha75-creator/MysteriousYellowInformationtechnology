@@ -9,6 +9,7 @@
     "deploy:commands": "node --no-warnings scripts/deployCommands.js",
     "clear:commands": "node --no-warnings scripts/clearCommands.js",
     "audit:channels": "node --no-warnings scripts/auditChannels.js",
+    "audit:nicks": "node --no-warnings scripts/auditNicks.js",
     "rename:channels": "node --no-warnings scripts/renameChannels.js",
     "backup:db": "node --no-warnings scripts/backupDatabase.js",
     "restore:db": "node --no-warnings scripts/restoreDatabase.js"

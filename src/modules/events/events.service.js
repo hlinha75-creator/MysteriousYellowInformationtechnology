@@ -331,10 +331,8 @@ async function createPostEventReviewSpace(interaction, eventId) {
   const event = repo.getEvent(eventId);
   if (!event) throw new Error('Evento nao encontrado.');
   const reviewChannel = await createReviewChannel(interaction.guild, eventId);
-  const dpsMessage = await postDpsMeterSummary(interaction.client, eventId);
   repo.updateReviewMetadata(eventId, {
-    review_channel_id: reviewChannel.id,
-    dps_message_id: dpsMessage?.id || null
+    review_channel_id: reviewChannel.id
   });
   await reviewChannel.send({
     content: [
@@ -402,11 +400,13 @@ async function postDpsMeterSummary(client, eventId) {
   if (!channel) return null;
   const participants = repo.listParticipants(eventId).filter((participant) => !participant.is_spectator);
   const mentions = participants.map((participant) => `<@${participant.discord_id}>`).join(' ');
-  return channel.send({
+  const message = await channel.send({
     content: mentions || undefined,
     embeds: [dpsMeterEmbed(eventId)],
     allowedMentions: { users: participants.map((participant) => participant.discord_id) }
   });
+  repo.updateReviewMetadata(eventId, { dps_message_id: message.id });
+  return message;
 }
 
 async function moveReviewChannelToClosed(client, eventId) {
@@ -419,7 +419,7 @@ async function moveReviewChannelToClosed(client, eventId) {
   return channel;
 }
 
-async function scheduleReviewChannelDeletion(client, eventId, hours = 24) {
+async function scheduleReviewChannelDeletion(client, eventId, hours = 14) {
   const review = repo.getReview(eventId);
   if (!review?.review_channel_id) return;
   const deleteAfter = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
@@ -431,7 +431,7 @@ async function cleanupExpiredReviewChannels(client) {
   const expired = repo.listExpiredReviewChannels(new Date().toISOString());
   for (const review of expired) {
     const channel = await client.channels.fetch(review.review_channel_id).catch(() => null);
-    await channel?.delete(`Revisao ${review.event_code} expirada apos 24h`).catch(() => {});
+    await channel?.delete(`Revisao ${review.event_code} expirada apos aprovacao financeira`).catch(() => {});
     repo.updateReviewMetadata(review.event_id, {
       review_channel_id: null,
       review_channel_delete_after: null
@@ -771,6 +771,7 @@ module.exports = {
   finishEvent,
   joinEvent,
   pauseParticipation,
+  postDpsMeterSummary,
   refreshEventMessage,
   refreshRunningEventMessages,
   removeParticipantReview,

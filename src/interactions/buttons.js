@@ -252,7 +252,7 @@ async function handleButton(interaction) {
         embeds: [events.reviewEmbed(eventId)],
         components: []
       }).catch(() => {});
-      await events.scheduleReviewChannelDeletion(interaction.client, eventId, 24);
+      await events.scheduleReviewChannelDeletion(interaction.client, eventId, 14);
       return interaction.editReply({ content: 'Pagamento aprovado e saldos depositados.' });
     }
     if (action === 'cancel') {
@@ -327,6 +327,7 @@ async function handleButton(interaction) {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       events.submitEventToFinance({ eventId, actorId: interaction.user.id });
       const reviewChannel = await events.moveReviewChannelToClosed(interaction.client, eventId);
+      await events.postDpsMeterSummary(interaction.client, eventId);
       await safeSend(interaction.client, ids.channels.finance, {
         content: `Evento #${eventId} enviado para aprovacao financeira.${reviewChannel ? ` Revisao: <#${reviewChannel.id}>` : ''}`,
         embeds: [events.reviewEmbed(eventId)],
