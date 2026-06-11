@@ -11,10 +11,13 @@ const voice = require('./modules/voice/voice.service');
 const events = require('./modules/events/events.service');
 const auctions = require('./modules/auctions/auctions.service');
 const guildVerification = require('./modules/albion/guildVerification.service');
+const faq = require('./modules/faq/faq.service');
 const { handleInteraction } = require('./interactions/router');
+const { startRaidInscricaoServer } = require('./server/raidInscricao.server');
 
 migrate();
 backupDatabase('startup');
+startRaidInscricaoServer();
 
 const recovered = voice.markRunningEventsForReview();
 if (recovered > 0) {
@@ -63,6 +66,7 @@ client.on('voiceStateUpdate', voice.handleVoiceStateUpdate);
 client.on('interactionCreate', handleInteraction);
 client.on('messageCreate', (message) => {
   guildVerification.handleDirectNickReply(message).catch((error) => console.error('Falha ao tratar resposta de nick por DM:', error));
+  faq.handleMessage(message).catch((error) => console.error('Falha ao tratar FAQ/tutorial:', error));
 });
 
 process.on('unhandledRejection', (error) => {
