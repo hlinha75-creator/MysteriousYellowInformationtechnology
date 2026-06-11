@@ -3,10 +3,15 @@ const events = require('../modules/events/events.service');
 const eventsRepo = require('../modules/events/events.repository');
 const deposit = require('../modules/deposit/deposit.service');
 const polls = require('../modules/polls/polls.service');
+const faq = require('../modules/faq/faq.service');
 const { can } = require('../config/permissions');
 
 async function handleSelect(interaction) {
   const [scope, action, id, messageId] = interaction.customId.split(':');
+  if (scope === 'faq_tutorial' && action === 'select') {
+    return faq.handleTutorialSelect(interaction);
+  }
+
   if (scope === 'auction_channel_select') {
     if (!can(interaction.member, 'createAuction')) {
       return interaction.reply({ content: 'Voce precisa ser membro para criar leilao.', flags: MessageFlags.Ephemeral });
