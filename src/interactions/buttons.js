@@ -12,7 +12,6 @@ const deposit = require('../modules/deposit/deposit.service');
 const polls = require('../modules/polls/polls.service');
 const auctions = require('../modules/auctions/auctions.service');
 const auctionsRepo = require('../modules/auctions/auctions.repository');
-const pet = require('../modules/pet/pet.service');
 const { formatSilver } = require('../utils/silver');
 const registration = require('../modules/registration/registration.service');
 const { safeSend } = require('../utils/discord');
@@ -330,7 +329,6 @@ async function handleButton(interaction) {
       events.submitEventToFinance({ eventId, actorId: interaction.user.id });
       const reviewChannel = await events.moveReviewChannelToClosed(interaction.client, eventId);
       await events.postDpsMeterSummary(interaction.client, eventId);
-      const petRewards = await pet.rewardEventParticipants({ client: interaction.client, guild: interaction.guild, eventId });
       await safeSend(interaction.client, ids.channels.finance, {
         content: `Evento #${eventId} enviado para aprovacao financeira.${reviewChannel ? ` Revisao: <#${reviewChannel.id}>` : ''}`,
         embeds: [events.reviewEmbed(eventId)],
@@ -341,8 +339,7 @@ async function handleButton(interaction) {
         embeds: [events.reviewEmbed(eventId)],
         components: []
       });
-      const rewardText = petRewards?.totalFruits > 0 ? ` Frutas geradas: ${petRewards.totalFruits}.` : '';
-      return interaction.editReply({ content: `Evento enviado ao financeiro para aprovacao.${rewardText}` });
+      return interaction.editReply({ content: 'Evento enviado ao financeiro para aprovacao.' });
     }
   }
 

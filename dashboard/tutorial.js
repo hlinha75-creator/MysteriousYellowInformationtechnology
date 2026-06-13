@@ -66,18 +66,6 @@ const commands = [
     options: ['atual obrigatorio', 'anterior opcional', 'voz opcional', 'data opcional']
   },
   {
-    name: '/membros_relatorio',
-    audience: 'Staff',
-    description: 'Recebe a lista atual de membros do Albion, compara com o ultimo envio salvo e atualiza o HTML de membros.',
-    options: ['arquivo obrigatorio', 'data opcional']
-  },
-  {
-    name: '/verificar_membro',
-    audience: 'Staff',
-    description: 'Verifica se um membro do Discord esta na guild do Albion.',
-    options: ['membro opcional']
-  },
-  {
     name: '/verificar_guild',
     audience: 'Staff',
     description: 'Verifica membros do Discord contra arquivo exportado do Albion.',

@@ -9,8 +9,6 @@ const reportWindowDays = 30;
 const knownFeatures = [
   { type: 'command', name: '/setup', label: 'Atualizar paineis fixos' },
   { type: 'command', name: '/saldo', label: 'Consultar saldo' },
-  { type: 'command', name: '/evento', label: 'Manutencao de evento por comando' },
-  { type: 'command', name: '/season', label: 'Resultado da Season 32' },
   { type: 'command', name: '/registro', label: 'Registro de nick Albion' },
   { type: 'command', name: '/enquete', label: 'Criar enquete' },
   { type: 'command', name: '/leilao', label: 'Criar ou editar leilao' },
@@ -18,7 +16,6 @@ const knownFeatures = [
   { type: 'command', name: '/exportar', label: 'Exportar CSV' },
   { type: 'command', name: '/importar', label: 'Importar CSV' },
   { type: 'command', name: '/relatorio_diario', label: 'Relatorio diario' },
-  { type: 'command', name: '/verificar_membro', label: 'Verificar membro individual' },
   { type: 'command', name: '/verificar_guild', label: 'Verificar guild por arquivo' },
   { type: 'command', name: '/aplicar_verificacao_guild', label: 'Aplicar verificacao da guild' },
   { type: 'command', name: '/renomear_canais', label: 'Renomear canais' },

@@ -11,7 +11,6 @@ const financeRepo = require('../modules/finance/finance.repository');
 const deposit = require('../modules/deposit/deposit.service');
 const polls = require('../modules/polls/polls.service');
 const auctions = require('../modules/auctions/auctions.service');
-const eventTemplates = require('../modules/eventTemplates/eventTemplates.service');
 
 function intField(fields, name) {
   const value = Number.parseInt(fields.getTextInputValue(name), 10);
@@ -20,18 +19,6 @@ function intField(fields, name) {
 }
 
 async function handleModal(interaction) {
-  if (interaction.customId.startsWith('event_template:create:')) {
-    if (!can(interaction.member, 'createEvent')) {
-      return interaction.reply({ content: 'Voce nao tem permissao para criar templates de evento.', flags: MessageFlags.Ephemeral });
-    }
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const rawName = interaction.customId.split(':')[2];
-    const template = eventTemplates.saveTemplateFromModal({ interaction, rawName });
-    return interaction.editReply({
-      content: `Template **${template.name}** salvo. Use \`/template_evento usar nome:${template.name} horario:20:00\`.`
-    });
-  }
-
   if (interaction.customId.startsWith('auction:create:')) {
     if (!can(interaction.member, 'createAuction')) {
       return interaction.reply({ content: 'Voce precisa ser membro para criar leilao.', flags: MessageFlags.Ephemeral });

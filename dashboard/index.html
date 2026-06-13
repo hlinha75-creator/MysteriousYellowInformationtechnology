@@ -16,53 +16,8 @@
       <div class="toolbar-actions">
         <a class="nav-button" href="tutorial.html">Tutorial do bot</a>
         <a class="nav-button" href="relatorio.html">Relatorio de uso</a>
-        <a class="nav-button" href="membros.html">Relatorio de membros</a>
         <button id="clearAll" type="button">Limpar comparacao</button>
       </div>
-    </section>
-
-    <section class="raid-panel">
-      <div class="panel-head">
-        <div>
-          <h2>Inscricao para raid</h2>
-          <p>Os dados sao enviados para o backend e publicados no Discord pelo webhook privado.</p>
-        </div>
-        <span id="raidFormStatus" aria-live="polite"></span>
-      </div>
-      <form id="raidForm" class="raid-form">
-        <label>
-          Nick
-          <input id="raidNick" name="nick" type="text" minlength="2" maxlength="32" autocomplete="nickname" placeholder="Seu nick no Albion" required>
-        </label>
-        <label>
-          Horarios disponiveis
-          <select id="raidHorarios" name="horarios" multiple required>
-            <option value="18:00">18:00</option>
-            <option value="19:00">19:00</option>
-            <option value="20:00">20:00</option>
-            <option value="21:00">21:00</option>
-            <option value="22:00">22:00</option>
-            <option value="23:00">23:00</option>
-          </select>
-        </label>
-        <div class="build-picker">
-          <strong>Builds oficiais por funcao</strong>
-          <div id="raidBuildGroups" class="build-groups"></div>
-        </div>
-        <aside id="raidBuildPreview" class="build-preview">
-          <strong>Preview da build</strong>
-          <span>Selecione uma arma para ver o link oficial.</span>
-        </aside>
-        <label class="check-field">
-          <input id="raidCasaHoLoch" name="casaHoLoch" type="checkbox">
-          Tenho casa na HO Loch
-        </label>
-        <label class="check-field">
-          <input id="raidPortalMartlock" name="portalMartlock" type="checkbox">
-          Tenho portal em Martlock
-        </label>
-        <button type="submit">Enviar inscricao</button>
-      </form>
     </section>
 
     <section class="period-loader">
