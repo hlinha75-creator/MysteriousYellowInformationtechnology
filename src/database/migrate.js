@@ -345,6 +345,152 @@ const migrations = [
         );
       `);
     }
+  },
+  {
+    version: 11,
+    name: 'notag_pet_fruits',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS pet_members (
+          discord_id TEXT PRIMARY KEY,
+          base_display_name TEXT,
+          total_fruits INTEGER NOT NULL DEFAULT 0,
+          total_points_earned INTEGER NOT NULL DEFAULT 0,
+          current_points INTEGER NOT NULL DEFAULT 0,
+          star_count INTEGER NOT NULL DEFAULT 0,
+          first_fruit_at TEXT,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS pet_feed_logs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          event_id INTEGER,
+          discord_id TEXT NOT NULL,
+          fruit_type TEXT NOT NULL,
+          points INTEGER NOT NULL,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE SET NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS pet_event_rewards (
+          event_id INTEGER PRIMARY KEY,
+          rewarded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS pet_daily_raffles (
+          raffle_date TEXT PRIMARY KEY,
+          winner_id TEXT,
+          chest_number INTEGER,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+    }
+  },
+  {
+    version: 12,
+    name: 'raid_avalon_registrations',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS raid_avalon_registrations (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          nick TEXT NOT NULL UNIQUE,
+          horarios_json TEXT NOT NULL,
+          armas_json TEXT NOT NULL,
+          builds_json TEXT NOT NULL,
+          casa_ho_loch INTEGER NOT NULL DEFAULT 0,
+          portal_martlock INTEGER NOT NULL DEFAULT 0,
+          warnings_json TEXT NOT NULL DEFAULT '[]',
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS raid_avalon_state (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+    }
+  },
+  {
+    version: 13,
+    name: 'server_usage_analytics',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS server_usage_events (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          event_type TEXT NOT NULL,
+          event_name TEXT NOT NULL,
+          detail TEXT,
+          user_id TEXT,
+          channel_id TEXT,
+          channel_name TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_server_usage_events_created_at
+          ON server_usage_events (created_at);
+
+        CREATE INDEX IF NOT EXISTS idx_server_usage_events_type_name
+          ON server_usage_events (event_type, event_name);
+      `);
+    }
+  },
+  {
+    version: 14,
+    name: 'member_snapshots',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS member_snapshots (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          created_by TEXT NOT NULL,
+          source_name TEXT,
+          member_count INTEGER NOT NULL DEFAULT 0,
+          online_count INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS member_snapshot_rows (
+          snapshot_id INTEGER NOT NULL,
+          member_key TEXT NOT NULL,
+          character_name TEXT NOT NULL,
+          last_seen TEXT,
+          roles_json TEXT NOT NULL DEFAULT '[]',
+          is_online INTEGER NOT NULL DEFAULT 0,
+          last_seen_iso TEXT,
+          PRIMARY KEY (snapshot_id, member_key),
+          FOREIGN KEY (snapshot_id) REFERENCES member_snapshots(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_member_snapshots_created_at
+          ON member_snapshots (created_at);
+      `);
+    }
+  },
+  {
+    version: 15,
+    name: 'event_templates',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS event_templates (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          creator_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          title TEXT NOT NULL,
+          location TEXT,
+          requirements TEXT,
+          composition TEXT,
+          tank_slots INTEGER NOT NULL DEFAULT 0,
+          healer_slots INTEGER NOT NULL DEFAULT 0,
+          support_slots INTEGER NOT NULL DEFAULT 0,
+          dps_slots INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(creator_id, name)
+        );
+      `);
+    }
   }
 ];
 

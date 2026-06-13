@@ -6,3 +6,5 @@ data/backups/
 *.log
 .replit
 .upm/
+.codex-remote-check/
+.vscode/.env

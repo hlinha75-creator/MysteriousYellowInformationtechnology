@@ -11,6 +11,7 @@ const financeRepo = require('../modules/finance/finance.repository');
 const deposit = require('../modules/deposit/deposit.service');
 const polls = require('../modules/polls/polls.service');
 const auctions = require('../modules/auctions/auctions.service');
+const eventTemplates = require('../modules/eventTemplates/eventTemplates.service');
 
 function intField(fields, name) {
   const value = Number.parseInt(fields.getTextInputValue(name), 10);
@@ -19,6 +20,18 @@ function intField(fields, name) {
 }
 
 async function handleModal(interaction) {
+  if (interaction.customId.startsWith('event_template:create:')) {
+    if (!can(interaction.member, 'createEvent')) {
+      return interaction.reply({ content: 'Voce nao tem permissao para criar templates de evento.', flags: MessageFlags.Ephemeral });
+    }
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const rawName = interaction.customId.split(':')[2];
+    const template = eventTemplates.saveTemplateFromModal({ interaction, rawName });
+    return interaction.editReply({
+      content: `Template **${template.name}** salvo. Use \`/template_evento usar nome:${template.name} horario:20:00\`.`
+    });
+  }
+
   if (interaction.customId.startsWith('auction:create:')) {
     if (!can(interaction.member, 'createAuction')) {
       return interaction.reply({ content: 'Voce precisa ser membro para criar leilao.', flags: MessageFlags.Ephemeral });
@@ -59,14 +72,16 @@ async function handleModal(interaction) {
     if (!can(interaction.member, 'createPoll')) {
       return interaction.reply({ content: 'Voce nao tem permissao para criar enquete.', flags: MessageFlags.Ephemeral });
     }
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const poll = await polls.createPollFromModal(interaction);
-    return interaction.reply({ content: `Enquete #${poll.id} criada no canal de eventos.`, flags: MessageFlags.Ephemeral });
+    return interaction.editReply({ content: `Enquete #${poll.id} criada no canal de eventos.` });
   }
 
   if (interaction.customId === 'event:create') {
     if (!can(interaction.member, 'createEvent')) {
       return interaction.reply({ content: 'Voce nao tem permissao para criar evento.', flags: MessageFlags.Ephemeral });
     }
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const title = fieldOrDefault(interaction, 'title', 'FastContent');
     const description = fieldOrDefault(interaction, 'description', 'Pergunte na Call');
     const location = fieldOrDefault(interaction, 'location', 'Pergunte na Call');
@@ -85,10 +100,11 @@ async function handleModal(interaction) {
       supportSlots: slots[2],
       dpsSlots: slots[3]
     });
-    return interaction.reply({ content: `Evento ${event.event_code} criado.`, flags: MessageFlags.Ephemeral });
+    return interaction.editReply({ content: `Evento ${event.event_code} criado.` });
   }
 
   if (interaction.customId === 'registration:submit') {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const albionName = interaction.fields.getTextInputValue('albionName').trim();
     const registrationId = await registration.submitRegistration({ interaction, albionName });
     await safeSend(interaction.client, ids.channels.registrationRequests, {
@@ -108,7 +124,7 @@ async function handleModal(interaction) {
         )
       ]
     });
-    return interaction.reply({ content: 'Registro enviado. Voce recebeu Convidado e a staff vai revisar.', flags: MessageFlags.Ephemeral });
+    return interaction.editReply({ content: 'Registro enviado. Voce recebeu Convidado e a staff vai revisar.' });
   }
 
   if (interaction.customId.startsWith('event:loot:')) {
@@ -221,6 +237,7 @@ async function handleModal(interaction) {
     if (!can(interaction.member, 'withdrawBalance')) {
       return interaction.reply({ content: 'Voce nao tem permissao para retirar saldo.', flags: MessageFlags.Ephemeral });
     }
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const targetRaw = interaction.fields.getTextInputValue('userId').trim();
     const targetId = targetRaw.replace(/[<@!>]/g, '');
     const amount = Math.abs(parseSilver(interaction.fields.getTextInputValue('amount')));
@@ -229,7 +246,7 @@ async function handleModal(interaction) {
     const before = financeRepo.getBalance(targetId);
     const after = before - amount;
     if (after < 0 && confirmation !== 'CONFIRMAR') {
-      return interaction.reply({ content: 'Essa retirada deixa saldo negativo. Digite CONFIRMAR no campo de confirmacao.', flags: MessageFlags.Ephemeral });
+      return interaction.editReply({ content: 'Essa retirada deixa saldo negativo. Digite CONFIRMAR no campo de confirmacao.' });
     }
     finance.applyBalanceTransaction({
       type: 'manual_remove',
@@ -252,7 +269,7 @@ async function handleModal(interaction) {
     await safeSend(interaction.client, ids.channels.bankLogs, {
       content: `Saldo retirado de <@${targetId}>: -${formatSilver(amount)} por <@${interaction.user.id}>. Motivo: ${reason}`
     });
-    return interaction.reply({ content: `Saldo retirado. Novo saldo: ${formatSilver(after)}.`, flags: MessageFlags.Ephemeral });
+    return interaction.editReply({ content: `Saldo retirado. Novo saldo: ${formatSilver(after)}.` });
   }
 }
 

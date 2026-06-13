@@ -67,9 +67,13 @@ const panels = [
     components: [
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('csv:export_balances').setLabel('Exportar saldos').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('csv:export_balances_html').setLabel('Lista HTML de saldos').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('csv:export_transactions').setLabel('Exportar logs financeiros').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('csv:export_audit').setLabel('Exportar auditoria').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('csv:import_help').setLabel('Importar CSV').setStyle(ButtonStyle.Primary)
+      ),
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('guild:export_members_html').setLabel('Discord x Albion HTML').setStyle(ButtonStyle.Secondary)
       )
     ]
   }

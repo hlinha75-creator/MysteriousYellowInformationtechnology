@@ -274,6 +274,20 @@ function getVerification(id, guildId) {
   };
 }
 
+function getLatestVerification(guildId) {
+  const row = db()
+    .prepare('SELECT * FROM guild_verifications WHERE guild_id = ? ORDER BY id DESC LIMIT 1')
+    .get(guildId);
+  if (!row) return null;
+  return {
+    ...row,
+    sourceNames: JSON.parse(row.source_names_json),
+    matches: JSON.parse(row.matches_json),
+    missing: JSON.parse(row.missing_json),
+    issues: JSON.parse(row.issues_json)
+  };
+}
+
 function summarizeAnalysis(result) {
   const renameCount = result.matches.filter((row) => row.pode_renomear === 'sim').length;
   return [
@@ -455,6 +469,268 @@ function actionAttachment(rows, name) {
   return new AttachmentBuilder(Buffer.from(csv, 'utf8'), { name });
 }
 
+async function membersHtmlAttachment(guild) {
+  const verification = getLatestVerification(guild.id);
+  if (!verification) {
+    throw new Error('Nenhuma verificacao encontrada. Rode /verificar_guild arquivo:<anexo> primeiro.');
+  }
+
+  const members = await guild.members.fetch();
+  const rows = [];
+  const relatedAlbionNames = new Set();
+
+  for (const member of members.filter((item) => !item.user.bot).values()) {
+    const result = analyzeMember(member, verification.sourceNames).row;
+    if ([STATUS.exact, STATUS.similar].includes(result.status) && result.albion_name) {
+      relatedAlbionNames.add(normalizedName(result.albion_name));
+    }
+    rows.push({
+      kind: 'discord',
+      discord_id: result.discord_id,
+      discord_tag: result.discord_tag,
+      discord_name: result.discord_name,
+      albion_name: result.albion_name,
+      status: result.status,
+      score: result.score,
+      motivo: result.motivo
+    });
+  }
+
+  for (const name of verification.sourceNames) {
+    if (relatedAlbionNames.has(normalizedName(name))) continue;
+    rows.push({
+      kind: 'albion',
+      discord_id: '',
+      discord_tag: '',
+      discord_name: '',
+      albion_name: name,
+      status: 'ALBION_SEM_DISCORD',
+      score: '',
+      motivo: 'Jogador do arquivo Albion sem membro Discord relacionado.'
+    });
+  }
+
+  return new AttachmentBuilder(Buffer.from(renderMembersHtml({ verification, rows }), 'utf8'), {
+    name: `discord-albion-verificacao-${verification.id}.html`
+  });
+}
+
+function renderMembersHtml({ verification, rows }) {
+  const generatedAt = new Date().toISOString();
+  const json = JSON.stringify(rows).replace(/</g, '\\u003c');
+  return `<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Discord x Albion</title>
+  <style>
+    :root {
+      --bg: #f5f7fa;
+      --panel: #fff;
+      --text: #1f2937;
+      --muted: #667085;
+      --line: #d9dee7;
+      --ok: #0f766e;
+      --warn: #b54708;
+      --bad: #b42318;
+      --info: #175cd3;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter, ui-sans-serif, system-ui, "Segoe UI", sans-serif; }
+    main { width: min(1200px, calc(100% - 32px)); margin: 24px auto 40px; }
+    header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-end; margin-bottom: 16px; }
+    h1 { margin: 0 0 6px; font-size: 28px; }
+    p { margin: 0; color: var(--muted); }
+    .filters, .metrics, .table-wrap { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+    .filters { display: grid; grid-template-columns: minmax(240px, 1.5fr) repeat(3, minmax(160px, 1fr)); gap: 12px; padding: 14px; margin-bottom: 14px; }
+    label { display: grid; gap: 6px; font-size: 12px; font-weight: 800; color: var(--muted); text-transform: uppercase; }
+    input, select { min-height: 38px; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font: inherit; background: #fff; color: var(--text); }
+    .metrics { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1px; overflow: hidden; margin-bottom: 14px; }
+    .metric { padding: 14px; background: #fff; }
+    .metric span { display: block; color: var(--muted); font-size: 12px; font-weight: 800; text-transform: uppercase; }
+    .metric strong { display: block; margin-top: 5px; font-size: 22px; }
+    .table-wrap { overflow: auto; }
+    table { width: 100%; min-width: 980px; border-collapse: collapse; background: #fff; }
+    th, td { padding: 11px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { position: sticky; top: 0; background: #f8fafc; color: var(--muted); font-size: 12px; text-transform: uppercase; z-index: 1; }
+    .name { font-weight: 800; }
+    .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+    .pill { display: inline-block; border-radius: 999px; padding: 3px 8px; font-size: 12px; font-weight: 800; background: #eef2f6; color: #344054; }
+    .EXATO { color: var(--ok); }
+    .PARECIDO, .PROBLEMA { color: var(--warn); }
+    .NAO_ENCONTRADO, .ALBION_SEM_DISCORD { color: var(--bad); }
+    .empty { padding: 28px; text-align: center; color: var(--muted); }
+    @media (max-width: 860px) {
+      main { width: min(100% - 20px, 1200px); margin-top: 14px; }
+      header { display: block; }
+      .filters { grid-template-columns: 1fr; }
+      .metrics { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Discord x Albion</h1>
+        <p>Verificacao #${escapeHtml(verification.id)} gerada em ${escapeHtml(generatedAt)}.</p>
+      </div>
+      <p id="visibleCount">0 linhas</p>
+    </header>
+
+    <section class="filters">
+      <label>Buscar
+        <input id="search" type="search" placeholder="Discord, Albion, ID ou motivo">
+      </label>
+      <label>Filtro
+        <select id="relation">
+          <option value="">Todos</option>
+          <option value="related">Relacionados</option>
+          <option value="unrelated">Nao relacionados</option>
+          <option value="discord_only">Discord sem Albion</option>
+          <option value="albion_only">Albion sem Discord</option>
+          <option value="issues">Problemas</option>
+        </select>
+      </label>
+      <label>Status
+        <select id="status">
+          <option value="">Todos</option>
+          <option value="EXATO">Exato</option>
+          <option value="PARECIDO">Parecido</option>
+          <option value="NAO_ENCONTRADO">Nao encontrado</option>
+          <option value="PROBLEMA">Problema</option>
+          <option value="ALBION_SEM_DISCORD">Albion sem Discord</option>
+        </select>
+      </label>
+      <label>Ordenar
+        <select id="sort">
+          <option value="status">Status</option>
+          <option value="discord">Discord A-Z</option>
+          <option value="albion">Albion A-Z</option>
+          <option value="score">Melhor similaridade</option>
+        </select>
+      </label>
+    </section>
+
+    <section class="metrics" id="metrics"></section>
+    <section class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Discord</th>
+            <th>Jogador Albion</th>
+            <th>Status</th>
+            <th>Similaridade</th>
+            <th>Motivo</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </section>
+  </main>
+  <script>
+    const allRows = ${json};
+    const search = document.querySelector('#search');
+    const relation = document.querySelector('#relation');
+    const status = document.querySelector('#status');
+    const sort = document.querySelector('#sort');
+    const rowsEl = document.querySelector('#rows');
+    const metricsEl = document.querySelector('#metrics');
+    const visibleCount = document.querySelector('#visibleCount');
+
+    for (const input of [search, relation, status, sort]) {
+      input.addEventListener('input', render);
+      input.addEventListener('change', render);
+    }
+
+    function normalize(value) {
+      return String(value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase();
+    }
+
+    function isRelated(row) {
+      return row.status === 'EXATO' || row.status === 'PARECIDO';
+    }
+
+    function filteredRows() {
+      const query = normalize(search.value);
+      const relationValue = relation.value;
+      const statusValue = status.value;
+      return allRows
+        .filter((row) => !query || normalize(row.discord_name + ' ' + row.discord_tag + ' ' + row.discord_id + ' ' + row.albion_name + ' ' + row.motivo).includes(query))
+        .filter((row) => !statusValue || row.status === statusValue)
+        .filter((row) => relationValue !== 'related' || isRelated(row))
+        .filter((row) => relationValue !== 'unrelated' || !isRelated(row))
+        .filter((row) => relationValue !== 'discord_only' || row.status === 'NAO_ENCONTRADO')
+        .filter((row) => relationValue !== 'albion_only' || row.status === 'ALBION_SEM_DISCORD')
+        .filter((row) => relationValue !== 'issues' || row.status === 'PROBLEMA')
+        .sort(sorter(sort.value));
+    }
+
+    function sorter(mode) {
+      if (mode === 'discord') return (a, b) => String(a.discord_name).localeCompare(String(b.discord_name));
+      if (mode === 'albion') return (a, b) => String(a.albion_name).localeCompare(String(b.albion_name));
+      if (mode === 'score') return (a, b) => Number(b.score || 0) - Number(a.score || 0);
+      return (a, b) => statusWeight(a.status) - statusWeight(b.status) || String(a.discord_name || a.albion_name).localeCompare(String(b.discord_name || b.albion_name));
+    }
+
+    function statusWeight(value) {
+      return { EXATO: 0, PARECIDO: 1, NAO_ENCONTRADO: 2, ALBION_SEM_DISCORD: 3, PROBLEMA: 4 }[value] ?? 9;
+    }
+
+    function render() {
+      const rows = filteredRows();
+      visibleCount.textContent = rows.length + ' linhas';
+      metricsEl.innerHTML = [
+        metric('Relacionados', allRows.filter(isRelated).length),
+        metric('Discord sem Albion', allRows.filter((row) => row.status === 'NAO_ENCONTRADO').length),
+        metric('Albion sem Discord', allRows.filter((row) => row.status === 'ALBION_SEM_DISCORD').length),
+        metric('Problemas', allRows.filter((row) => row.status === 'PROBLEMA').length),
+        metric('Visiveis', rows.length)
+      ].join('');
+      rowsEl.innerHTML = rows.length ? rows.map(rowHtml).join('') : '<tr><td colspan="5" class="empty">Nenhum registro com esses filtros.</td></tr>';
+    }
+
+    function metric(label, value) {
+      return '<div class="metric"><span>' + escapeHtml(label) + '</span><strong>' + escapeHtml(value) + '</strong></div>';
+    }
+
+    function rowHtml(row) {
+      return '<tr>' +
+        '<td><div class="name">' + escapeHtml(row.discord_name || '-') + '</div><div class="sub">' + escapeHtml(row.discord_tag || row.discord_id || '-') + '</div></td>' +
+        '<td><div class="name">' + escapeHtml(row.albion_name || '-') + '</div></td>' +
+        '<td><span class="pill ' + escapeHtml(row.status) + '">' + escapeHtml(row.status) + '</span></td>' +
+        '<td>' + escapeHtml(row.score || '-') + '</td>' +
+        '<td>' + escapeHtml(row.motivo || '-') + '</td>' +
+      '</tr>';
+    }
+
+    function escapeHtml(value) {
+      return String(value == null ? '' : value).replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      }[char]));
+    }
+
+    render();
+  </script>
+</body>
+</html>`;
+}
+
+function escapeHtml(value) {
+  return String(value == null ? '' : value).replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[char]));
+}
+
 module.exports = {
   STATUS,
   actionAttachment,
@@ -464,6 +740,7 @@ module.exports = {
   askMissingMembers,
   handleDirectNickReply,
   importantLines,
+  membersHtmlAttachment,
   parseGuildExport,
   summarizeAnalysis
 };

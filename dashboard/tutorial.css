@@ -1,0 +1,403 @@
+:root {
+  color-scheme: light;
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --ink: #18212f;
+  --muted: #667085;
+  --line: #d9dee7;
+  --accent: #0f766e;
+  --accent-dark: #115e59;
+  --fill: #e7f4f2;
+  --warn: #b42318;
+  --shadow: 0 12px 34px rgba(15, 23, 42, 0.09);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+a {
+  color: inherit;
+}
+
+code {
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: #f9fafb;
+  padding: 2px 6px;
+  font-size: 0.95em;
+}
+
+.hero {
+  min-height: 560px;
+  background:
+    linear-gradient(90deg, rgba(15, 118, 110, 0.94), rgba(17, 94, 89, 0.82)),
+    url("https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=1800&q=80") center / cover;
+  color: white;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 20px 0;
+}
+
+.brand {
+  font-size: 18px;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.nav-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.nav-links a {
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  padding: 8px 12px;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.hero-content {
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 96px 0 120px;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.hero .eyebrow {
+  color: #b7f7ee;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+h1 {
+  max-width: 780px;
+  font-size: 54px;
+  line-height: 1.02;
+}
+
+.hero-content p:not(.eyebrow) {
+  max-width: 720px;
+  margin-top: 18px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 19px;
+  line-height: 1.55;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.button,
+button {
+  min-height: 42px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent);
+  color: white;
+  padding: 11px 15px;
+  font: inherit;
+  font-weight: 850;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.button.secondary {
+  border-color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+main {
+  width: min(1180px, calc(100% - 32px));
+  margin: -54px auto 56px;
+}
+
+.quick-start {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.quick-start article,
+.guide-card,
+.checklist,
+.steps article,
+details,
+.command-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.quick-start article {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+}
+
+.quick-start span,
+.steps span,
+.command-tag {
+  display: inline-flex;
+  align-items: center;
+  width: max-content;
+  min-height: 26px;
+  border-radius: 999px;
+  background: var(--fill);
+  color: var(--accent-dark);
+  padding: 4px 9px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.quick-start p,
+.guide-card p,
+.steps p,
+details p,
+.command-card p,
+.search-box {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.section {
+  padding: 42px 0 0;
+}
+
+.section-head {
+  margin-bottom: 16px;
+}
+
+.section-head h2 {
+  font-size: 30px;
+  line-height: 1.12;
+}
+
+.with-tools {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.guide-grid,
+.command-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.guide-card,
+.command-card {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 18px;
+}
+
+.copy-command {
+  justify-self: start;
+}
+
+.staff-layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 14px;
+}
+
+.checklist {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 18px;
+}
+
+.checklist label,
+.search-box {
+  display: grid;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.checklist label {
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.checklist input {
+  margin-top: 3px;
+}
+
+#resetChecklist {
+  border-color: #475467;
+  background: #475467;
+}
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.steps article {
+  display: grid;
+  gap: 10px;
+  padding: 18px;
+}
+
+.search-box input {
+  width: min(360px, 100%);
+  height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0 12px;
+  font: inherit;
+}
+
+.command-card header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.command-name {
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.command-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.command-options span {
+  border-radius: 999px;
+  background: #eef2f6;
+  padding: 4px 8px;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.faq {
+  display: grid;
+  gap: 10px;
+}
+
+details {
+  padding: 16px 18px;
+}
+
+summary {
+  cursor: pointer;
+  font-weight: 900;
+}
+
+details p {
+  margin-top: 10px;
+}
+
+.toast {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  transform: translateY(16px);
+  opacity: 0;
+  border-radius: 8px;
+  background: var(--ink);
+  color: white;
+  padding: 12px 14px;
+  font-weight: 800;
+  transition: opacity 160ms ease, transform 160ms ease;
+  pointer-events: none;
+}
+
+.toast.visible {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.empty {
+  grid-column: 1 / -1;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  background: white;
+  padding: 20px;
+  color: var(--muted);
+  text-align: center;
+}
+
+@media (max-width: 860px) {
+  .topbar,
+  .with-tools {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .nav-links {
+    justify-content: flex-start;
+  }
+
+  h1 {
+    font-size: 38px;
+  }
+
+  .quick-start,
+  .guide-grid,
+  .staff-layout,
+  .steps,
+  .command-list {
+    grid-template-columns: 1fr;
+  }
+
+  .search-box input,
+  .button,
+  button {
+    width: 100%;
+  }
+}

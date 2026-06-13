@@ -268,6 +268,35 @@ Fluxo:
 
 Votos de enquete ficam no SQLite.
 
+## FAQ e Tutoriais
+
+O bot pode responder mensagens simples quando alguem chama:
+- `botnotag`;
+- `notag bot`;
+- `oi bot`;
+- `bot tutorial`.
+
+FAQ:
+- Membro e Convidado podem perguntar sobre saldo, saque, evento e registro;
+- Staff, ADM, Caller e Recrutador podem perguntar tambem sobre deposito, CSV e backup;
+- respostas sao por palavras-chave simples;
+- sem IA externa por enquanto;
+- novas respostas devem ficar em `src/modules/faq/faq.service.js`.
+
+Tutoriais:
+- `bot tutorial` mostra um menu de tutoriais;
+- `bot tutorial completo` tenta mandar o tutorial completo no privado;
+- o menu e publico, mas a resposta do item escolhido e efemera;
+- permitido para Staff, ADM, Caller, Recrutador e owner.
+
+Tutoriais atuais:
+- Eventos;
+- Financeiro;
+- Deposito;
+- Registro;
+- CSV e backups;
+- Treinamento.
+
 ## Aviso de 1 Minuto
 
 Todos usam UTC-3 como referencia de horario de Albion.
@@ -291,9 +320,9 @@ Depois de finalizar, o criador preenche:
 - reparo;
 - sacos de prata;
 - taxa %.
-- campo opcional com links/observacoes de DPS meter e fama total.
+- campo unico opcional com link/imagem/observacoes de DPS meter, fama total e loot logger.
 
-Discord modal nao aceita upload de arquivo. CSV do loot logger e prints devem ser anexados depois no canal temporario de revisao.
+Discord modal nao aceita upload de arquivo. CSV do loot logger e prints podem ser anexados depois no canal temporario de revisao.
 
 Calculo:
 - loot liquido = loot total + sacos de prata - reparo - taxa%.
@@ -309,15 +338,15 @@ Antes de enviar para pagamento:
 Ao finalizar evento:
 - mover membros da sala de voz para Aguardando Evento;
 - apagar sala temporaria de voz;
-- postar resumo no canal DPS meter mencionando participantes;
 - criar canal temporario de revisao na categoria Eventos pendentes/ativos;
 - nome do canal: criador + horario;
 - canal visivel para criador, participantes e staff/ADM/tesoureiro;
 - criador revisa/edita e clica Enviar Financeiro;
+- postar resumo no canal DPS meter mencionando participantes depois da revisao final do criador;
 - bot move canal para Eventos encerrados;
 - bot posta pedido de aprovacao no Financeiro;
 - staff aprova pagamento;
-- apos aprovacao, canal temporario de revisao deve ser apagado depois de 24h.
+- apos aprovacao, registro fica no Financeiro e o canal temporario de revisao some depois de 14h.
 
 Editar/adicionar/remover participantes deve usar User Select Menu do Discord sempre que possivel.
 
@@ -411,6 +440,50 @@ Fluxo:
 
 Se tentar confirmar sem participantes:
 - bloquear e avisar.
+
+## Jogo de Frutas NOTAG
+
+O jogo de frutas e separado do financeiro e nao altera saldo de prata.
+
+Quando um evento e enviado para o financeiro depois da revisao:
+- o bot calcula o tempo valido dos participantes;
+- espectador nao conta;
+- 25 minutos ja contam como 1 bloco de 30 minutos;
+- abaixo de 25 minutos nao ganha fruta;
+- acima disso, arredondar para o bloco de 30 minutos mais proximo;
+- cada bloco gera 1 fruta;
+- o evento so pode gerar frutas uma vez.
+
+Frutas:
+- Banana de prata: 70%, vale 1 ponto;
+- Maca de ouro: 25%, vale 3 pontos;
+- Uva esmeralda roxa: 5%, vale 10 pontos.
+
+As frutas sao automaticamente dadas ao bot NOTAG:
+- membro nao precisa clicar em nada;
+- nao mandar DM;
+- postar resumo no chat NOTAG.
+
+Estrelinhas:
+- a cada 10 pontos, ganha 1 estrelinha;
+- pontos usados viram estrelinha e a sobra continua;
+- exemplo: tinha 9 pontos, ganhou 3, vira 1 estrelinha e sobra 2 pontos;
+- estrela aparece na lista/ranking;
+- no apelido do Discord aparece apenas o numero de estrelas no final;
+- exemplo: `Tmaiusculo 1`;
+- se ja tiver numero no final, substituir;
+- guardar o nome base no banco para nao baguncar apelidos;
+- se o bot nao conseguir renomear por hierarquia, registrar mesmo assim e avisar no resumo quando possivel.
+
+Ranking e sorteio:
+- todo dia as 18:00 UTC-3;
+- postar no chat NOTAG;
+- ranking top 20 acumulado;
+- sorteio diario junto com ranking;
+- participa quem ja ganhou pelo menos 1 fruta alguma vez;
+- chance igual para todos;
+- pode repetir vencedor em dias diferentes;
+- premio e bau numero 1 a 14.
 
 ## Painel ADM
 

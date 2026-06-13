@@ -7,10 +7,12 @@ const financeRepo = require('../modules/finance/finance.repository');
 const finance = require('../modules/finance/finance.service');
 const audit = require('../modules/audit/audit.repository');
 const csv = require('../modules/csv/csv.service');
+const albionVerification = require('../modules/albion/guildVerification.service');
 const deposit = require('../modules/deposit/deposit.service');
 const polls = require('../modules/polls/polls.service');
 const auctions = require('../modules/auctions/auctions.service');
 const auctionsRepo = require('../modules/auctions/auctions.repository');
+const pet = require('../modules/pet/pet.service');
 const { formatSilver } = require('../utils/silver');
 const registration = require('../modules/registration/registration.service');
 const { safeSend } = require('../utils/discord');
@@ -252,7 +254,7 @@ async function handleButton(interaction) {
         embeds: [events.reviewEmbed(eventId)],
         components: []
       }).catch(() => {});
-      await events.scheduleReviewChannelDeletion(interaction.client, eventId, 24);
+      await events.scheduleReviewChannelDeletion(interaction.client, eventId, 14);
       return interaction.editReply({ content: 'Pagamento aprovado e saldos depositados.' });
     }
     if (action === 'cancel') {
@@ -327,6 +329,8 @@ async function handleButton(interaction) {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       events.submitEventToFinance({ eventId, actorId: interaction.user.id });
       const reviewChannel = await events.moveReviewChannelToClosed(interaction.client, eventId);
+      await events.postDpsMeterSummary(interaction.client, eventId);
+      const petRewards = await pet.rewardEventParticipants({ client: interaction.client, guild: interaction.guild, eventId });
       await safeSend(interaction.client, ids.channels.finance, {
         content: `Evento #${eventId} enviado para aprovacao financeira.${reviewChannel ? ` Revisao: <#${reviewChannel.id}>` : ''}`,
         embeds: [events.reviewEmbed(eventId)],
@@ -337,7 +341,8 @@ async function handleButton(interaction) {
         embeds: [events.reviewEmbed(eventId)],
         components: []
       });
-      return interaction.editReply({ content: 'Evento enviado ao financeiro para aprovacao.' });
+      const rewardText = petRewards?.totalFruits > 0 ? ` Frutas geradas: ${petRewards.totalFruits}.` : '';
+      return interaction.editReply({ content: `Evento enviado ao financeiro para aprovacao.${rewardText}` });
     }
   }
 
@@ -480,6 +485,23 @@ async function handleButton(interaction) {
   if (interaction.customId === 'csv:export_balances') {
     if (!can(interaction.member, 'importCsv')) return interaction.reply({ content: 'Sem permissao.', flags: MessageFlags.Ephemeral });
     return interaction.reply({ content: 'Saldos exportados.', files: [csv.balancesAttachment()], flags: MessageFlags.Ephemeral });
+  }
+
+  if (interaction.customId === 'csv:export_balances_html') {
+    if (!can(interaction.member, 'importCsv')) return interaction.reply({ content: 'Sem permissao.', flags: MessageFlags.Ephemeral });
+    return interaction.reply({ content: 'Lista HTML de saldos gerada.', files: [csv.balancesHtmlAttachment()], flags: MessageFlags.Ephemeral });
+  }
+
+  if (interaction.customId === 'guild:export_members_html') {
+    if (!can(interaction.member, 'approveRegistration') && !can(interaction.member, 'importCsv')) {
+      return interaction.reply({ content: 'Sem permissao.', flags: MessageFlags.Ephemeral });
+    }
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const attachment = await albionVerification.membersHtmlAttachment(interaction.guild);
+    return interaction.editReply({
+      content: 'Lista HTML Discord x Albion gerada com base na ultima verificacao.',
+      files: [attachment]
+    });
   }
 
   if (interaction.customId === 'csv:export_transactions') {

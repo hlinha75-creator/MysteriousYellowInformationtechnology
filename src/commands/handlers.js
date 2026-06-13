@@ -22,6 +22,9 @@ const polls = require('../modules/polls/polls.service');
 const auctions = require('../modules/auctions/auctions.service');
 const objectives = require('../modules/objectives/objectives.service');
 const dailyReport = require('../modules/reports/dailyReport.service');
+const memberReport = require('../modules/members/memberReport.service');
+const eventTemplates = require('../modules/eventTemplates/eventTemplates.service');
+const season = require('../modules/season/season.service');
 
 function input(id, label, style = TextInputStyle.Short, required = true) {
   return new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setRequired(required);
@@ -57,6 +60,64 @@ async function handleCommand(interaction) {
     return interaction.showModal(modal('registration:submit', 'Registro Albion', [
       input('albionName', 'Nome do personagem no Albion')
     ]));
+  }
+
+  if (interaction.commandName === 'season') {
+    return interaction.reply({
+      content: 'Resultado da Season 32 da NoTag:',
+      embeds: season.buildSeason32Embeds()
+    });
+  }
+
+  if (interaction.commandName === 'template_evento') {
+    if (!can(interaction.member, 'createEvent')) {
+      return interaction.reply({ content: 'Voce nao tem permissao para criar templates de evento.', flags: MessageFlags.Ephemeral });
+    }
+
+    const subcommand = interaction.options.getSubcommand();
+    const name = interaction.options.getString('nome');
+
+    if (subcommand === 'criar') {
+      const normalizedName = eventTemplates.normalizeName(name);
+      if (!normalizedName) {
+        return interaction.reply({ content: 'Informe um nome valido para o template.', flags: MessageFlags.Ephemeral });
+      }
+      return interaction.showModal(modal(`event_template:create:${normalizedName}`, `Template ${normalizedName}`, [
+        input('title', 'Titulo do evento', TextInputStyle.Short, true)
+          .setPlaceholder('Ex: DG de Grupo - Vulto'),
+        input('location', 'Local de saida', TextInputStyle.Short, false)
+          .setPlaceholder('Ex: HO Loch'),
+        input('requirements', 'Regras e requisitos', TextInputStyle.Paragraph, false)
+          .setPlaceholder('Ex: Equipamento tier 8 + set de fuga no inventario'),
+        input('composition', 'Composicao / builds', TextInputStyle.Paragraph, true)
+          .setPlaceholder('1x Incubus, 1x Queda Santa, 1x Chama Sombra, 3x Fura-Bruma'),
+        input('slots', 'Vagas Tank, Healer, Sup, DPS', TextInputStyle.Short, false)
+          .setPlaceholder('Ex: 1,1,1,3')
+      ]));
+    }
+
+    if (subcommand === 'listar') {
+      return interaction.reply({
+        content: eventTemplates.listTemplatesText(interaction.user.id),
+        flags: MessageFlags.Ephemeral
+      });
+    }
+
+    if (subcommand === 'remover') {
+      const removed = eventTemplates.removeTemplate({ creatorId: interaction.user.id, name });
+      return interaction.reply({ content: `Template ${removed} removido.`, flags: MessageFlags.Ephemeral });
+    }
+
+    if (subcommand === 'usar') {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      const event = await eventTemplates.createEventFromTemplate({
+        interaction,
+        name,
+        scheduledTime: interaction.options.getString('horario'),
+        titleOverride: interaction.options.getString('titulo')
+      });
+      return interaction.editReply({ content: `Evento ${event.event_code} criado a partir do template.` });
+    }
   }
 
   if (interaction.commandName === 'enquete') {
@@ -182,6 +243,20 @@ async function handleCommand(interaction) {
       currentAttachment: interaction.options.getAttachment('atual'),
       previousAttachment: interaction.options.getAttachment('anterior'),
       voiceAttachment: interaction.options.getAttachment('voz'),
+      dateText: interaction.options.getString('data')
+    });
+    return interaction.editReply({ content: result.content, files: result.files });
+  }
+
+  if (interaction.commandName === 'membros_relatorio') {
+    if (!can(interaction.member, 'importCsv')) {
+      return interaction.reply({ content: 'Voce nao tem permissao para gerar relatorio de membros.', flags: MessageFlags.Ephemeral });
+    }
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const result = await memberReport.buildMemberReport({
+      attachment: interaction.options.getAttachment('arquivo'),
+      actorId: interaction.user.id,
       dateText: interaction.options.getString('data')
     });
     return interaction.editReply({ content: result.content, files: result.files });

@@ -54,6 +54,37 @@ function listBalances() {
     .all();
 }
 
+function listAllBalances() {
+  return getDatabase()
+    .prepare(`
+      SELECT discord_id, discord_name, albion_name, balance, last_updated
+      FROM (
+        SELECT
+          u.discord_id,
+          u.discord_name,
+          u.albion_name,
+          COALESCE(b.balance, 0) AS balance,
+          b.updated_at AS last_updated,
+          COALESCE(u.albion_name, u.discord_name, u.discord_id) AS sort_name
+        FROM users u
+        LEFT JOIN balances b ON b.discord_id = u.discord_id
+        UNION
+        SELECT
+          b.discord_id,
+          NULL AS discord_name,
+          NULL AS albion_name,
+          b.balance,
+          b.updated_at AS last_updated,
+          b.discord_id AS sort_name
+        FROM balances b
+        LEFT JOIN users u ON u.discord_id = b.discord_id
+        WHERE u.discord_id IS NULL
+      )
+      ORDER BY sort_name COLLATE NOCASE
+    `)
+    .all();
+}
+
 function listTransactions(limit = 1000) {
   return getDatabase()
     .prepare('SELECT * FROM balance_transactions ORDER BY id DESC LIMIT ?')
@@ -84,6 +115,7 @@ module.exports = {
   getBalance,
   getWithdrawRequest,
   insertTransaction,
+  listAllBalances,
   listBalances,
   listTransactions,
   setBalance,

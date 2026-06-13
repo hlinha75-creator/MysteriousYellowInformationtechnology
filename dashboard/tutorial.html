@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tutorial Notag Bot</title>
+  <link rel="stylesheet" href="tutorial.css">
+</head>
+<body>
+  <header class="hero">
+    <nav class="topbar" aria-label="Navegacao principal">
+      <a class="brand" href="index.html">Notag Bot</a>
+      <div class="nav-links">
+        <a href="relatorio.html">Relatorio</a>
+        <a href="membros.html">Membros HTML</a>
+        <a href="#membros">Membros</a>
+        <a href="#staff">Staff</a>
+        <a href="#comandos">Comandos</a>
+        <a href="#duvidas">Duvidas</a>
+      </div>
+    </nav>
+
+    <section class="hero-content">
+      <p class="eyebrow">Guia rapido da guild</p>
+      <h1>Aprenda a usar o bot sem depender de tentativa e erro.</h1>
+      <p>Um tutorial pratico para membros registrarem nick, consultarem saldo e participarem dos eventos; e para staff administrar paineis, relatorios, auditorias e importacoes.</p>
+      <div class="hero-actions">
+        <a class="button" href="#membros">Sou membro</a>
+        <a class="button secondary" href="#staff">Sou staff</a>
+      </div>
+    </section>
+  </header>
+
+  <main>
+    <section class="quick-start" aria-label="Primeiros passos">
+      <article>
+        <span>1</span>
+        <strong>Use comandos com /</strong>
+        <p>No Discord, digite a barra e escolha o comando do Notag Bot na lista.</p>
+      </article>
+      <article>
+        <span>2</span>
+        <strong>Leia as opcoes</strong>
+        <p>Alguns comandos pedem arquivo, codigo, membro, data ou imagem.</p>
+      </article>
+      <article>
+        <span>3</span>
+        <strong>Confirme antes de aplicar</strong>
+        <p>Fluxos sensiveis, como importacao e verificacao, usam confirmacao.</p>
+      </article>
+    </section>
+
+    <section id="membros" class="section">
+      <div class="section-head">
+        <p class="eyebrow">Membros</p>
+        <h2>O que cada membro precisa saber</h2>
+      </div>
+      <div class="guide-grid">
+        <article class="guide-card">
+          <h3>Registrar nick</h3>
+          <p>Use <code>/registro</code> para abrir o fluxo de registro do nome em jogo. Informe o nick correto do Albion para facilitar auditorias e organizacao de eventos.</p>
+          <button class="copy-command" type="button" data-command="/registro">Copiar /registro</button>
+        </article>
+        <article class="guide-card">
+          <h3>Consultar saldo</h3>
+          <p>Use <code>/saldo</code> para consultar seu saldo. Se precisar ver outra pessoa, selecione o membro na opcao do comando, quando permitido.</p>
+          <button class="copy-command" type="button" data-command="/saldo">Copiar /saldo</button>
+        </article>
+        <article class="guide-card">
+          <h3>Entrar em eventos</h3>
+          <p>Acompanhe os paineis fixos e comandos de evento. Quando houver codigo de evento, use <code>/evento</code> com o codigo informado pela staff.</p>
+          <button class="copy-command" type="button" data-command="/evento codigo: EVT-000001">Copiar exemplo</button>
+        </article>
+        <article class="guide-card">
+          <h3>Participar de enquetes e leiloes</h3>
+          <p>Vote nas enquetes do canal de eventos e acompanhe leiloes publicados pelo bot. Leia prazos, valores e imagens antes de participar.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="staff" class="section split">
+      <div class="section-head">
+        <p class="eyebrow">Staff</p>
+        <h2>Rotina segura para operar o bot</h2>
+      </div>
+      <div class="staff-layout">
+        <aside class="checklist">
+          <h3>Checklist de operacao</h3>
+          <label><input type="checkbox"> Verificar se esta no canal correto.</label>
+          <label><input type="checkbox"> Conferir arquivos CSV ou TXT antes de importar.</label>
+          <label><input type="checkbox"> Rodar previsualizacao quando o comando oferecer.</label>
+          <label><input type="checkbox"> Confirmar a acao apenas depois de revisar o resumo.</label>
+          <label><input type="checkbox"> Guardar codigos de relatorio, evento ou verificacao.</label>
+          <button id="resetChecklist" type="button">Limpar checklist</button>
+        </aside>
+
+        <div class="steps">
+          <article>
+            <span>Setup</span>
+            <h3>Paineis fixos</h3>
+            <p>Use <code>/setup</code> para postar ou atualizar os paineis do bot. Esse comando exige permissao de gerenciamento do servidor.</p>
+          </article>
+          <article>
+            <span>Dados</span>
+            <h3>Importar e exportar CSV</h3>
+            <p>Use <code>/importar</code> para saldos e <code>/exportar</code> para gerar CSV de saldos, financeiro, auditoria ou voz.</p>
+          </article>
+          <article>
+            <span>Auditoria</span>
+            <h3>Validar guild e canais</h3>
+            <p>Use <code>/verificar_guild</code>, <code>/aplicar_verificacao_guild</code>, <code>/auditar_canais</code> e <code>/renomear_canais</code> com cuidado.</p>
+          </article>
+          <article>
+            <span>Relatorios</span>
+            <h3>Fechamento diario</h3>
+            <p>Use <code>/relatorio_diario</code> com arquivo atual, arquivo anterior e CSV de voz para comparar membros e atividade.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="comandos" class="section">
+      <div class="section-head with-tools">
+        <div>
+          <p class="eyebrow">Referencia</p>
+          <h2>Comandos do bot</h2>
+        </div>
+        <label class="search-box">
+          Buscar comando
+          <input id="commandSearch" type="search" placeholder="Ex: saldo, evento, staff">
+        </label>
+      </div>
+      <div id="commandList" class="command-list" aria-live="polite"></div>
+    </section>
+
+    <section id="duvidas" class="section faq">
+      <div class="section-head">
+        <p class="eyebrow">Duvidas comuns</p>
+        <h2>Antes de chamar a staff</h2>
+      </div>
+      <details>
+        <summary>O comando nao apareceu no Discord.</summary>
+        <p>Confira se voce esta no servidor correto e se o bot esta online. Comandos novos podem exigir registro com <code>npm run deploy:commands</code> pela administracao tecnica.</p>
+      </details>
+      <details>
+        <summary>Meu nick esta errado.</summary>
+        <p>Use <code>/registro</code> novamente ou fale com a staff para revisar seu cadastro.</p>
+      </details>
+      <details>
+        <summary>Qual formato de data usar?</summary>
+        <p>Quando o comando pedir data, use <code>AAAA-MM-DD</code>, por exemplo <code>2026-06-12</code>.</p>
+      </details>
+      <details>
+        <summary>Posso importar qualquer CSV?</summary>
+        <p>Nao. Use apenas arquivos esperados pelo fluxo do bot e revise o resumo antes de confirmar importacoes.</p>
+      </details>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="tutorial.js"></script>
+</body>
+</html>

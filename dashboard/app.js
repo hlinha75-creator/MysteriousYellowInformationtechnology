@@ -28,6 +28,23 @@ const channelFilter = document.querySelector('#channelFilter');
 const sectionFilter = document.querySelector('#sectionFilter');
 const exportMerged = document.querySelector('#exportMerged');
 const clearAll = document.querySelector('#clearAll');
+const raidForm = document.querySelector('#raidForm');
+const raidFormStatus = document.querySelector('#raidFormStatus');
+const raidBuildGroups = document.querySelector('#raidBuildGroups');
+const raidBuildPreview = document.querySelector('#raidBuildPreview');
+const raidRoleLabels = {
+  tank: 'Tank',
+  healer: 'Healer',
+  support: 'Suporte',
+  dps: 'DPS'
+};
+const raidRoleLimits = {
+  tank: 3,
+  healer: 3,
+  support: 2,
+  dps: 15
+};
+let raidBuilds = [];
 
 previousFileInput.addEventListener('change', (event) => loadFiles('previous', [...event.target.files]));
 currentFileInput.addEventListener('change', (event) => loadFiles('current', [...event.target.files]));
@@ -36,6 +53,9 @@ channelFilter.addEventListener('change', render);
 sectionFilter.addEventListener('change', render);
 exportMerged.addEventListener('click', exportComparisonCsv);
 clearAll.addEventListener('click', clearComparison);
+raidForm.addEventListener('submit', submitRaidInscricao);
+raidBuildGroups.addEventListener('change', updateRaidBuildPreview);
+raidBuildGroups.addEventListener('focusin', updateRaidBuildPreview);
 
 for (const zone of document.querySelectorAll('.drop-zone')) {
   zone.addEventListener('dragover', (event) => {
@@ -51,6 +71,130 @@ for (const zone of document.querySelectorAll('.drop-zone')) {
 }
 
 render();
+loadRaidBuilds();
+
+async function loadRaidBuilds() {
+  try {
+    const response = await fetch('/api/raid-builds');
+    const result = await response.json();
+    raidBuilds = result.builds || [];
+  } catch (error) {
+    raidBuilds = fallbackRaidBuilds();
+  }
+  renderRaidBuilds();
+}
+
+function renderRaidBuilds() {
+  const groups = Object.keys(raidRoleLabels).map((role) => {
+    const builds = raidBuilds.filter((build) => build.role === role);
+    return `
+      <fieldset class="build-role">
+        <legend>${raidRoleLabels[role]} <span>${builds.length} builds | limite ${raidRoleLimits[role]}</span></legend>
+        ${builds.map((build) => `
+          <label class="build-option">
+            <input type="checkbox" name="armas" value="${escapeHtml(build.weapon)}" data-role="${escapeHtml(build.role)}" data-url="${escapeHtml(build.url)}">
+            <span>${escapeHtml(build.weapon)}</span>
+            <a href="${escapeHtml(build.url)}" target="_blank" rel="noopener">build oficial</a>
+          </label>
+        `).join('')}
+      </fieldset>
+    `;
+  });
+  raidBuildGroups.innerHTML = groups.join('');
+  updateRaidBuildPreview();
+}
+
+async function submitRaidInscricao(event) {
+  event.preventDefault();
+  const formData = new FormData(raidForm);
+  const payload = {
+    nick: cleanName(formData.get('nick')),
+    horarios: formData.getAll('horarios'),
+    armas: formData.getAll('armas'),
+    casaHoLoch: formData.get('casaHoLoch') === 'on',
+    portalMartlock: formData.get('portalMartlock') === 'on'
+  };
+  const errors = validateRaidForm(payload);
+
+  if (errors.length > 0) {
+    setRaidFormStatus(errors.join(' '), 'error');
+    return;
+  }
+
+  setRaidFormStatus('Enviando inscricao...', '');
+  raidForm.querySelector('button[type="submit"]').disabled = true;
+
+  try {
+    const response = await fetch('/api/raid-inscricao', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const result = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      const message = result.errors?.join(' ') || result.error || 'Nao foi possivel enviar a inscricao.';
+      throw new Error(message);
+    }
+
+    raidForm.reset();
+    updateRaidBuildPreview();
+    setRaidFormStatus('Inscricao enviada para o Discord.', 'success');
+  } catch (error) {
+    setRaidFormStatus(error.message, 'error');
+  } finally {
+    raidForm.querySelector('button[type="submit"]').disabled = false;
+  }
+}
+
+function validateRaidForm(payload) {
+  const errors = [];
+  if (!/^[\w .'-]{2,32}$/.test(payload.nick)) errors.push('Informe um nick valido.');
+  if (payload.horarios.length === 0) errors.push('Selecione pelo menos um horario.');
+  if (payload.armas.length === 0) errors.push('Selecione pelo menos uma build oficial.');
+  return errors;
+}
+
+function setRaidFormStatus(message, type) {
+  raidFormStatus.textContent = message;
+  raidFormStatus.className = type ? `form-status ${type}` : 'form-status';
+}
+
+function updateRaidBuildPreview() {
+  const selected = [...raidBuildGroups.querySelectorAll('input[name="armas"]:checked')];
+  if (selected.length === 0) {
+    raidBuildPreview.innerHTML = '<strong>Preview da build</strong><span>Selecione uma arma para ver o link oficial.</span>';
+    return;
+  }
+
+  raidBuildPreview.innerHTML = [
+    '<strong>Builds selecionadas</strong>',
+    ...selected.map((input) => `
+      <a href="${escapeHtml(input.dataset.url)}" target="_blank" rel="noopener">
+        ${escapeHtml(input.value)} <span>${escapeHtml(raidRoleLabels[input.dataset.role] || input.dataset.role)}</span>
+      </a>
+    `)
+  ].join('');
+}
+
+function fallbackRaidBuilds() {
+  return [
+    { role: 'tank', weapon: 'Martelo', url: 'https://albiononlinegrind.com/build/main-tank-predatorz' },
+    { role: 'tank', weapon: 'Incubus', url: 'https://albiononlinegrind.com/build/incubus-mace-tank-group-fame-farm-build' },
+    { role: 'tank', weapon: 'Quebra-Reinos', url: 'https://albiononlinegrind.com/build/ava-realmbreaker' },
+    { role: 'tank', weapon: 'Monge Negro', url: 'https://albiononlinegrind.com/build/ava-black-monk-swap' },
+    { role: 'healer', weapon: 'Queda Santa', url: 'https://albiononlinegrind.com/build/healer-bau-estradas-avalonianas' },
+    { role: 'healer', weapon: 'Avivador', url: 'https://albiononlinegrind.com/build/healer-bau-estradas-avalonianas' },
+    { role: 'healer', weapon: 'Corrompido', url: 'https://albiononlinegrind.com/build/ava-group-priest-swap' },
+    { role: 'healer', weapon: 'Raiz-Ferre', url: 'https://albiononlinegrind.com/build/ava-ironroot' },
+    { role: 'support', weapon: 'Chama Sombra', url: 'https://albiononlinegrind.com/build/chama-sombra-bau-estradas-avalonianas' },
+    { role: 'support', weapon: 'Danação', url: 'https://albiononlinegrind.com/build/damnation-staff-support-zvz-build' },
+    { role: 'dps', weapon: 'Prisma', url: 'https://albiononlinegrind.com/build/prisma-bau-estradas-avalonianas' },
+    { role: 'dps', weapon: 'Águia', url: 'https://albiononlinegrind.com/build/guia-bau-estradas-avaloninanas' },
+    { role: 'dps', weapon: 'Fura-Bruma', url: 'https://albiononlinegrind.com/build/mistpiercer-pve-build-for-gold-chests' },
+    { role: 'dps', weapon: 'Repetidor', url: 'https://albiononlinegrind.com/build/group-dungeon-weeping-pve' }
+  ];
+}
 
 async function loadFiles(period, files) {
   const nextDatasets = emptyDatasets();

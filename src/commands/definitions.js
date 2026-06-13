@@ -17,6 +17,43 @@ const commands = [
     .setDescription('Manutencao de eventos.')
     .addStringOption((option) => option.setName('codigo').setDescription('Codigo do evento, ex: EVT-000001').setRequired(true)),
   new SlashCommandBuilder()
+    .setName('season')
+    .setDescription('Apresenta o resultado da Season 32 da NoTag.'),
+  new SlashCommandBuilder()
+    .setName('template_evento')
+    .setDescription('Cria e usa templates pessoais de eventos.')
+    .addSubcommand((subcommand) => subcommand
+      .setName('criar')
+      .setDescription('Cria ou atualiza um template seu.')
+      .addStringOption((option) => option
+        .setName('nome')
+        .setDescription('Nome curto do template. Ex: dg-grupo')
+        .setRequired(true)))
+    .addSubcommand((subcommand) => subcommand
+      .setName('usar')
+      .setDescription('Cria um evento a partir de um template seu.')
+      .addStringOption((option) => option
+        .setName('nome')
+        .setDescription('Nome do template.')
+        .setRequired(true))
+      .addStringOption((option) => option
+        .setName('horario')
+        .setDescription('Horario UTC-3. Ex: 20:00')
+        .setRequired(true))
+      .addStringOption((option) => option
+        .setName('titulo')
+        .setDescription('Titulo opcional para este evento.')))
+    .addSubcommand((subcommand) => subcommand
+      .setName('listar')
+      .setDescription('Lista seus templates de evento.'))
+    .addSubcommand((subcommand) => subcommand
+      .setName('remover')
+      .setDescription('Remove um template seu.')
+      .addStringOption((option) => option
+        .setName('nome')
+        .setDescription('Nome do template.')
+        .setRequired(true))),
+  new SlashCommandBuilder()
     .setName('registro')
     .setDescription('Abre registro de nome em jogo.'),
   new SlashCommandBuilder()
@@ -75,6 +112,16 @@ const commands = [
     .addAttachmentOption((option) => option
       .setName('voz')
       .setDescription('CSV diario de voz gerado pelo bot.'))
+    .addStringOption((option) => option
+      .setName('data')
+      .setDescription('Data do relatorio no formato AAAA-MM-DD.')),
+  new SlashCommandBuilder()
+    .setName('membros_relatorio')
+    .setDescription('Recebe lista de membros do Albion e compara com o ultimo envio salvo.')
+    .addAttachmentOption((option) => option
+      .setName('arquivo')
+      .setDescription('Arquivo com Character Name, Last Seen e Roles.')
+      .setRequired(true))
     .addStringOption((option) => option
       .setName('data')
       .setDescription('Data do relatorio no formato AAAA-MM-DD.')),

@@ -38,6 +38,12 @@ body {
   margin-bottom: 16px;
 }
 
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 h1,
 h2,
 p {
@@ -61,7 +67,8 @@ label {
 }
 
 .file-button,
-button {
+button,
+.nav-button {
   min-height: 40px;
   border: 1px solid var(--accent);
   border-radius: 6px;
@@ -70,6 +77,12 @@ button {
   padding: 10px 14px;
   font-weight: 700;
   cursor: pointer;
+}
+
+.nav-button {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
 }
 
 .file-button.secondary {
@@ -143,7 +156,8 @@ select {
 }
 
 .metric,
-.panel {
+.panel,
+.raid-panel {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel);
@@ -182,6 +196,11 @@ select {
   overflow: hidden;
 }
 
+.raid-panel {
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
 .panel-head {
   display: flex;
   align-items: center;
@@ -190,6 +209,127 @@ select {
   min-height: 50px;
   border-bottom: 1px solid var(--line);
   padding: 14px 16px;
+}
+
+.raid-form {
+  display: grid;
+  grid-template-columns: 220px 220px minmax(360px, 1fr) 280px;
+  gap: 12px;
+  align-items: start;
+  padding: 16px;
+}
+
+.raid-form select[multiple] {
+  height: 86px;
+  padding: 8px 10px;
+}
+
+.check-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+}
+
+.check-field input {
+  width: 18px;
+  height: 18px;
+}
+
+.build-picker,
+.build-preview {
+  display: grid;
+  gap: 10px;
+}
+
+.build-picker {
+  grid-row: span 3;
+}
+
+.build-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.build-role {
+  min-width: 0;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.build-role legend {
+  padding: 0 4px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.build-role legend span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.build-option {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 0;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.build-option input {
+  width: 16px;
+  height: 16px;
+}
+
+.build-option a,
+.build-preview a {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.build-preview {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f9fafb;
+  padding: 12px;
+}
+
+.build-preview span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.build-preview a {
+  display: grid;
+  gap: 3px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+  text-decoration: none;
+}
+
+.form-status {
+  max-width: 520px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.form-status.success {
+  color: var(--accent);
+}
+
+.form-status.error {
+  color: var(--accent-2);
 }
 
 .table-wrap {
@@ -306,14 +446,21 @@ canvas {
   }
 
   .metrics,
-  .grid {
+  .grid,
+  .raid-form {
     grid-template-columns: 1fr;
   }
 
   input,
   select,
   button,
+  .nav-button,
   .file-button {
     width: 100%;
+  }
+
+  .toolbar-actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 }

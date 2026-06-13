@@ -17,6 +17,303 @@ function balancesAttachment() {
   return new AttachmentBuilder(Buffer.from(csv, 'utf8'), { name: 'saldos-guilda.csv' });
 }
 
+function balancesHtmlAttachment() {
+  const rows = financeRepo.listAllBalances().map((row) => ({
+    discord_id: row.discord_id || '',
+    discord_name: row.discord_name || '',
+    albion_name: row.albion_name || '',
+    balance: Number(row.balance || 0),
+    last_updated: row.last_updated || ''
+  }));
+  return new AttachmentBuilder(Buffer.from(renderBalancesHtml(rows), 'utf8'), { name: 'saldos-guilda.html' });
+}
+
+function renderBalancesHtml(rows) {
+  const generatedAt = new Date().toISOString();
+  const json = JSON.stringify(rows).replace(/</g, '\\u003c');
+  return `<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Saldos da guilda</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --text: #1f2937;
+      --muted: #667085;
+      --line: #d9dee7;
+      --accent: #0f766e;
+      --danger: #b42318;
+      --warn: #b54708;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main {
+      width: min(1180px, calc(100% - 32px));
+      margin: 24px auto 40px;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: flex-end;
+      margin-bottom: 18px;
+    }
+    h1 { margin: 0 0 6px; font-size: 28px; }
+    p { margin: 0; color: var(--muted); }
+    .filters, .metrics, .table-wrap {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    .filters {
+      display: grid;
+      grid-template-columns: minmax(220px, 1.3fr) repeat(4, minmax(140px, 1fr));
+      gap: 12px;
+      padding: 14px;
+      margin-bottom: 14px;
+    }
+    label {
+      display: grid;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+    input, select {
+      width: 100%;
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font: inherit;
+      color: var(--text);
+      background: #fff;
+    }
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1px;
+      overflow: hidden;
+      margin-bottom: 14px;
+    }
+    .metric {
+      padding: 14px;
+      background: #fff;
+    }
+    .metric span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .metric strong {
+      display: block;
+      margin-top: 5px;
+      font-size: 22px;
+    }
+    .table-wrap { overflow: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 860px;
+      background: #fff;
+    }
+    th, td {
+      padding: 11px 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      position: sticky;
+      top: 0;
+      background: #f8fafc;
+      font-size: 12px;
+      color: var(--muted);
+      text-transform: uppercase;
+      z-index: 1;
+    }
+    td.amount, th.amount { text-align: right; }
+    .name { font-weight: 800; }
+    .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+    .positive { color: var(--accent); font-weight: 800; }
+    .negative { color: var(--danger); font-weight: 800; }
+    .zero { color: var(--warn); font-weight: 800; }
+    .empty {
+      padding: 28px;
+      text-align: center;
+      color: var(--muted);
+    }
+    @media (max-width: 820px) {
+      main { width: min(100% - 20px, 1180px); margin-top: 14px; }
+      header { display: block; }
+      .filters { grid-template-columns: 1fr; }
+      .metrics { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Saldos da guilda</h1>
+        <p>Gerado em ${escapeHtml(generatedAt)}. Use os filtros para procurar membros e faixas de saldo.</p>
+      </div>
+      <p id="visibleCount">0 linhas</p>
+    </header>
+
+    <section class="filters">
+      <label>Buscar
+        <input id="search" type="search" placeholder="Nick, Discord ou ID">
+      </label>
+      <label>Status
+        <select id="status">
+          <option value="">Todos</option>
+          <option value="positive">Saldo positivo</option>
+          <option value="zero">Saldo zero</option>
+          <option value="negative">Saldo negativo</option>
+        </select>
+      </label>
+      <label>Saldo minimo
+        <input id="minBalance" type="number" inputmode="numeric" placeholder="Ex: 0">
+      </label>
+      <label>Saldo maximo
+        <input id="maxBalance" type="number" inputmode="numeric" placeholder="Ex: 1000000">
+      </label>
+      <label>Ordenar
+        <select id="sort">
+          <option value="name">Nome A-Z</option>
+          <option value="balance_desc">Maior saldo</option>
+          <option value="balance_asc">Menor saldo</option>
+          <option value="updated_desc">Atualizado recente</option>
+        </select>
+      </label>
+    </section>
+
+    <section class="metrics" id="metrics"></section>
+    <section class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Membro</th>
+            <th>Discord</th>
+            <th>ID</th>
+            <th class="amount">Saldo</th>
+            <th>Atualizado</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </section>
+  </main>
+  <script>
+    const balances = ${json};
+    const search = document.querySelector('#search');
+    const status = document.querySelector('#status');
+    const minBalance = document.querySelector('#minBalance');
+    const maxBalance = document.querySelector('#maxBalance');
+    const sort = document.querySelector('#sort');
+    const rowsEl = document.querySelector('#rows');
+    const metricsEl = document.querySelector('#metrics');
+    const visibleCount = document.querySelector('#visibleCount');
+
+    for (const input of [search, status, minBalance, maxBalance, sort]) {
+      input.addEventListener('input', render);
+      input.addEventListener('change', render);
+    }
+
+    function normalize(value) {
+      return String(value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase();
+    }
+
+    function filteredRows() {
+      const query = normalize(search.value);
+      const min = minBalance.value === '' ? null : Number(minBalance.value);
+      const max = maxBalance.value === '' ? null : Number(maxBalance.value);
+      const statusValue = status.value;
+      return balances
+        .filter((row) => !query || normalize(row.albion_name + ' ' + row.discord_name + ' ' + row.discord_id).includes(query))
+        .filter((row) => statusValue !== 'positive' || row.balance > 0)
+        .filter((row) => statusValue !== 'zero' || row.balance === 0)
+        .filter((row) => statusValue !== 'negative' || row.balance < 0)
+        .filter((row) => min == null || row.balance >= min)
+        .filter((row) => max == null || row.balance <= max)
+        .sort(sorter(sort.value));
+    }
+
+    function sorter(mode) {
+      if (mode === 'balance_desc') return (a, b) => b.balance - a.balance || nameOf(a).localeCompare(nameOf(b));
+      if (mode === 'balance_asc') return (a, b) => a.balance - b.balance || nameOf(a).localeCompare(nameOf(b));
+      if (mode === 'updated_desc') return (a, b) => String(b.last_updated).localeCompare(String(a.last_updated));
+      return (a, b) => nameOf(a).localeCompare(nameOf(b));
+    }
+
+    function nameOf(row) {
+      return row.albion_name || row.discord_name || row.discord_id || '';
+    }
+
+    function render() {
+      const rows = filteredRows();
+      const total = rows.reduce((sum, row) => sum + row.balance, 0);
+      const positive = rows.filter((row) => row.balance > 0).length;
+      const zero = rows.filter((row) => row.balance === 0).length;
+      const negative = rows.filter((row) => row.balance < 0).length;
+      visibleCount.textContent = rows.length + ' linhas';
+      metricsEl.innerHTML = [
+        metric('Total filtrado', silver(total)),
+        metric('Positivos', positive),
+        metric('Zerados', zero),
+        metric('Negativos', negative)
+      ].join('');
+      rowsEl.innerHTML = rows.length ? rows.map(rowHtml).join('') : '<tr><td colspan="5" class="empty">Nenhum saldo encontrado com esses filtros.</td></tr>';
+    }
+
+    function metric(label, value) {
+      return '<div class="metric"><span>' + escapeHtml(label) + '</span><strong>' + escapeHtml(value) + '</strong></div>';
+    }
+
+    function rowHtml(row) {
+      const klass = row.balance > 0 ? 'positive' : row.balance < 0 ? 'negative' : 'zero';
+      return '<tr>' +
+        '<td><div class="name">' + escapeHtml(row.albion_name || '-') + '</div><div class="sub">' + escapeHtml(row.discord_name || '-') + '</div></td>' +
+        '<td>' + escapeHtml(row.discord_name || '-') + '</td>' +
+        '<td>' + escapeHtml(row.discord_id || '-') + '</td>' +
+        '<td class="amount ' + klass + '">' + silver(row.balance) + '</td>' +
+        '<td>' + escapeHtml(row.last_updated || '-') + '</td>' +
+      '</tr>';
+    }
+
+    function silver(value) {
+      return new Intl.NumberFormat('pt-BR').format(Number(value || 0));
+    }
+
+    function escapeHtml(value) {
+      return String(value == null ? '' : value).replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      }[char]));
+    }
+
+    render();
+  </script>
+</body>
+</html>`;
+}
+
 function transactionsAttachment() {
   const rows = financeRepo.listTransactions(5000).map((row) => ({
     id: row.id,
@@ -278,10 +575,21 @@ const applyBalanceImport = transaction(({ preview, actorId }) => {
   return transactions;
 });
 
+function escapeHtml(value) {
+  return String(value == null ? '' : value).replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[char]));
+}
+
 module.exports = {
   applyBalanceImport,
   auditAttachment,
   balancesAttachment,
+  balancesHtmlAttachment,
   saveImportPreview,
   previewBalanceImport,
   takeImportPreview,
