@@ -234,6 +234,11 @@ async function handleButton(interaction) {
   if (scope === 'event') {
     const eventId = Number(id);
     const event = eventsRepo.getEvent(eventId);
+    if (action === 'join_role') {
+      const role = extra;
+      await events.joinEvent(interaction, eventId, role);
+      return interaction.reply({ content: `Voce entrou como ${roleLabel(role)}.`, flags: MessageFlags.Ephemeral });
+    }
     if (action === 'auto_join') {
       let role;
       try {
@@ -724,10 +729,10 @@ function auctionChannelSelect(draftId) {
 
 function roleLabel(role) {
   const labels = {
-    tank: 'Tank',
-    healer: 'Healer',
-    support: 'Suporte',
-    dps: 'DPS'
+    tank: '🔵 Tank',
+    healer: '🟢 Healer',
+    support: '🟡 Suporte',
+    dps: '🔴 DPS'
   };
   return labels[role] || role;
 }

@@ -4,8 +4,7 @@ const {
   ButtonStyle,
   ChannelType,
   EmbedBuilder,
-  PermissionFlagsBits,
-  StringSelectMenuBuilder
+  PermissionFlagsBits
 } = require('discord.js');
 const ids = require('../../config/ids');
 const { transaction } = require('../../database/connection');
@@ -16,12 +15,13 @@ const { calculateNetLoot, calculatePayouts } = require('./lootCalculator');
 const { formatSilver } = require('../../utils/silver');
 const { backupDatabase } = require('../../database/backup');
 
-const roles = [
-  { label: '🛡️ Tank', value: 'tank' },
-  { label: '💚 Healer', value: 'healer' },
-  { label: '🌀 Suporte', value: 'support' },
-  { label: '⚔️ DPS', value: 'dps' }
-];
+const roleConfigs = {
+  tank: { label: '🔵 Tank', slots: 'tank_slots', style: ButtonStyle.Primary },
+  healer: { label: '🟢 Healer', slots: 'healer_slots', style: ButtonStyle.Success },
+  support: { label: '🟡 Suporte', slots: 'support_slots', style: ButtonStyle.Secondary },
+  dps: { label: '🔴 DPS', slots: 'dps_slots', style: ButtonStyle.Danger }
+};
+const eventRoles = Object.keys(roleConfigs);
 
 function eventEmbed(event, participants = []) {
   const count = (role) => participants.filter((p) => p.role === role && !p.is_spectator).length;
@@ -33,35 +33,32 @@ function eventEmbed(event, participants = []) {
 
   if (event.status === 'running') {
     return embed
-      .setDescription(`**${event.description || 'Evento em andamento'}**\nEm andamento | ${event.location || 'Local nao informado'} | ${event.scheduled_time || 'Horario nao informado'}`)
+      .setDescription(`**${event.description || 'Evento em andamento'}**\nCriador: <@${event.creator_id}>\n${statusLabel(event.status)} | ${event.location || 'Local nao informado'} | ${event.scheduled_time || 'Horario nao informado'}`)
       .addFields(
         { name: 'Tempo em andamento', value: elapsed, inline: true },
-        { name: 'Vagas', value: `${roleLabel('tank')} ${count('tank')}/${event.tank_slots} | ${roleLabel('healer')} ${count('healer')}/${event.healer_slots} | ${roleLabel('support')} ${count('support')}/${event.support_slots} | ${roleLabel('dps')} ${count('dps')}/${event.dps_slots}`, inline: false },
+        { name: 'Vagas', value: eventRoles.map((role) => `${roleLabel(role)} ${count(role)}/${event[roleConfigs[role].slots]}`).join(' | '), inline: false },
         { name: 'Participantes', value: runningParticipantsSummary(participants), inline: false },
-        { name: 'Voz', value: event.voice_channel_id ? `<#${event.voice_channel_id}>` : 'Sala em criacao', inline: true },
-        { name: 'Criador', value: `<@${event.creator_id}>`, inline: true }
+        { name: 'Voz', value: event.voice_channel_id ? `<#${event.voice_channel_id}>` : 'Sala em criacao', inline: true }
       );
   }
 
   return embed
-    .setDescription(`**${event.description || 'Sem descricao.'}**`)
+    .setDescription(`**${event.description || 'Sem descricao.'}**\nCriador: <@${event.creator_id}>`)
     .addFields(
-      { name: 'Status', value: event.status, inline: true },
+      { name: 'Status', value: statusLabel(event.status), inline: true },
       { name: 'Local', value: event.location || 'Nao informado', inline: true },
       { name: 'Horario UTC-3', value: event.scheduled_time || 'Nao informado', inline: true },
-      { name: roleLabel('tank'), value: roleOccupants(participants, 'tank', event.tank_slots), inline: false },
-      { name: roleLabel('healer'), value: roleOccupants(participants, 'healer', event.healer_slots), inline: false },
-      { name: roleLabel('support'), value: roleOccupants(participants, 'support', event.support_slots), inline: false },
-      { name: roleLabel('dps'), value: roleOccupants(participants, 'dps', event.dps_slots), inline: false },
-      { name: 'Criador', value: `<@${event.creator_id}>`, inline: true }
+      ...eventRoles.map((role) => ({
+        name: `${roleLabel(role)} ${count(role)}/${event[roleConfigs[role].slots]}`,
+        value: roleOccupants(participants, role),
+        inline: true
+      }))
     );
 }
 
-function roleOccupants(participants, role, slots) {
+function roleOccupants(participants, role) {
   const users = participants.filter((p) => p.role === role && !p.is_spectator).map((p) => `<@${p.discord_id}>`);
-  const header = `${users.length}/${slots}`;
-  const value = users.length > 0 ? users.join(', ') : 'Vazio';
-  const text = `${header} - ${value}`;
+  const text = users.length > 0 ? users.join(', ') : 'Vazio';
   return text.length > 1024 ? `${text.slice(0, 1018)}...` : text;
 }
 
@@ -97,10 +94,11 @@ function eventComponents(event) {
   const rows = [];
   if (event.status === 'created') {
     rows.push(new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId(`event:join:${event.id}`)
-        .setPlaceholder('Participar como...')
-        .addOptions(roles)
+      eventRoles.map((role) => new ButtonBuilder()
+        .setCustomId(`event:join_role:${event.id}:${role}`)
+        .setLabel(roleLabel(role).replace(/^[^\s]+ /, ''))
+        .setEmoji(roleLabel(role).split(' ')[0])
+        .setStyle(roleConfigs[role].style))
     ));
   }
 
@@ -252,7 +250,7 @@ async function startEvent(interaction, eventId) {
   if (event.status !== 'created') throw new Error('Evento nao pode ser iniciado.');
 
   const voice = await interaction.guild.channels.create({
-    name: event.event_code,
+    name: eventVoiceChannelName(event),
     type: ChannelType.GuildVoice,
     parent: ids.categories.activeEvents,
     reason: `Evento ${event.event_code} iniciado`
@@ -672,13 +670,28 @@ function dedupeOverwrites(overwrites) {
 
 function roleLabel(role) {
   const labels = {
-    tank: '🛡️ Tank',
-    healer: '💚 Healer',
-    support: '🌀 Suporte',
-    dps: '⚔️ DPS',
-    spectator: 'Espectador'
+    ...Object.fromEntries(Object.entries(roleConfigs).map(([key, config]) => [key, config.label])),
+    spectator: '👁️ Espectador'
   };
   return labels[role] || role;
+}
+
+function statusLabel(status) {
+  const labels = {
+    created: '🟦 Aberto',
+    running: '🟢 Em andamento',
+    review: '🟡 Em revisao',
+    pending_payment: '🟠 Pendente financeiro',
+    approved: '✅ Finalizado',
+    cancelled: '🔴 Cancelado'
+  };
+  return labels[status] || status;
+}
+
+function eventVoiceChannelName(event) {
+  const title = String(event.title || '').replace(/\s+/g, ' ').trim();
+  if (!title) return event.event_code;
+  return title.slice(0, 90);
 }
 
 async function closeAllOpenSessions(eventId, leftAt) {

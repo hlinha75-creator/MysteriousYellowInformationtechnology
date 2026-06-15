@@ -617,6 +617,15 @@ Dashboard/API:
 - nao iniciar porta 3000 em producao enquanto a prioridade for manter o bot simples;
 - arquivos antigos de dashboard podem permanecer no repositorio, mas nao devem rodar automaticamente.
 
+Interface de eventos:
+- evento aberto deve ser compacto e mais horizontal;
+- criador aparece no topo da descricao;
+- status usa simbolo visual;
+- vagas usam cores por funcao: azul Tank, verde Healer, amarelo Suporte, vermelho DPS;
+- inscricao em evento aberto usa botoes por funcao em vez de menu select;
+- Discord nao tem botao amarelo nativo, entao Suporte usa emoji amarelo em botao cinza;
+- ao iniciar evento, a sala de voz usa o titulo do evento como nome.
+
 Antes de terminar uma alteracao:
 - rodar `node --check` nos arquivos JS alterados;
 - se mexer em banco, garantir migracao segura;
