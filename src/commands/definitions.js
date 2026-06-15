@@ -59,8 +59,8 @@ const commands = [
     .setDescription('Importa CSV de saldos. Use o painel/fluxo com confirmacao.')
     .addAttachmentOption((option) => option.setName('arquivo').setDescription('CSV de saldos').setRequired(true)),
   new SlashCommandBuilder()
-    .setName('verificar_guilda')
-    .setDescription('Verifica pedidos pendentes de registro usando CSV/TSV da guild Albion.')
+    .setName('aprovar_pendentes')
+    .setDescription('Aprova pedidos pendentes de registro usando CSV/TSV da guild Albion.')
     .addAttachmentOption((option) => option
       .setName('arquivo')
       .setDescription('CSV/TSV com os nicks oficiais da guild no Albion.')
@@ -82,8 +82,8 @@ const commands = [
       .setName('data')
       .setDescription('Data do relatorio no formato AAAA-MM-DD.')),
   new SlashCommandBuilder()
-    .setName('verificar_guild')
-    .setDescription('Verifica os membros do Discord contra a guild do Albion.')
+    .setName('auditar_guilda')
+    .setDescription('Audita membros do Discord contra a guild do Albion.')
     .addAttachmentOption((option) => option
       .setName('arquivo')
       .setDescription('Arquivo exportado do jogo com a coluna Character Name.')

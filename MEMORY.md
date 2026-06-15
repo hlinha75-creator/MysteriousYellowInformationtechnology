@@ -154,7 +154,7 @@ Quando vira Membro:
 - remover Convidado.
 
 Verificacao em massa de pedidos pendentes:
-- comando `/verificar_guilda arquivo:<csv/tsv>`;
+- comando `/aprovar_pendentes arquivo:<csv/tsv>`;
 - botao de ajuda no Painel ADM: `Verificar pedidos pendentes`;
 - permitido para Staff, ADM, Recrutador e owner;
 - arquivo pode ser CSV ou TSV;
@@ -532,6 +532,14 @@ Saque maior que o saldo atual:
 - bot deve avisar a staff que o saque deixara saldo negativo;
 - a decisao de aprovar/pagar/recusar continua com a staff.
 
+O Painel ADM tambem deve mostrar o painel Arquivar:
+- exportar saldos;
+- lista HTML de saldos;
+- exportar logs financeiros;
+- exportar auditoria;
+- importar CSV;
+- Discord x Albion HTML.
+
 ## CSV e Backups
 
 Exportar CSV:
@@ -588,6 +596,11 @@ Preferir codigo dividido por modulos:
 - setup.
 
 Nao criar dashboard web agora.
+
+Dashboard/API:
+- servidor HTTP do dashboard fica desligado no `src/index.js` para economizar RAM no Discloud;
+- nao iniciar porta 3000 em producao enquanto a prioridade for manter o bot simples;
+- arquivos antigos de dashboard podem permanecer no repositorio, mas nao devem rodar automaticamente.
 
 Antes de terminar uma alteracao:
 - rodar `node --check` nos arquivos JS alterados;

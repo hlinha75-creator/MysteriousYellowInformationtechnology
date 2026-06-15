@@ -472,7 +472,7 @@ function actionAttachment(rows, name) {
 async function membersHtmlAttachment(guild) {
   const verification = getLatestVerification(guild.id);
   if (!verification) {
-    throw new Error('Nenhuma verificacao encontrada. Rode /verificar_guild arquivo:<anexo> primeiro.');
+    throw new Error('Nenhuma verificacao encontrada. Rode /auditar_guilda arquivo:<anexo> primeiro.');
   }
 
   const members = await guild.members.fetch();

@@ -493,9 +493,9 @@ async function handleButton(interaction) {
     if (!can(interaction.member, 'approveRegistration')) {
       return interaction.reply({ content: 'Voce nao tem permissao para verificar pedidos pendentes.', flags: MessageFlags.Ephemeral });
     }
-    return interaction.reply({
-      content: [
-        'Use o comando `/verificar_guilda arquivo:<csv/tsv>` e anexe a lista oficial de membros da guild no Albion.',
+      return interaction.reply({
+        content: [
+        'Use o comando `/aprovar_pendentes arquivo:<csv/tsv>` e anexe a lista oficial de membros da guild no Albion.',
         'O bot vai mostrar uma previa antes de dar cargos.',
         'Encontrados viram Membro; nao encontrados continuam Convidado/pendente.'
       ].join('\n'),

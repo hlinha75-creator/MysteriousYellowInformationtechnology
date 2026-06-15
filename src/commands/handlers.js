@@ -173,7 +173,7 @@ async function handleCommand(interaction) {
     });
   }
 
-  if (interaction.commandName === 'verificar_guilda') {
+  if (interaction.commandName === 'aprovar_pendentes') {
     if (!can(interaction.member, 'approveRegistration')) {
       return interaction.reply({ content: 'Voce nao tem permissao para verificar pedidos pendentes.', flags: MessageFlags.Ephemeral });
     }
@@ -215,7 +215,7 @@ async function handleCommand(interaction) {
     return interaction.editReply({ content: result.content, files: result.files });
   }
 
-  if (interaction.commandName === 'verificar_guild') {
+  if (interaction.commandName === 'auditar_guilda') {
     if (!can(interaction.member, 'approveRegistration')) {
       return interaction.reply({ content: 'Voce nao tem permissao para verificar a guild inteira.', flags: MessageFlags.Ephemeral });
     }

@@ -8,6 +8,24 @@ const ids = require('../../config/ids');
 const { getDatabase } = require('../../database/connection');
 const memberList = require('../members/memberList.service');
 
+const archiveEmbed = new EmbedBuilder()
+  .setTitle('Arquivar')
+  .setDescription('Exportacao e importacao manual de dados.')
+  .setColor(0x805ad5);
+
+const archiveComponents = [
+  new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('csv:export_balances').setLabel('Exportar saldos').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('csv:export_balances_html').setLabel('Lista HTML de saldos').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('csv:export_transactions').setLabel('Exportar logs financeiros').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('csv:export_audit').setLabel('Exportar auditoria').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('csv:import_help').setLabel('Importar CSV').setStyle(ButtonStyle.Primary)
+  ),
+  new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('guild:export_members_html').setLabel('Discord x Albion HTML').setStyle(ButtonStyle.Secondary)
+  )
+];
+
 const panels = [
   {
     type: 'create_event',
@@ -44,12 +62,16 @@ const panels = [
   {
     type: 'admin',
     channelId: ids.channels.adminPanel,
-    embed: new EmbedBuilder().setTitle('Painel ADM').setDescription('Acoes administrativas de saldo.').setColor(0xdd6b20),
+    embeds: [
+      new EmbedBuilder().setTitle('Painel ADM').setDescription('Acoes administrativas de saldo.').setColor(0xdd6b20),
+      archiveEmbed
+    ],
     components: [
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('admin:remove_balance').setLabel('Retirar saldo').setStyle(ButtonStyle.Danger),
         new ButtonBuilder().setCustomId('admin:verify_pending_registrations').setLabel('Verificar pedidos pendentes').setStyle(ButtonStyle.Secondary)
-      )
+      ),
+      ...archiveComponents
     ]
   },
   {
@@ -70,19 +92,8 @@ const panels = [
   {
     type: 'archive',
     channelId: ids.channels.archive,
-    embed: new EmbedBuilder().setTitle('Arquivar').setDescription('Exportacao e importacao manual de dados.').setColor(0x805ad5),
-    components: [
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('csv:export_balances').setLabel('Exportar saldos').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('csv:export_balances_html').setLabel('Lista HTML de saldos').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('csv:export_transactions').setLabel('Exportar logs financeiros').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('csv:export_audit').setLabel('Exportar auditoria').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('csv:import_help').setLabel('Importar CSV').setStyle(ButtonStyle.Primary)
-      ),
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('guild:export_members_html').setLabel('Discord x Albion HTML').setStyle(ButtonStyle.Secondary)
-      )
-    ]
+    embed: archiveEmbed,
+    components: archiveComponents
   }
 ];
 
@@ -92,7 +103,9 @@ async function upsertSetupPanels(client) {
     const channel = await client.channels.fetch(panel.channelId);
     const previous = db.prepare('SELECT * FROM setup_messages WHERE channel_id = ?').get(panel.channelId);
     let message = previous ? await channel.messages.fetch(previous.message_id).catch(() => null) : null;
-    const payload = panel.dynamic ? await panel.dynamic(channel.guild) : { embeds: [panel.embed], components: panel.components };
+    const payload = panel.dynamic
+      ? await panel.dynamic(channel.guild)
+      : { embeds: panel.embeds || [panel.embed], components: panel.components };
     if (message) {
       await message.edit(payload);
     } else {

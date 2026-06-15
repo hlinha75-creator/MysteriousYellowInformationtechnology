@@ -12,10 +12,8 @@ const events = require('./modules/events/events.service');
 const auctions = require('./modules/auctions/auctions.service');
 const guildVerification = require('./modules/albion/guildVerification.service');
 const faq = require('./modules/faq/faq.service');
-const analytics = require('./modules/analytics/analytics.service');
 const balanceBackup = require('./modules/csv/balanceBackup.service');
 const { handleInteraction } = require('./interactions/router');
-const { startDashboardServer } = require('./server/dashboard.server');
 
 migrate();
 backupDatabase('startup');
@@ -28,7 +26,6 @@ const closedVoiceSessions = voice.closeOpenVoiceSessionsOnStartup();
 if (closedVoiceSessions > 0) {
   console.log(`${closedVoiceSessions} sessao(oes) de voz fechada(s) apos reinicio do bot.`);
 }
-analytics.generateReportHtml().catch((error) => console.error('Falha ao gerar relatorio inicial:', error));
 
 const client = new Client({
   intents: [
@@ -41,8 +38,6 @@ const client = new Client({
   ],
   partials: [Partials.Channel]
 });
-
-startDashboardServer();
 
 client.once('clientReady', () => {
   console.log(`Notag bot online como ${client.user.tag}`);
@@ -61,9 +56,6 @@ client.once('clientReady', () => {
     events.cleanupExpiredReviewChannels(client).catch((error) => console.error('Falha ao limpar canais de revisao:', error));
   }, 60 * 60 * 1000);
   setInterval(() => {
-    analytics.generateReportHtml().catch((error) => console.error('Falha ao atualizar relatorio de uso:', error));
-  }, 5 * 60 * 1000);
-  setInterval(() => {
     balanceBackup.postDailyBackupIfNeeded(client).catch((error) => console.error('Falha ao postar backup diario de saldos:', error));
   }, 60 * 60 * 1000);
 });
@@ -76,7 +68,6 @@ client.on('guildMemberAdd', registration.handleGuildMemberAdd);
 client.on('voiceStateUpdate', voice.handleVoiceStateUpdate);
 client.on('interactionCreate', handleInteraction);
 client.on('messageCreate', (message) => {
-  analytics.trackMessage(message);
   guildVerification.handleDirectNickReply(message).catch((error) => console.error('Falha ao tratar resposta de nick por DM:', error));
   faq.handleMessage(message).catch((error) => console.error('Falha ao tratar FAQ/tutorial:', error));
 });

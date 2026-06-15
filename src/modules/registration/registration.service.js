@@ -124,7 +124,7 @@ function previewPendingGuildRegistrations(csvText, actorId) {
 async function applyPendingGuildRegistrationPreview({ guild, previewId, actorId }) {
   const preview = guildVerificationPreviews.get(previewId);
   guildVerificationPreviews.delete(previewId);
-  if (!preview) throw new Error('Previa expirada ou ja usada. Rode /verificar_guilda novamente.');
+  if (!preview) throw new Error('Previa expirada ou ja usada. Rode /aprovar_pendentes novamente.');
   if (preview.actorId !== actorId) throw new Error('Somente quem criou a previa pode confirmar.');
 
   const results = [];
@@ -182,7 +182,7 @@ function pendingGuildPreviewText(preview) {
 
   return [
     'Previa da verificacao de pedidos pendentes:',
-    `Nomes no arquivo: ${preview.guildNamesCount}`,
+    `Entradas lidas no arquivo: ${preview.guildNamesCount}`,
     `Pedidos pendentes: ${preview.pendingCount}`,
     `Serao aprovados como Membro: ${preview.approved.length}`,
     `Continuam Convidado/pendente: ${preview.keptGuest.length}`,
@@ -226,7 +226,7 @@ function pendingGuildApplyAttachment(results) {
 }
 
 function parseGuildNames(text) {
-  const raw = String(text || '').trim();
+  const raw = String(text || '').replace(/^\uFEFF/, '').trim();
   if (!raw) return [];
 
   const delimiter = raw.split(/\r?\n/, 1)[0].includes('\t') ? '\t' : ',';
@@ -234,18 +234,16 @@ function parseGuildNames(text) {
   const firstCells = firstLine.split(delimiter).map((cell) => normalizeHeader(cell));
   const hasKnownHeader = firstCells.some((cell) => guildNameHeaders().includes(cell));
   if (!hasKnownHeader) {
-    const lineNames = raw
-      .split(/\r?\n/)
-      .map((line) => line.split(delimiter)[0])
-      .map((name) => String(name || '').trim())
-      .filter(Boolean);
-    return uniqueNames(lineNames);
+    return uniqueNames(allCellsFromLines(raw, delimiter));
   }
 
   const rows = delimiter === ','
     ? parseCsv(raw)
     : parseDelimited(raw, '\t');
-  return uniqueNames(namesFromRows(rows));
+  return uniqueNames([
+    ...namesFromRows(rows),
+    ...allValuesFromRows(rows)
+  ]);
 }
 
 function namesFromRows(rows) {
@@ -262,7 +260,22 @@ function namesFromRows(rows) {
 }
 
 function guildNameHeaders() {
-  return ['character name', 'character_name', 'name', 'nick', 'player', 'jogador', 'albion_name', 'albion'];
+  return ['character name', 'character_name', 'name', 'nome', 'nick', 'player', 'jogador', 'albion_name', 'albion'];
+}
+
+function allValuesFromRows(rows) {
+  return rows
+    .flatMap((row) => Object.values(row))
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+}
+
+function allCellsFromLines(text, delimiter) {
+  return String(text || '')
+    .split(/\r?\n/)
+    .flatMap((line) => line.split(delimiter))
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
 }
 
 function parseDelimited(text, delimiter) {
@@ -288,7 +301,11 @@ function uniqueNames(names) {
 }
 
 function normalizeName(name) {
-  return String(name || '').trim().toLowerCase();
+  return String(name || '')
+    .replace(/^\uFEFF/, '')
+    .replace(/^"|"$/g, '')
+    .trim()
+    .toLowerCase();
 }
 
 function normalizeHeader(name) {
