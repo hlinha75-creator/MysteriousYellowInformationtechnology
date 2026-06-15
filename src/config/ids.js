@@ -24,6 +24,7 @@ module.exports = {
     archive: '1499357332231163924',
     register: '1492707388552253525',
     registrationRequests: '1482334949540626462',
+    memberList: '1482334951637516289',
     waitingVoice: '1492707400485179664',
     notagChat: '1481363760110243910'
   },

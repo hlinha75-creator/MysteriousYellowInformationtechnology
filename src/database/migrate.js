@@ -491,6 +491,28 @@ const migrations = [
         );
       `);
     }
+  },
+  {
+    version: 16,
+    name: 'balance_csv_backups',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS balance_csv_backups (
+          backup_key TEXT PRIMARY KEY,
+          trigger_type TEXT NOT NULL,
+          reference_id TEXT,
+          status TEXT NOT NULL DEFAULT 'pending',
+          message_id TEXT,
+          channel_id TEXT,
+          error_message TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          sent_at TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_balance_csv_backups_sent_at
+          ON balance_csv_backups (sent_at);
+      `);
+    }
   }
 ];
 

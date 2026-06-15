@@ -59,6 +59,13 @@ const commands = [
     .setDescription('Importa CSV de saldos. Use o painel/fluxo com confirmacao.')
     .addAttachmentOption((option) => option.setName('arquivo').setDescription('CSV de saldos').setRequired(true)),
   new SlashCommandBuilder()
+    .setName('verificar_guilda')
+    .setDescription('Verifica pedidos pendentes de registro usando CSV/TSV da guild Albion.')
+    .addAttachmentOption((option) => option
+      .setName('arquivo')
+      .setDescription('CSV/TSV com os nicks oficiais da guild no Albion.')
+      .setRequired(true)),
+  new SlashCommandBuilder()
     .setName('relatorio_diario')
     .setDescription('Gera relatorio diario comparando membros Albion e voz Discord.')
     .addAttachmentOption((option) => option

@@ -13,6 +13,7 @@ const auctions = require('./modules/auctions/auctions.service');
 const guildVerification = require('./modules/albion/guildVerification.service');
 const faq = require('./modules/faq/faq.service');
 const analytics = require('./modules/analytics/analytics.service');
+const balanceBackup = require('./modules/csv/balanceBackup.service');
 const { handleInteraction } = require('./interactions/router');
 const { startDashboardServer } = require('./server/dashboard.server');
 
@@ -46,6 +47,7 @@ startDashboardServer();
 client.once('clientReady', () => {
   console.log(`Notag bot online como ${client.user.tag}`);
   events.cleanupExpiredReviewChannels(client).catch((error) => console.error('Falha ao limpar canais de revisao:', error));
+  balanceBackup.postDailyBackupIfNeeded(client).catch((error) => console.error('Falha ao postar backup diario de saldos:', error));
   setInterval(() => {
     events.refreshRunningEventMessages(client).catch((error) => console.error('Falha ao atualizar eventos em andamento:', error));
   }, 60000);
@@ -61,6 +63,9 @@ client.once('clientReady', () => {
   setInterval(() => {
     analytics.generateReportHtml().catch((error) => console.error('Falha ao atualizar relatorio de uso:', error));
   }, 5 * 60 * 1000);
+  setInterval(() => {
+    balanceBackup.postDailyBackupIfNeeded(client).catch((error) => console.error('Falha ao postar backup diario de saldos:', error));
+  }, 60 * 60 * 1000);
 });
 
 client.on('error', (error) => {

@@ -76,6 +76,7 @@ O dono e o owner do servidor Discord.
 - Arquivar/CSV: `1499357332231163924`
 - Registrar nick: `1492707388552253525`
 - Solicitacoes de registro: `1482334949540626462`
+- Lista de membros: `1482334951637516289`
 - Voz aguardando evento: `1492707400485179664`
 
 Categorias:
@@ -151,6 +152,31 @@ Staff/ADM/Recrutador podem resolver registro:
 
 Quando vira Membro:
 - remover Convidado.
+
+Verificacao em massa de pedidos pendentes:
+- comando `/verificar_guilda arquivo:<csv/tsv>`;
+- botao de ajuda no Painel ADM: `Verificar pedidos pendentes`;
+- permitido para Staff, ADM, Recrutador e owner;
+- arquivo pode ser CSV ou TSV;
+- aceitar coluna `Character Name`, `Name`, `Nick`, `Player`, `Jogador`, `albion_name` ou primeira coluna quando for lista simples;
+- comparar ignorando maiusculas/minusculas e espacos no comeco/fim;
+- mostrar previa antes de aplicar;
+- encontrados na lista oficial da guild viram Membro;
+- remover Convidado quando virar Membro;
+- nao encontrados continuam Convidado/pendente;
+- gerar CSV de resultado e auditoria.
+
+Lista de membros:
+- canal `1482334951637516289`;
+- painel fixo criado/atualizado pelo `/setup`;
+- mostra resumo de total, membros, convidados, pendentes, sem tag, equipe, registrados e novos 7 dias;
+- botoes para atualizar, exportar CSV e ver filtros curtos;
+- detalhes e CSV sao respostas efemeras para equipe autorizada.
+
+Privacidade de mensagens por cargo:
+- mensagem normal em canal de texto e visivel para todos que podem ver o canal;
+- para so uma tag enxergar, usar canal/categoria com permissao desse cargo, thread privada ou resposta efemera de botao/comando;
+- mencionar cargo nao esconde a mensagem dos outros.
 
 ## Eventos
 
@@ -512,6 +538,14 @@ Exportar CSV:
 - saldos;
 - logs financeiros;
 - auditoria.
+
+Backup automatico de saldos:
+- postar CSV no canal Arquivar/CSV `1499357332231163924`;
+- postar depois que um evento e aprovado no financeiro e os saldos sao depositados;
+- postar tambem a cada 24 horas;
+- usar trava no banco para nao duplicar backup do mesmo evento ou do mesmo ciclo diario;
+- CSV deve conter discord_id, discord_name, albion_name, balance e last_updated;
+- backup automatico nao altera saldo.
 
 Importar CSV:
 - deve mostrar previa antes;

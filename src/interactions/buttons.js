@@ -7,11 +7,13 @@ const financeRepo = require('../modules/finance/finance.repository');
 const finance = require('../modules/finance/finance.service');
 const audit = require('../modules/audit/audit.repository');
 const csv = require('../modules/csv/csv.service');
+const balanceBackup = require('../modules/csv/balanceBackup.service');
 const albionVerification = require('../modules/albion/guildVerification.service');
 const deposit = require('../modules/deposit/deposit.service');
 const polls = require('../modules/polls/polls.service');
 const auctions = require('../modules/auctions/auctions.service');
 const auctionsRepo = require('../modules/auctions/auctions.repository');
+const memberList = require('../modules/members/memberList.service');
 const { formatSilver } = require('../utils/silver');
 const registration = require('../modules/registration/registration.service');
 const { safeSend } = require('../utils/discord');
@@ -142,6 +144,33 @@ async function handleButton(interaction) {
     }
   }
 
+  if (scope === 'member_list') {
+    if (!can(interaction.member, 'approveRegistration') && !can(interaction.member, 'importCsv')) {
+      return interaction.reply({ content: 'Sem permissao para usar a lista de membros.', flags: MessageFlags.Ephemeral });
+    }
+
+    if (action === 'refresh') {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      await memberList.refreshPanel(interaction);
+      return interaction.editReply({ content: 'Lista de membros atualizada.' });
+    }
+
+    if (action === 'csv') {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      return interaction.editReply({
+        content: 'CSV da lista de membros gerado.',
+        files: [await memberList.csvAttachment(interaction.guild)]
+      });
+    }
+
+    if (action === 'view') {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      return interaction.editReply({
+        embeds: [await memberList.filteredEmbed(interaction.guild, id)]
+      });
+    }
+  }
+
   if (scope === 'event') {
     const eventId = Number(id);
     const event = eventsRepo.getEvent(eventId);
@@ -254,6 +283,7 @@ async function handleButton(interaction) {
         components: []
       }).catch(() => {});
       await events.scheduleReviewChannelDeletion(interaction.client, eventId, 14);
+      await balanceBackup.postEventBalanceBackup(interaction.client, eventId);
       return interaction.editReply({ content: 'Pagamento aprovado e saldos depositados.' });
     }
     if (action === 'cancel') {
@@ -457,6 +487,48 @@ async function handleButton(interaction) {
       components: [adminRemoveBalanceUserSelect()],
       flags: MessageFlags.Ephemeral
     });
+  }
+
+  if (interaction.customId === 'admin:verify_pending_registrations') {
+    if (!can(interaction.member, 'approveRegistration')) {
+      return interaction.reply({ content: 'Voce nao tem permissao para verificar pedidos pendentes.', flags: MessageFlags.Ephemeral });
+    }
+    return interaction.reply({
+      content: [
+        'Use o comando `/verificar_guilda arquivo:<csv/tsv>` e anexe a lista oficial de membros da guild no Albion.',
+        'O bot vai mostrar uma previa antes de dar cargos.',
+        'Encontrados viram Membro; nao encontrados continuam Convidado/pendente.'
+      ].join('\n'),
+      flags: MessageFlags.Ephemeral
+    });
+  }
+
+  if (scope === 'registration_bulk') {
+    if (!can(interaction.member, 'approveRegistration')) {
+      return interaction.reply({ content: 'Voce nao tem permissao para aplicar verificacao de registros.', flags: MessageFlags.Ephemeral });
+    }
+
+    if (action === 'confirm') {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      const results = await registration.applyPendingGuildRegistrationPreview({
+        guild: interaction.guild,
+        previewId: id,
+        actorId: interaction.user.id
+      });
+      const approved = results.filter((row) => row.result === 'aprovado como membro').length;
+      const kept = results.filter((row) => row.result === 'mantido convidado').length;
+      await interaction.message.edit({ components: [] }).catch(() => {});
+      return interaction.editReply({
+        content: `Verificacao aplicada. Aprovados como Membro: ${approved}. Mantidos como Convidado/pendente: ${kept}.`,
+        files: [registration.pendingGuildApplyAttachment(results)]
+      });
+    }
+
+    if (action === 'cancel') {
+      registration.takePendingGuildRegistrationPreview(id, interaction.user.id);
+      await interaction.message.edit({ components: [] }).catch(() => {});
+      return interaction.reply({ content: 'Verificacao cancelada. Nenhum cargo foi alterado.', flags: MessageFlags.Ephemeral });
+    }
   }
 
   if (scope === 'registration') {

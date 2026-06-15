@@ -33,6 +33,18 @@ function getRegistration(id) {
   return getDatabase().prepare('SELECT * FROM registrations WHERE id = ?').get(id);
 }
 
+function listPendingRegistrations() {
+  return getDatabase()
+    .prepare(`
+      SELECT r.*, u.discord_name
+      FROM registrations r
+      LEFT JOIN users u ON u.discord_id = r.discord_id
+      WHERE r.status = 'pending'
+      ORDER BY r.created_at ASC, r.id ASC
+    `)
+    .all();
+}
+
 function updateRegistration({ id, status, reviewedBy, note }) {
   return getDatabase()
     .prepare(`
@@ -47,6 +59,7 @@ module.exports = {
   createRegistration,
   getRegistration,
   getUser,
+  listPendingRegistrations,
   updateRegistration,
   upsertUser
 };

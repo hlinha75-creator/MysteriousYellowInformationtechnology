@@ -6,6 +6,7 @@ const {
 } = require('discord.js');
 const ids = require('../../config/ids');
 const { getDatabase } = require('../../database/connection');
+const memberList = require('../members/memberList.service');
 
 const panels = [
   {
@@ -46,7 +47,8 @@ const panels = [
     embed: new EmbedBuilder().setTitle('Painel ADM').setDescription('Acoes administrativas de saldo.').setColor(0xdd6b20),
     components: [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('admin:remove_balance').setLabel('Retirar saldo').setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId('admin:remove_balance').setLabel('Retirar saldo').setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId('admin:verify_pending_registrations').setLabel('Verificar pedidos pendentes').setStyle(ButtonStyle.Secondary)
       )
     ]
   },
@@ -59,6 +61,11 @@ const panels = [
         new ButtonBuilder().setCustomId('deposit:create').setLabel('Criar deposito').setStyle(ButtonStyle.Primary)
       )
     ]
+  },
+  {
+    type: 'member_list',
+    channelId: ids.channels.memberList,
+    dynamic: memberList.panelPayload
   },
   {
     type: 'archive',
@@ -85,10 +92,11 @@ async function upsertSetupPanels(client) {
     const channel = await client.channels.fetch(panel.channelId);
     const previous = db.prepare('SELECT * FROM setup_messages WHERE channel_id = ?').get(panel.channelId);
     let message = previous ? await channel.messages.fetch(previous.message_id).catch(() => null) : null;
+    const payload = panel.dynamic ? await panel.dynamic(channel.guild) : { embeds: [panel.embed], components: panel.components };
     if (message) {
-      await message.edit({ embeds: [panel.embed], components: panel.components });
+      await message.edit(payload);
     } else {
-      message = await channel.send({ embeds: [panel.embed], components: panel.components });
+      message = await channel.send(payload);
     }
     db.prepare(`
       INSERT INTO setup_messages (channel_id, message_id, panel_type, updated_at)

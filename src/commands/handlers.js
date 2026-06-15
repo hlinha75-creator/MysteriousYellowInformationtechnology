@@ -22,6 +22,7 @@ const polls = require('../modules/polls/polls.service');
 const auctions = require('../modules/auctions/auctions.service');
 const objectives = require('../modules/objectives/objectives.service');
 const dailyReport = require('../modules/reports/dailyReport.service');
+const registration = require('../modules/registration/registration.service');
 
 function input(id, label, style = TextInputStyle.Short, required = true) {
   return new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setRequired(required);
@@ -167,6 +168,33 @@ async function handleCommand(interaction) {
         new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId(`csv:confirm_import:${sessionId}`).setLabel('Confirmar importacao').setStyle(ButtonStyle.Danger),
           new ButtonBuilder().setCustomId(`csv:cancel_import:${sessionId}`).setLabel('Cancelar').setStyle(ButtonStyle.Secondary)
+        )
+      ]
+    });
+  }
+
+  if (interaction.commandName === 'verificar_guilda') {
+    if (!can(interaction.member, 'approveRegistration')) {
+      return interaction.reply({ content: 'Voce nao tem permissao para verificar pedidos pendentes.', flags: MessageFlags.Ephemeral });
+    }
+
+    const attachment = interaction.options.getAttachment('arquivo');
+    if (!attachment?.url) {
+      return interaction.reply({ content: 'Anexe um CSV/TSV valido.', flags: MessageFlags.Ephemeral });
+    }
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const response = await fetch(attachment.url);
+    if (!response.ok) throw new Error('Nao consegui baixar o arquivo anexado.');
+    const text = await response.text();
+    const { id, preview } = registration.previewPendingGuildRegistrations(text, interaction.user.id);
+    return interaction.editReply({
+      content: registration.pendingGuildPreviewText(preview),
+      files: [registration.pendingGuildPreviewAttachment(preview)],
+      components: [
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId(`registration_bulk:confirm:${id}`).setLabel('Confirmar cargos').setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId(`registration_bulk:cancel:${id}`).setLabel('Cancelar').setStyle(ButtonStyle.Secondary)
         )
       ]
     });
