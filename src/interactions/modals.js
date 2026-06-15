@@ -11,6 +11,7 @@ const financeRepo = require('../modules/finance/finance.repository');
 const deposit = require('../modules/deposit/deposit.service');
 const polls = require('../modules/polls/polls.service');
 const auctions = require('../modules/auctions/auctions.service');
+const memberPanel = require('../modules/members/memberPanel.service');
 
 function intField(fields, name) {
   const value = Number.parseInt(fields.getTextInputValue(name), 10);
@@ -19,6 +20,47 @@ function intField(fields, name) {
 }
 
 async function handleModal(interaction) {
+  if (interaction.customId === 'member_panel:ask_staff_modal') {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const text = interaction.fields.getTextInputValue('text').trim();
+    await memberPanel.sendMemberQuestion({ client: interaction.client, user: interaction.user, text });
+    return interaction.editReply({ content: 'Sua pergunta foi enviada para a staff.' });
+  }
+
+  if (interaction.customId === 'member_panel:report_modal') {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const text = interaction.fields.getTextInputValue('text').trim();
+    await memberPanel.sendAnonymousReport({ client: interaction.client, text });
+    return interaction.editReply({ content: 'Denuncia anonima enviada para a staff.' });
+  }
+
+  if (interaction.customId === 'member_panel:suggestion_modal') {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const text = interaction.fields.getTextInputValue('text').trim();
+    const anonymous = /^s(im)?$/i.test(interaction.fields.getTextInputValue('anonymous').trim());
+    await memberPanel.sendSuggestion({ client: interaction.client, user: interaction.user, text, anonymous });
+    return interaction.editReply({ content: `Sugestao enviada ${anonymous ? 'anonimamente' : 'com seu nome'}.` });
+  }
+
+  if (interaction.customId === 'member_panel:chat_modal') {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const text = interaction.fields.getTextInputValue('text').trim();
+    const result = await memberPanel.handleBotConversation({ client: interaction.client, user: interaction.user, text });
+    return interaction.editReply({ content: result.answer });
+  }
+
+  if (interaction.customId.startsWith('member_panel_staff:answer_modal:')) {
+    if (!can(interaction.member, 'approveRegistration')) {
+      return interaction.reply({ content: 'Somente a equipe pode responder membros.', flags: MessageFlags.Ephemeral });
+    }
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const targetUserId = interaction.customId.split(':')[2];
+    const answer = interaction.fields.getTextInputValue('answer').trim();
+    await memberPanel.answerMember({ client: interaction.client, staffUser: interaction.user, targetUserId, answer });
+    await interaction.message?.edit({ components: [] }).catch(() => {});
+    return interaction.editReply({ content: 'Resposta enviada no privado do membro.' });
+  }
+
   if (interaction.customId.startsWith('auction:create:')) {
     if (!can(interaction.member, 'createAuction')) {
       return interaction.reply({ content: 'Voce precisa ser membro para criar leilao.', flags: MessageFlags.Ephemeral });

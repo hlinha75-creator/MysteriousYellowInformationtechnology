@@ -77,6 +77,8 @@ O dono e o owner do servidor Discord.
 - Registrar nick: `1492707388552253525`
 - Solicitacoes de registro: `1482334949540626462`
 - Lista de membros: `1482334951637516289`
+- Painel do membro / assistente geral: `1515255057971548261`
+- Pendencias membros / atendimento staff: `1516030220073963520`
 - Voz aguardando evento: `1492707400485179664`
 
 Categorias:
@@ -172,6 +174,19 @@ Lista de membros:
 - mostra resumo de total, membros, convidados, pendentes, sem tag, equipe, registrados e novos 7 dias;
 - botoes para atualizar, exportar CSV e ver filtros curtos;
 - detalhes e CSV sao respostas efemeras para equipe autorizada.
+
+Painel do membro:
+- canal `1515255057971548261`;
+- painel fixo criado pelo `/setup`;
+- botoes para consultar pontos de influencia e temporada;
+- pontos sao lidos dos CSVs em `resources/season32`;
+- link de grafico: `https://notag.xyz/S32/pizza.html`;
+- builds PvE temporariamente apontam para `https://notag.xyz/builds/pve/Raid/`;
+- pergunta para staff, denuncia anonima e sugestao vao para `1516030220073963520`;
+- staff pode responder pergunta pelo botao e o bot envia DM ao membro;
+- historico mostra eventos participados, horas em evento/voz, saldo acumulado positivo e saldo atual;
+- conversar com bot responde palavras-chave simples ou envia pergunta para staff atualizar FAQ;
+- Ver/Ocultar por enquanto mostra atalhos importantes sem alterar permissoes automaticamente.
 
 Privacidade de mensagens por cargo:
 - mensagem normal em canal de texto e visivel para todos que podem ver o canal;

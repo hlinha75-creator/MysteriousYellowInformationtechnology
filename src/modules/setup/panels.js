@@ -7,6 +7,7 @@ const {
 const ids = require('../../config/ids');
 const { getDatabase } = require('../../database/connection');
 const memberList = require('../members/memberList.service');
+const memberPanel = require('../members/memberPanel.service');
 
 const archiveEmbed = new EmbedBuilder()
   .setTitle('Arquivar')
@@ -88,6 +89,11 @@ const panels = [
     type: 'member_list',
     channelId: ids.channels.memberList,
     dynamic: memberList.panelPayload
+  },
+  {
+    type: 'member_panel',
+    channelId: ids.channels.memberPanel,
+    dynamic: memberPanel.panelPayload
   },
   {
     type: 'archive',

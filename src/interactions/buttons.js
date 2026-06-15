@@ -14,6 +14,7 @@ const polls = require('../modules/polls/polls.service');
 const auctions = require('../modules/auctions/auctions.service');
 const auctionsRepo = require('../modules/auctions/auctions.repository');
 const memberList = require('../modules/members/memberList.service');
+const memberPanel = require('../modules/members/memberPanel.service');
 const { formatSilver } = require('../utils/silver');
 const registration = require('../modules/registration/registration.service');
 const { safeSend } = require('../utils/discord');
@@ -168,6 +169,65 @@ async function handleButton(interaction) {
       return interaction.editReply({
         embeds: [await memberList.filteredEmbed(interaction.guild, id)]
       });
+    }
+  }
+
+  if (scope === 'member_panel') {
+    if (action === 'points_normal') {
+      return interaction.reply({ embeds: [memberPanel.pointsEmbed(interaction.user.id, 'normal')], flags: MessageFlags.Ephemeral });
+    }
+
+    if (action === 'points_season') {
+      return interaction.reply({ embeds: [memberPanel.pointsEmbed(interaction.user.id, 'season')], flags: MessageFlags.Ephemeral });
+    }
+
+    if (action === 'builds') {
+      return interaction.reply({ embeds: [memberPanel.buildsEmbed()], flags: MessageFlags.Ephemeral });
+    }
+
+    if (action === 'history') {
+      return interaction.reply({ embeds: [memberPanel.historyEmbed(interaction.user.id)], flags: MessageFlags.Ephemeral });
+    }
+
+    if (action === 'channels') {
+      return interaction.reply({ embeds: [memberPanel.channelsEmbed()], flags: MessageFlags.Ephemeral });
+    }
+
+    if (action === 'ask_staff') {
+      return showModal(interaction, 'member_panel:ask_staff_modal', 'Perguntar para staff', [
+        textInput('text', 'Sua pergunta', true, 'Escreva sua pergunta para a staff', TextInputStyle.Paragraph)
+      ]);
+    }
+
+    if (action === 'report') {
+      return showModal(interaction, 'member_panel:report_modal', 'Denuncia anonima', [
+        textInput('text', 'Denuncia', true, 'Explique a denuncia. Seu nome nao sera enviado.', TextInputStyle.Paragraph)
+      ]);
+    }
+
+    if (action === 'suggestion') {
+      return showModal(interaction, 'member_panel:suggestion_modal', 'Sugestao', [
+        textInput('text', 'Sugestao', true, 'Escreva sua sugestao', TextInputStyle.Paragraph),
+        textInput('anonymous', 'Anonima? sim ou nao', false, 'Padrao: nao')
+      ]);
+    }
+
+    if (action === 'chat_bot') {
+      return showModal(interaction, 'member_panel:chat_modal', 'Conversar com o bot', [
+        textInput('text', 'Mensagem', true, 'Ex: como vejo meu saldo?', TextInputStyle.Paragraph)
+      ]);
+    }
+  }
+
+  if (scope === 'member_panel_staff') {
+    if (!can(interaction.member, 'approveRegistration')) {
+      return interaction.reply({ content: 'Somente a equipe pode responder membros.', flags: MessageFlags.Ephemeral });
+    }
+
+    if (action === 'answer') {
+      return showModal(interaction, `member_panel_staff:answer_modal:${id}`, 'Responder membro', [
+        textInput('answer', 'Resposta', true, 'Escreva a resposta que sera enviada por DM', TextInputStyle.Paragraph)
+      ]);
     }
   }
 
