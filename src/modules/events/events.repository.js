@@ -187,6 +187,93 @@ function updateReviewMetadata(eventId, patch) {
   return getReview(eventId);
 }
 
+function createRaidAvalonEventMeta({ eventId, dungeonTier, buildTier }) {
+  return getDatabase()
+    .prepare(`
+      INSERT INTO raid_avalon_events (event_id, dungeon_tier, build_tier)
+      VALUES (?, ?, ?)
+      ON CONFLICT(event_id) DO UPDATE SET
+        dungeon_tier = excluded.dungeon_tier,
+        build_tier = excluded.build_tier,
+        updated_at = CURRENT_TIMESTAMP
+    `)
+    .run(eventId, dungeonTier, buildTier);
+}
+
+function getRaidAvalonEventMeta(eventId) {
+  return getDatabase().prepare('SELECT * FROM raid_avalon_events WHERE event_id = ?').get(eventId);
+}
+
+function upsertRaidAvalonParticipant({ eventId, discordId, weaponKey = null, weaponName = null, itemPower = null, helperRole = null }) {
+  return getDatabase()
+    .prepare(`
+      INSERT INTO raid_avalon_event_participants
+        (event_id, discord_id, weapon_key, weapon_name, item_power, helper_role)
+      VALUES
+        (@eventId, @discordId, @weaponKey, @weaponName, @itemPower, @helperRole)
+      ON CONFLICT(event_id, discord_id) DO UPDATE SET
+        weapon_key = excluded.weapon_key,
+        weapon_name = excluded.weapon_name,
+        item_power = excluded.item_power,
+        helper_role = excluded.helper_role,
+        updated_at = CURRENT_TIMESTAMP
+    `)
+    .run({ eventId, discordId, weaponKey, weaponName, itemPower, helperRole });
+}
+
+function getRaidAvalonParticipant({ eventId, discordId }) {
+  return getDatabase()
+    .prepare('SELECT * FROM raid_avalon_event_participants WHERE event_id = ? AND discord_id = ?')
+    .get(eventId, discordId);
+}
+
+function listRaidAvalonParticipants(eventId) {
+  return getDatabase()
+    .prepare('SELECT * FROM raid_avalon_event_participants WHERE event_id = ? ORDER BY helper_role, weapon_name, discord_id')
+    .all(eventId);
+}
+
+function getRaidAvalonCareer({ discordId, weaponKey }) {
+  return getDatabase()
+    .prepare('SELECT * FROM raid_avalon_weapon_career WHERE discord_id = ? AND weapon_key = ?')
+    .get(discordId, weaponKey);
+}
+
+function upsertRaidAvalonCareer({ discordId, weaponKey, weaponName, roleId, addPoint = false }) {
+  return getDatabase()
+    .prepare(`
+      INSERT INTO raid_avalon_weapon_career
+        (discord_id, weapon_key, weapon_name, points, role_id, first_tag_at, last_point_at)
+      VALUES
+        (@discordId, @weaponKey, @weaponName, @points, @roleId, CURRENT_TIMESTAMP, @lastPointAt)
+      ON CONFLICT(discord_id, weapon_key) DO UPDATE SET
+        weapon_name = excluded.weapon_name,
+        points = raid_avalon_weapon_career.points + @points,
+        role_id = COALESCE(excluded.role_id, raid_avalon_weapon_career.role_id),
+        last_point_at = COALESCE(excluded.last_point_at, raid_avalon_weapon_career.last_point_at),
+        updated_at = CURRENT_TIMESTAMP
+    `)
+    .run({
+      discordId,
+      weaponKey,
+      weaponName,
+      roleId,
+      points: addPoint ? 1 : 0,
+      lastPointAt: addPoint ? new Date().toISOString() : null
+    });
+}
+
+function listRaidAvalonCareer(limit = 30) {
+  return getDatabase()
+    .prepare(`
+      SELECT *
+      FROM raid_avalon_weapon_career
+      ORDER BY points DESC, updated_at DESC
+      LIMIT ?
+    `)
+    .all(limit);
+}
+
 function markReviewApproved({ eventId, approvedBy }) {
   return getDatabase()
     .prepare("UPDATE event_reviews SET status = 'approved', approved_by = ?, approved_at = CURRENT_TIMESTAMP WHERE event_id = ?")
@@ -209,17 +296,23 @@ function listExpiredReviewChannels(nowIso) {
 module.exports = {
   closeOpenVoiceSession,
   createEvent,
+  createRaidAvalonEventMeta,
   clearParticipantPayouts,
   getEvent,
   getEventByCode,
   getEventByVoiceChannel,
   getOpenVoiceSession,
   getParticipant,
+  getRaidAvalonCareer,
+  getRaidAvalonEventMeta,
+  getRaidAvalonParticipant,
   getReview,
   listActiveEvents,
   listExpiredReviewChannels,
   listPendingWarningEvents,
   listParticipants,
+  listRaidAvalonCareer,
+  listRaidAvalonParticipants,
   markReviewApproved,
   refreshParticipantSeconds,
   removeParticipant,
@@ -227,6 +320,8 @@ module.exports = {
   setParticipantReview,
   startVoiceSession,
   updateEvent,
+  upsertRaidAvalonCareer,
+  upsertRaidAvalonParticipant,
   upsertParticipant,
   upsertReview,
   updateReviewMetadata

@@ -63,6 +63,18 @@ async function handleButton(interaction) {
     ]);
   }
 
+  if (interaction.customId === 'panel:create_raid_full') {
+    if (!can(interaction.member, 'createEvent')) {
+      return interaction.reply({ content: 'Voce nao tem permissao para criar Raid Avalon Full.', flags: MessageFlags.Ephemeral });
+    }
+    return showModal(interaction, 'event:create_raid_full', 'Raid Avalon Full', [
+      textInput('scheduledTime', 'Dia e hora UTC-3', true, 'Ex: hoje 20:30 ou 16/06 20:30'),
+      textInput('location', 'Local', true, 'Ex: Martlock, Portal, HO'),
+      textInput('dungeonTier', 'Tier da DG', true, 'Ex: T8.1'),
+      textInput('buildTier', 'Tier da build', true, 'Ex: T8 equivalente')
+    ]);
+  }
+
   if (interaction.customId === 'panel:registration') {
     return showModal(interaction, 'registration:submit', 'Registro Albion', [
       textInput('albionName', 'Nome do personagem no Albion')
@@ -234,6 +246,17 @@ async function handleButton(interaction) {
   if (scope === 'event') {
     const eventId = Number(id);
     const event = eventsRepo.getEvent(eventId);
+    if (action === 'raid_role') {
+      const role = extra;
+      return showModal(interaction, `event:raid_join:${eventId}:${role}`, `Raid Full - ${roleLabel(role).replace(/^[^\s]+ /, '')}`, [
+        textInput('weapon', 'Arma', true, events.raidWeaponSuggestions(role)),
+        textInput('itemPower', 'IP', true, 'Ex: 1500')
+      ]);
+    }
+    if (action === 'raid_helper') {
+      const helperName = await events.joinRaidAvalonHelper(interaction, eventId, extra);
+      return interaction.reply({ content: `Voce entrou como ${helperName}.`, flags: MessageFlags.Ephemeral });
+    }
     if (action === 'join_role') {
       const role = extra;
       await events.joinEvent(interaction, eventId, role);
@@ -341,6 +364,7 @@ async function handleButton(interaction) {
       }
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const transactions = events.approveEventPayment({ eventId, actorId: interaction.user.id });
+      const raidRewards = await events.grantRaidAvalonRewards({ guild: interaction.guild, eventId });
       await finance.notifyBalanceTransactions({ client: interaction.client, transactions });
       await interaction.message.edit({
         content: `Evento #${eventId} finalizado por <@${interaction.user.id}>.`,
@@ -349,7 +373,10 @@ async function handleButton(interaction) {
       }).catch(() => {});
       await events.scheduleReviewChannelDeletion(interaction.client, eventId, 14);
       await balanceBackup.postEventBalanceBackup(interaction.client, eventId);
-      return interaction.editReply({ content: 'Pagamento aprovado e saldos depositados.' });
+      const raidText = raidRewards.granted || raidRewards.points
+        ? ` Tags Raid Avalon: ${raidRewards.granted} nova(s), ${raidRewards.points} ponto(s).`
+        : '';
+      return interaction.editReply({ content: `Pagamento aprovado e saldos depositados.${raidText}` });
     }
     if (action === 'cancel') {
       return showModal(interaction, `event:cancel_modal:${eventId}`, 'Cancelar Evento', [
@@ -729,10 +756,10 @@ function auctionChannelSelect(draftId) {
 
 function roleLabel(role) {
   const labels = {
-    tank: '🔵 Tank',
-    healer: '🟢 Healer',
-    support: '🟡 Suporte',
-    dps: '🔴 DPS'
+    tank: '🛡️ Tank',
+    healer: '💚 Healer',
+    support: '🌀 Suporte',
+    dps: '⚔️ DPS'
   };
   return labels[role] || role;
 }

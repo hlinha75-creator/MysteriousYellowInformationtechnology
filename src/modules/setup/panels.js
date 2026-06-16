@@ -34,7 +34,8 @@ const panels = [
     embed: new EmbedBuilder().setTitle('Criar evento').setDescription('Use o botao abaixo para criar um evento da guild.').setColor(0x3182ce),
     components: [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('panel:create_event').setLabel('Criar Evento').setStyle(ButtonStyle.Primary)
+        new ButtonBuilder().setCustomId('panel:create_event').setLabel('Criar Evento').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('panel:create_raid_full').setLabel('Raid Full').setStyle(ButtonStyle.Success)
       )
     ]
   },

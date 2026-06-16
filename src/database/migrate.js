@@ -513,6 +513,47 @@ const migrations = [
           ON balance_csv_backups (sent_at);
       `);
     }
+  },
+  {
+    version: 17,
+    name: 'raid_avalon_full_events',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS raid_avalon_events (
+          event_id INTEGER PRIMARY KEY,
+          dungeon_tier TEXT,
+          build_tier TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS raid_avalon_event_participants (
+          event_id INTEGER NOT NULL,
+          discord_id TEXT NOT NULL,
+          weapon_key TEXT,
+          weapon_name TEXT,
+          item_power INTEGER,
+          helper_role TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (event_id, discord_id),
+          FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS raid_avalon_weapon_career (
+          discord_id TEXT NOT NULL,
+          weapon_key TEXT NOT NULL,
+          weapon_name TEXT NOT NULL,
+          points INTEGER NOT NULL DEFAULT 0,
+          role_id TEXT,
+          first_tag_at TEXT,
+          last_point_at TEXT,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (discord_id, weapon_key)
+        );
+      `);
+    }
   }
 ];
 

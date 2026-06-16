@@ -132,6 +132,33 @@ async function handleModal(interaction) {
     return interaction.editReply({ content: `Evento ${event.event_code} criado.` });
   }
 
+  if (interaction.customId === 'event:create_raid_full') {
+    if (!can(interaction.member, 'createEvent')) {
+      return interaction.reply({ content: 'Voce nao tem permissao para criar Raid Avalon Full.', flags: MessageFlags.Ephemeral });
+    }
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const event = await events.createRaidAvalonFullFromModal(interaction, {
+      scheduledTime: fieldOrDefault(interaction, 'scheduledTime', defaultUtcMinus3Time(10)),
+      location: fieldOrDefault(interaction, 'location', 'Pergunte na Call'),
+      dungeonTier: fieldOrDefault(interaction, 'dungeonTier', 'Nao informado'),
+      buildTier: fieldOrDefault(interaction, 'buildTier', 'Nao informado')
+    });
+    return interaction.editReply({ content: `Raid Avalon Full ${event.event_code} criada com 20 vagas.` });
+  }
+
+  if (interaction.customId.startsWith('event:raid_join:')) {
+    const [, , eventIdText, role] = interaction.customId.split(':');
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const itemPower = intField(interaction.fields, 'itemPower');
+    const weapon = await events.joinRaidAvalonRole(interaction, {
+      eventId: Number(eventIdText),
+      role,
+      weapon: interaction.fields.getTextInputValue('weapon'),
+      itemPower
+    });
+    return interaction.editReply({ content: `Voce entrou na Raid Avalon Full como ${roleLabel(role)} usando ${weapon} IP ${itemPower}.` });
+  }
+
   if (interaction.customId === 'registration:submit') {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const albionName = interaction.fields.getTextInputValue('albionName').trim();
@@ -351,6 +378,16 @@ function normalizeRole(value) {
   };
   if (!aliases[role]) throw new Error('Funcao invalida. Exemplos aceitos: tank, tanque, healer, cura, sup, suporte, dps, dano.');
   return aliases[role];
+}
+
+function roleLabel(role) {
+  const labels = {
+    tank: 'Tank',
+    healer: 'Healer',
+    support: 'Suporte',
+    dps: 'DPS'
+  };
+  return labels[role] || role;
 }
 
 function parseMinutes(value) {
