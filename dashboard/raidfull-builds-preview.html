@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Raid Full com builds</title>
+  <style>
+    :root {
+      --bg: #202127;
+      --discord: #2b2d35;
+      --embed: #31333d;
+      --soft: #383a45;
+      --line: #4a4d5a;
+      --text: #f4f5f8;
+      --muted: #b9bdca;
+      --red: #f04458;
+      --green: #64c96a;
+      --blue: #55acee;
+      --purple: #5865f2;
+      --button: #4e5058;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", Arial, sans-serif;
+      font-size: 14px;
+    }
+
+    main {
+      width: min(1120px, calc(100% - 24px));
+      margin: 28px auto;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 330px;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .discord,
+    .reminder {
+      background: var(--discord);
+      border: 1px solid #1c1d22;
+      border-radius: 8px;
+      padding: 18px;
+    }
+
+    .message {
+      display: grid;
+      grid-template-columns: 46px minmax(0, 1fr);
+      gap: 14px;
+    }
+
+    .avatar {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: radial-gradient(circle at 35% 30%, #59d6ff, #3345c9 58%, #171a37);
+      border: 2px solid #7aa8ff;
+      font-weight: 800;
+      font-size: 12px;
+    }
+
+    .author {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 7px;
+    }
+
+    .name {
+      color: #ff5a54;
+      font-weight: 700;
+    }
+
+    .app {
+      color: #fff;
+      background: var(--purple);
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .time {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .embed {
+      max-width: 760px;
+      background: var(--embed);
+      border-left: 4px solid var(--blue);
+      border-radius: 5px;
+      padding: 14px 16px 16px;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 16px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    .description {
+      margin: 0 0 14px;
+      color: var(--text);
+      font-weight: 650;
+    }
+
+    .creator {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    .mention {
+      color: #d8dcff;
+      background: rgba(88, 101, 242, 0.24);
+      border-radius: 3px;
+      padding: 0 3px;
+      font-weight: 650;
+    }
+
+    .meta {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 12px;
+    }
+
+    .meta b {
+      display: block;
+      margin-bottom: 3px;
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .meta span {
+      font-size: 13px;
+      overflow-wrap: anywhere;
+    }
+
+    .composition {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .group {
+      background: var(--soft);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px;
+    }
+
+    .group h2 {
+      margin: 0 0 8px;
+      font-size: 13px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    .slots {
+      display: grid;
+      gap: 6px;
+    }
+
+    .slot {
+      display: grid;
+      grid-template-columns: 30px minmax(0, 1fr);
+      gap: 8px;
+      align-items: center;
+      min-height: 30px;
+      font-size: 12.5px;
+      color: #ffb0ba;
+    }
+
+    .slot.filled {
+      color: #bff0c3;
+    }
+
+    .icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 5px;
+      background: #242631;
+      object-fit: contain;
+      border: 1px solid #555967;
+    }
+
+    .status {
+      font-weight: 900;
+      margin-right: 4px;
+    }
+
+    .free .status {
+      color: var(--red);
+    }
+
+    .filled .status {
+      color: var(--green);
+    }
+
+    .aux {
+      margin-top: 10px;
+      background: #30323b;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px;
+    }
+
+    .aux h2,
+    .reminder h2 {
+      margin: 0 0 8px;
+      font-size: 13px;
+      color: var(--muted);
+      letter-spacing: 0;
+    }
+
+    .aux-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+    }
+
+    .pill {
+      background: #444753;
+      border-radius: 14px;
+      padding: 4px 9px;
+      color: var(--text);
+      font-size: 12.5px;
+    }
+
+    .buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+      max-width: 760px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 6px;
+      min-height: 34px;
+      padding: 0 13px;
+      color: white;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .primary { background: var(--purple); }
+    .success { background: #248046; }
+    .secondary { background: var(--button); }
+    .danger { background: #da373c; }
+
+    .reminder {
+      position: sticky;
+      top: 18px;
+    }
+
+    .reminder-card {
+      background: var(--embed);
+      border-left: 4px solid var(--green);
+      border-radius: 5px;
+      padding: 12px;
+    }
+
+    .reminder-row {
+      display: grid;
+      grid-template-columns: 38px minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .reminder a {
+      color: #aeb7ff;
+      text-decoration: none;
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+
+    .small {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 12.5px;
+      line-height: 1.4;
+    }
+
+    @media (max-width: 940px) {
+      main {
+        grid-template-columns: 1fr;
+      }
+
+      .reminder {
+        position: static;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .meta,
+      .composition {
+        grid-template-columns: 1fr;
+      }
+
+      .message {
+        grid-template-columns: 38px minmax(0, 1fr);
+      }
+
+      .avatar {
+        width: 38px;
+        height: 38px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="discord">
+      <div class="message">
+        <div class="avatar">NT</div>
+        <section>
+          <div class="author">
+            <span class="name">NOTAG</span>
+            <span class="app">APP</span>
+            <span class="time">Hoje as 10:12</span>
+          </div>
+
+          <article class="embed">
+            <h1>RAID AVALON FULL</h1>
+            <p class="description">
+              Raid Avalon Full | DG T8.1 | Build T10
+              <span class="creator">Criador: <span class="mention">@Tmaiusculo</span></span>
+            </p>
+
+            <section class="meta">
+              <div><b>Status</b><span>🔵 Aberto</span></div>
+              <div><b>Local</b><span>Zona Azul</span></div>
+              <div><b>Horario UTC-3</b><span>00:00</span></div>
+              <div><b>Tier DG</b><span>T8.1</span></div>
+              <div><b>Tier Build</b><span>T10</span></div>
+            </section>
+
+            <section class="composition">
+              <div class="group">
+                <h2>🔵 🛡️ Tank 1/3</h2>
+                <div class="slots">
+                  <div class="slot filled"><img class="icon" src="https://albiononlinegrind.com/images/fallback/T8_2H_HAMMER_CRYSTAL.png" alt=""><span><span class="status">●</span><span class="mention">@Tmaiusculo</span> | IP 1890</span></div>
+                  <div class="slot free"><img class="icon" src="https://render.albiononline.com/v1/item/T8_MAIN_MACE_HELL.png?count=1&amp;quality=1" alt=""><span><span class="status">●</span>Incubus</span></div>
+                  <div class="slot free"><img class="icon" src="https://render.albiononline.com/v1/item/T8_2H_AXE_AVALON.png?count=1&amp;quality=1" alt=""><span><span class="status">●</span>Quebra Reinos</span></div>
+                </div>
+              </div>
+
+              <div class="group">
+                <h2>🟢 💚 Healer 0/3</h2>
+                <div class="slots">
+                  <div class="slot free"><img class="icon" src="https://render.albiononline.com/v1/item/T8_MAIN_HOLYSTAFF_AVALON.png?count=1&amp;quality=1" alt=""><span><span class="status">●</span>Queda Santa</span></div>
+                  <div class="slot free"><img class="icon" src="https://render.albiononline.com/v1/item/T8_2H_HOLYSTAFF_HELL.png?count=1&amp;quality=1" alt=""><span><span class="status">●</span>Corrompido</span></div>
+                  <div class="slot free"><img class="icon" src="https://render.albiononline.com/v1/item/T8_MAIN_NATURESTAFF_AVALON.png?count=1&amp;quality=1" alt=""><span><span class="status">●</span>Raiz Ferrea</span></div>
+                </div>
+              </div>
+
+              <div class="group">
+                <h2>🟡 🚩 Suporte 0/3</h2>
+                <div class="slots">
+                  <div class="slot free"><img class="icon" src="https://render.albiononline.com/v1/item/T8_MAIN_CURSEDSTAFF_AVALON.png?count=1&amp;quality=1" alt=""><span><span class="status">●</span>Shadow Caller</span></div>
+                  <div class="slot free"><img class="icon" src="https://render.albiononline.com/v1/item/T8_2H_CURSEDSTAFF_MORGANA.png?count=1&amp;quality=1" alt=""><span><span class="status">●</span>Danacao</span></div>
+                  <div class="slot free"><img class="icon" src="https://render.albiononline.com/v1/item/T8_2H_ENIGMATICSTAFF.png?count=1&amp;quality=1" alt=""><span><span class="status">●</span>Enigmatico</span></div>
+                </div>
+              </div>
+
+              <div class="group">
+                <h2>🔴 ⚔️ DPS 2/11</h2>
+                <div class="slots">
+                  <div class="slot filled"><img class="icon" src="https://render.albiononline.com/v1/item/T8_2H_REPEATINGCROSSBOW_UNDEAD.png?count=1&amp;quality=1" alt=""><span><span class="status">●</span><span class="mention">@PlayerDPS</span> | IP 1620</span></div>
+                  <div class="slot free"><img class="icon" src="https://render.albiononline.com/v1/item/T8_2H_SHAPESHIFTER_AVALON.png?count=1&amp;quality=1" alt=""><span><span class="status">●</span>Aguia</span></div>
+                  <div class="slot free"><img class="icon" src="https://render.albiononline.com/v1/item/T8_MAIN_FROSTSTAFF_AVALON.png?count=1&amp;quality=1" alt=""><span><span class="status">●</span>Uivo Frio</span></div>
+                  <div class="slot filled"><img class="icon" src="https://render.albiononline.com/v1/item/T8_2H_REPEATINGCROSSBOW_UNDEAD.png?count=1&amp;quality=1" alt=""><span><span class="status">●</span><span class="mention">@MistMain</span> | IP 1580</span></div>
+                  <div class="slot free"><img class="icon" src="https://render.albiononline.com/v1/item/T8_2H_REPEATINGCROSSBOW_UNDEAD.png?count=1&amp;quality=1" alt=""><span><span class="status">●</span>Mist / Repetidor</span></div>
+                  <div class="slot free"><img class="icon" src="https://render.albiononline.com/v1/item/T8_2H_REPEATINGCROSSBOW_UNDEAD.png?count=1&amp;quality=1" alt=""><span><span class="status">●</span>Mist / Repetidor</span></div>
+                  <div class="slot free"><img class="icon" src="https://render.albiononline.com/v1/item/T8_2H_REPEATINGCROSSBOW_UNDEAD.png?count=1&amp;quality=1" alt=""><span><span class="status">●</span>Mist / Repetidor</span></div>
+                  <div class="slot free"><img class="icon" src="https://render.albiononline.com/v1/item/T8_2H_REPEATINGCROSSBOW_UNDEAD.png?count=1&amp;quality=1" alt=""><span><span class="status">●</span>Mist / Repetidor</span></div>
+                  <div class="slot free"><img class="icon" src="https://render.albiononline.com/v1/item/T8_2H_REPEATINGCROSSBOW_UNDEAD.png?count=1&amp;quality=1" alt=""><span><span class="status">●</span>Mist / Repetidor</span></div>
+                  <div class="slot free"><img class="icon" src="https://render.albiononline.com/v1/item/T8_2H_REPEATINGCROSSBOW_UNDEAD.png?count=1&amp;quality=1" alt=""><span><span class="status">●</span>Mist / Repetidor</span></div>
+                  <div class="slot free"><img class="icon" src="https://render.albiononline.com/v1/item/T8_2H_REPEATINGCROSSBOW_UNDEAD.png?count=1&amp;quality=1" alt=""><span><span class="status">●</span>Mist / Repetidor</span></div>
+                </div>
+              </div>
+            </section>
+
+            <section class="aux">
+              <h2>Auxiliares</h2>
+              <div class="aux-list">
+                <span class="pill">Assistir: <span class="mention">@Observador</span></span>
+                <span class="pill">Scout: <span class="mention">@ScoutOne</span></span>
+                <span class="pill">Looter: vazio</span>
+                <span class="pill">Uper: vazio</span>
+              </div>
+            </section>
+          </article>
+
+          <div class="buttons">
+            <button class="primary">🛡️ Tank</button>
+            <button class="success">💚 Healer</button>
+            <button class="secondary">🚩 🟡 Suporte</button>
+            <button class="danger">⚔️ DPS</button>
+            <button class="secondary">Assistir</button>
+            <button class="secondary">Scout</button>
+            <button class="secondary">Looter</button>
+            <button class="secondary">Uper</button>
+            <button class="success">Iniciar</button>
+            <button class="danger">Cancelar</button>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <aside class="reminder">
+      <h2>Lembrete enviado apos escolher a arma</h2>
+      <div class="reminder-card">
+        <div class="reminder-row">
+          <img class="icon" src="https://albiononlinegrind.com/images/fallback/T8_2H_HAMMER_CRYSTAL.png" alt="">
+          <div>
+            <strong>Martelo registrado</strong><br>
+            <span class="mention">@Tmaiusculo</span> | IP 1890
+          </div>
+        </div>
+        <a href="https://prnt.sc/Y-z2-06j746K">Abrir build de Martelo</a>
+        <p class="small">Esse link nao precisa aparecer na vaga. Ele pode ser enviado em resposta privada depois que o player escolhe a arma e preenche o IP.</p>
+      </div>
+    </aside>
+  </main>
+</body>
+</html>

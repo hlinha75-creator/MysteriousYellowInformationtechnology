@@ -157,7 +157,9 @@ async function handleModal(interaction) {
       weapon: weaponName,
       itemPower
     });
-    return interaction.editReply({ content: `Voce entrou na Raid Avalon Full como ${roleLabel(role)} usando ${weapon} IP ${itemPower}.` });
+    const buildUrl = events.raidWeaponBuildUrl(role, weaponKey || weapon);
+    const buildText = buildUrl ? `\nLembrete da build: ${buildUrl}` : '';
+    return interaction.editReply({ content: `Voce entrou na Raid Avalon Full como ${roleLabel(role)} usando ${weapon} IP ${itemPower}.${buildText}` });
   }
 
   if (interaction.customId === 'registration:submit') {

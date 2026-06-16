@@ -32,6 +32,64 @@ const raidAvalonWeaponSlots = {
 const raidAvalonWeapons = Object.fromEntries(
   Object.entries(raidAvalonWeaponSlots).map(([role, weapons]) => [role, [...new Set(weapons)]])
 );
+const raidAvalonWeaponInfo = {
+  martelo: {
+    iconUrl: 'https://albiononlinegrind.com/images/fallback/T8_2H_HAMMER_CRYSTAL.png',
+    buildUrl: 'https://prnt.sc/Y-z2-06j746K'
+  },
+  incubus: {
+    iconUrl: 'https://render.albiononline.com/v1/item/T8_MAIN_MACE_HELL.png?count=1&quality=1',
+    buildUrl: 'https://prnt.sc/TU9zh2Ez58aR'
+  },
+  quebra_reinos: {
+    iconUrl: 'https://render.albiononline.com/v1/item/T8_2H_AXE_AVALON.png?count=1&quality=1',
+    buildUrl: 'https://prnt.sc/mn4C8rnsSsaY'
+  },
+  queda_santa: {
+    iconUrl: 'https://render.albiononline.com/v1/item/T8_MAIN_HOLYSTAFF_AVALON.png?count=1&quality=1',
+    buildUrl: 'https://prnt.sc/LOnzuabDHwiE'
+  },
+  corrompido: {
+    iconUrl: 'https://render.albiononline.com/v1/item/T8_2H_HOLYSTAFF_HELL.png?count=1&quality=1',
+    buildUrl: 'https://prnt.sc/J7lD2RLeVkti'
+  },
+  raiz_ferrea: {
+    iconUrl: 'https://render.albiononline.com/v1/item/T8_MAIN_NATURESTAFF_AVALON.png?count=1&quality=1',
+    buildUrl: 'https://prnt.sc/tbnvRFhoZPaG'
+  },
+  shadow_caller: {
+    iconUrl: 'https://render.albiononline.com/v1/item/T8_MAIN_CURSEDSTAFF_AVALON.png?count=1&quality=1',
+    buildUrl: 'https://prnt.sc/mpbQ1v8vgR-f'
+  },
+  danacao: {
+    iconUrl: 'https://render.albiononline.com/v1/item/T8_2H_CURSEDSTAFF_MORGANA.png?count=1&quality=1',
+    buildUrl: 'https://prnt.sc/mpbQ1v8vgR-f'
+  },
+  enigmatico: {
+    iconUrl: 'https://render.albiononline.com/v1/item/T8_2H_ENIGMATICSTAFF.png?count=1&quality=1',
+    buildUrl: 'https://prnt.sc/sYmochYnSwfo'
+  },
+  repetidor: {
+    iconUrl: 'https://render.albiononline.com/v1/item/T8_2H_REPEATINGCROSSBOW_UNDEAD.png?count=1&quality=1',
+    buildUrl: 'https://prnt.sc/zJhF3t_ePQIb'
+  },
+  aguia: {
+    iconUrl: 'https://render.albiononline.com/v1/item/T8_2H_SHAPESHIFTER_AVALON.png?count=1&quality=1',
+    buildUrl: 'https://prnt.sc/GPBXB_qGTYTD'
+  },
+  uivo_frio: {
+    iconUrl: 'https://render.albiononline.com/v1/item/T8_MAIN_FROSTSTAFF_AVALON.png?count=1&quality=1',
+    buildUrl: 'https://prnt.sc/wekmGkxwXrl0'
+  },
+  mist_repetidor: {
+    iconUrl: 'https://render.albiononline.com/v1/item/T8_2H_REPEATINGCROSSBOW_UNDEAD.png?count=1&quality=1',
+    buildUrl: 'https://prnt.sc/zJhF3t_ePQIb'
+  },
+  mistpiercer: {
+    iconUrl: 'https://render.albiononline.com/v1/item/T8_2H_BOW_AVALON.png?count=1&quality=1',
+    buildUrl: 'https://prnt.sc/rMl0DPRnsss7'
+  }
+};
 const raidAvalonHelpers = {
   scout: 'Scout',
   looter: 'Looter',
@@ -925,6 +983,22 @@ function raidWeaponName(role, key) {
   return match;
 }
 
+function raidWeaponBuildUrl(role, keyOrName) {
+  const key = raidWeaponInfoKey(role, keyOrName);
+  return raidAvalonWeaponInfo[key]?.buildUrl || null;
+}
+
+function raidWeaponIconUrl(role, keyOrName) {
+  const key = raidWeaponInfoKey(role, keyOrName);
+  return raidAvalonWeaponInfo[key]?.iconUrl || null;
+}
+
+function raidWeaponInfoKey(role, keyOrName) {
+  const rawKey = weaponKey(keyOrName);
+  const byKnownWeapon = (raidAvalonWeapons[role] || []).find((weapon) => weaponKey(weapon) === rawKey);
+  return weaponKey(byKnownWeapon || keyOrName);
+}
+
 async function grantRaidAvalonRewards({ guild, eventId }) {
   if (!repo.getRaidAvalonEventMeta(eventId)) return { granted: 0, points: 0, skipped: 0 };
   const participants = repo.listParticipants(eventId).filter((participant) => !participant.is_spectator);
@@ -1116,6 +1190,8 @@ module.exports = {
   joinRaidAvalonRole,
   pauseParticipation,
   postDpsMeterSummary,
+  raidWeaponBuildUrl,
+  raidWeaponIconUrl,
   raidWeaponName,
   raidWeaponOptions,
   raidWeaponSuggestions,
