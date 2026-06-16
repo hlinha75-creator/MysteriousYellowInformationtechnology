@@ -18,17 +18,20 @@ const { backupDatabase } = require('../../database/backup');
 const roleConfigs = {
   tank: { label: '🛡️ Tank', slots: 'tank_slots', style: ButtonStyle.Primary },
   healer: { label: '💚 Healer', slots: 'healer_slots', style: ButtonStyle.Success },
-  support: { label: '🌀 Suporte', slots: 'support_slots', style: ButtonStyle.Secondary },
+  support: { label: '🚩 Suporte', slots: 'support_slots', style: ButtonStyle.Secondary },
   dps: { label: '⚔️ DPS', slots: 'dps_slots', style: ButtonStyle.Danger }
 };
 const eventRoles = Object.keys(roleConfigs);
 const raidAvalonSlots = { tank: 3, healer: 3, support: 3, dps: 11 };
-const raidAvalonWeapons = {
+const raidAvalonWeaponSlots = {
   tank: ['Martelo', 'Incubus', 'Quebra Reinos'],
   healer: ['Queda Santa', 'Corrompido', 'Raiz Ferrea'],
   support: ['Shadow Caller', 'Danacao', 'Enigmatico'],
-  dps: ['Repetidor', 'Aguia', 'Uivo Frio', 'MistPiercer']
+  dps: ['Repetidor', 'Aguia', 'Uivo Frio', 'Mist / Repetidor', 'Mist / Repetidor', 'Mist / Repetidor', 'Mist / Repetidor', 'Mist / Repetidor', 'Mist / Repetidor', 'Mist / Repetidor', 'Mist / Repetidor']
 };
+const raidAvalonWeapons = Object.fromEntries(
+  Object.entries(raidAvalonWeaponSlots).map(([role, weapons]) => [role, [...new Set(weapons)]])
+);
 const raidAvalonHelpers = {
   scout: 'Scout',
   looter: 'Looter',
@@ -49,6 +52,28 @@ function eventEmbed(event, participants = []) {
     .setTitle(formatEventTitle(event.title))
     .setColor(event.status === 'running' ? 0x38a169 : event.status === 'cancelled' ? 0xe53e3e : 0x3182ce)
     .setTimestamp(new Date());
+
+  if (raidMeta) {
+    const fields = [
+      { name: 'Status', value: statusLabel(event.status), inline: true },
+      { name: 'Local', value: event.location || 'Nao informado', inline: true },
+      { name: 'Horario UTC-3', value: event.scheduled_time || 'Nao informado', inline: true },
+      ...raidFields,
+      ...eventRoles.map((role) => ({
+        name: `${roleStatsLabel(role)} ${count(role)}/${event[roleConfigs[role].slots]}`,
+        value: roleOccupants(event, participants, role),
+        inline: true
+      })),
+      { name: 'Auxiliares', value: raidHelpersSummary(participants), inline: false }
+    ];
+    if (event.status === 'running') {
+      fields.splice(1, 0, { name: 'Tempo em andamento', value: elapsed, inline: true });
+      fields.push({ name: 'Voz', value: event.voice_channel_id ? `<#${event.voice_channel_id}>` : 'Sala em criacao', inline: true });
+    }
+    return embed
+      .setDescription(`**${event.description || 'Raid Avalon Full'}**\nCriador: <@${event.creator_id}>`)
+      .addFields(fields);
+  }
 
   if (event.status === 'running') {
     return embed
@@ -71,18 +96,54 @@ function eventEmbed(event, participants = []) {
       ...raidFields,
       ...eventRoles.map((role) => ({
         name: `${roleStatsLabel(role)} ${count(role)}/${event[roleConfigs[role].slots]}`,
-        value: roleOccupants(participants, role),
+        value: roleOccupants(event, participants, role),
         inline: true
-      }))
+      })),
+      ...(raidMeta ? [{ name: 'Auxiliares', value: raidHelpersSummary(participants), inline: false }] : [])
     );
 }
 
-function roleOccupants(participants, role) {
+function roleOccupants(event, participants, role) {
+  if (repo.getRaidAvalonEventMeta(event.id)) {
+    return raidRoleSlotsSummary(participants, role);
+  }
+
   const users = participants
     .filter((p) => p.role === role && !p.is_spectator)
     .map((p) => raidParticipantLabel(p));
   const text = users.length > 0 ? users.join(', ') : 'Vazio';
   return text.length > 1024 ? `${text.slice(0, 1018)}...` : text;
+}
+
+function raidRoleSlotsSummary(participants, role) {
+  const roleParticipants = participants.filter((p) => p.role === role && !p.is_spectator);
+  const remaining = new Map();
+  for (const participant of roleParticipants) {
+    const raid = repo.getRaidAvalonParticipant({ eventId: participant.event_id, discordId: participant.discord_id });
+    const key = weaponKey(raid?.weapon_name);
+    if (!key) continue;
+    if (!remaining.has(key)) remaining.set(key, []);
+    remaining.get(key).push({ participant, raid });
+  }
+
+  const lines = (raidAvalonWeaponSlots[role] || []).map((weapon) => {
+    const key = weaponKey(weapon);
+    const match = remaining.get(key)?.shift();
+    if (!match) return `🔴 ${weapon}`;
+    return `🟢 <@${match.participant.discord_id}> | IP ${match.raid.item_power || '?'}`;
+  });
+
+  return lines.join('\n') || 'Vazio';
+}
+
+function raidHelpersSummary(participants) {
+  const helpers = participants.filter((participant) => participant.is_spectator);
+  if (helpers.length === 0) return 'Vazio';
+  return helpers.map((participant) => {
+    const raid = repo.getRaidAvalonParticipant({ eventId: participant.event_id, discordId: participant.discord_id });
+    const label = raid?.helper_role ? raidAvalonHelpers[raid.helper_role] || raid.helper_role : 'Assistir';
+    return `<@${participant.discord_id}> - ${label}`;
+  }).join('\n');
 }
 
 function raidParticipantLabel(participant) {
@@ -131,8 +192,8 @@ function eventComponents(event) {
     rows.push(new ActionRowBuilder().addComponents(
       eventRoles.map((role) => new ButtonBuilder()
         .setCustomId(`${isRaid ? 'event:raid_role' : 'event:join_role'}:${event.id}:${role}`)
-        .setLabel(roleLabel(role).replace(/^[^\s]+ /, ''))
-        .setEmoji(roleLabel(role).split(' ')[0])
+        .setLabel(roleButtonLabel(role))
+        .setEmoji(roleButtonEmoji(role))
         .setStyle(roleConfigs[role].style))
     ));
     if (isRaid) {
@@ -147,7 +208,13 @@ function eventComponents(event) {
   }
 
   const buttons = event.status === 'running'
+    ? isRaid
     ? [
+      new ButtonBuilder().setCustomId(`event:pause:${event.id}`).setLabel('Pausar participação').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`event:finish:${event.id}`).setLabel('Finalizar').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`event:cancel:${event.id}`).setLabel('Cancelar').setStyle(ButtonStyle.Danger)
+    ]
+    : [
       new ButtonBuilder().setCustomId(`event:auto_join:${event.id}`).setLabel('Quero participar').setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId(`event:spectate:${event.id}`).setLabel('Assistir').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId(`event:pause:${event.id}`).setLabel('Pausar participação').setStyle(ButtonStyle.Secondary),
@@ -796,6 +863,26 @@ function roleStatsLabel(role) {
   return labels[role] || roleLabel(role);
 }
 
+function roleButtonLabel(role) {
+  const labels = {
+    tank: 'Tank',
+    healer: 'Healer',
+    support: '🟡 Suporte',
+    dps: 'DPS'
+  };
+  return labels[role] || role;
+}
+
+function roleButtonEmoji(role) {
+  const emojis = {
+    tank: '🛡️',
+    healer: '💚',
+    support: '🚩',
+    dps: '⚔️'
+  };
+  return emojis[role] || undefined;
+}
+
 function formatEventTitle(title) {
   return String(title || 'EVENTO').toLocaleUpperCase('pt-BR');
 }
@@ -823,6 +910,19 @@ function normalizeRaidWeapon(role, value) {
 
 function raidWeaponSuggestions(role) {
   return (raidAvalonWeapons[role] || []).join(', ') || 'Arma';
+}
+
+function raidWeaponOptions(role) {
+  return (raidAvalonWeapons[role] || []).map((weapon) => ({
+    label: weapon,
+    value: weaponKey(weapon)
+  }));
+}
+
+function raidWeaponName(role, key) {
+  const match = (raidAvalonWeapons[role] || []).find((weapon) => weaponKey(weapon) === key);
+  if (!match) throw new Error('Arma invalida para essa funcao.');
+  return match;
 }
 
 async function grantRaidAvalonRewards({ guild, eventId }) {
@@ -1016,6 +1116,8 @@ module.exports = {
   joinRaidAvalonRole,
   pauseParticipation,
   postDpsMeterSummary,
+  raidWeaponName,
+  raidWeaponOptions,
   raidWeaponSuggestions,
   refreshEventMessage,
   refreshRunningEventMessages,

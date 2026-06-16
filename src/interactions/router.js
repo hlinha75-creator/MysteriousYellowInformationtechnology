@@ -35,7 +35,7 @@ async function handleInteraction(interaction) {
 }
 
 function isUserFacingError(error) {
-  return error?.isUserFacing === true;
+  return error?.isUserFacing === true || (error instanceof Error && error.name === 'Error' && !error.code);
 }
 
 module.exports = {

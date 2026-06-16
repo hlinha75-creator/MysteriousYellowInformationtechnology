@@ -147,13 +147,14 @@ async function handleModal(interaction) {
   }
 
   if (interaction.customId.startsWith('event:raid_join:')) {
-    const [, , eventIdText, role] = interaction.customId.split(':');
+    const [, , eventIdText, role, weaponKey] = interaction.customId.split(':');
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const itemPower = intField(interaction.fields, 'itemPower');
+    const weaponName = weaponKey ? events.raidWeaponName(role, weaponKey) : interaction.fields.getTextInputValue('weapon');
     const weapon = await events.joinRaidAvalonRole(interaction, {
       eventId: Number(eventIdText),
       role,
-      weapon: interaction.fields.getTextInputValue('weapon'),
+      weapon: weaponName,
       itemPower
     });
     return interaction.editReply({ content: `Voce entrou na Raid Avalon Full como ${roleLabel(role)} usando ${weapon} IP ${itemPower}.` });

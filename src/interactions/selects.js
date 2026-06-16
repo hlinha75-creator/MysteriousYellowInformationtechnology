@@ -32,6 +32,15 @@ async function handleSelect(interaction) {
     return interaction.reply({ content: `Voce entrou como ${role}.`, flags: MessageFlags.Ephemeral });
   }
 
+  if (scope === 'event_raid_weapon_select' && action === 'weapon') {
+    const role = messageId;
+    const weaponKey = interaction.values[0];
+    const weapon = events.raidWeaponName(role, weaponKey);
+    return showModal(interaction, `event:raid_join:${id}:${role}:${weaponKey}`, `Raid Full - ${weapon}`, [
+      input('itemPower', 'IP da arma', '', 'Ex: 1500')
+    ]);
+  }
+
   if (scope === 'poll' && action === 'vote') {
     const selected = await polls.vote({ interaction, pollId: Number(id), options: interaction.values });
     return interaction.reply({

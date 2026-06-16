@@ -1,4 +1,4 @@
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder } = require('discord.js');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType, MessageFlags, ModalBuilder, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder } = require('discord.js');
 const { can, hasRole, isOwner } = require('../config/permissions');
 const ids = require('../config/ids');
 const eventsRepo = require('../modules/events/events.repository');
@@ -248,10 +248,11 @@ async function handleButton(interaction) {
     const event = eventsRepo.getEvent(eventId);
     if (action === 'raid_role') {
       const role = extra;
-      return showModal(interaction, `event:raid_join:${eventId}:${role}`, `Raid Full - ${roleLabel(role).replace(/^[^\s]+ /, '')}`, [
-        textInput('weapon', 'Arma', true, events.raidWeaponSuggestions(role)),
-        textInput('itemPower', 'IP', true, 'Ex: 1500')
-      ]);
+      return interaction.reply({
+        content: 'Clique na arma para ver e selecionar sua build:',
+        components: [raidWeaponSelect(eventId, role)],
+        flags: MessageFlags.Ephemeral
+      });
     }
     if (action === 'raid_helper') {
       const helperName = await events.joinRaidAvalonHelper(interaction, eventId, extra);
@@ -754,11 +755,20 @@ function auctionChannelSelect(draftId) {
   );
 }
 
+function raidWeaponSelect(eventId, role) {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`event_raid_weapon_select:weapon:${eventId}:${role}`)
+      .setPlaceholder('Clique na arma para ver')
+      .addOptions(events.raidWeaponOptions(role))
+  );
+}
+
 function roleLabel(role) {
   const labels = {
     tank: '🛡️ Tank',
     healer: '💚 Healer',
-    support: '🌀 Suporte',
+    support: '🚩 Suporte',
     dps: '⚔️ DPS'
   };
   return labels[role] || role;
