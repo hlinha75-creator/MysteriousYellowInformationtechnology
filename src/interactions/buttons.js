@@ -58,7 +58,7 @@ async function handleButton(interaction) {
       textInput('title', 'Titulo', false, 'Padrao: FastContent'),
       textInput('description', 'Descricao', false, 'Padrao: Pergunte na Call'),
       textInput('location', 'Local', false, 'Padrao: Pergunte na Call'),
-      textInput('scheduledTime', 'Horario UTC-3', false, 'Padrao: 10 minutos a frente'),
+      textInput('scheduledTime', 'Horario UTC', false, 'Padrao: 10 minutos a frente'),
       textInput('slots', 'Vagas Tank, Healer, Sup, DPS ex: 3,3,2,12', false, 'Padrao: 1,1,1,17')
     ]);
   }
@@ -68,7 +68,7 @@ async function handleButton(interaction) {
       return interaction.reply({ content: 'Voce nao tem permissao para criar Raid Avalon Full.', flags: MessageFlags.Ephemeral });
     }
     return showModal(interaction, 'event:create_raid_full', 'Raid Avalon Full', [
-      textInput('scheduledTime', 'Dia e hora UTC-3', true, 'Ex: hoje 20:30 ou 16/06 20:30'),
+      textInput('scheduledTime', 'Dia e hora UTC', true, 'Ex: hoje 20:30 ou 16/06 20:30'),
       textInput('location', 'Local', true, 'Ex: Martlock, Portal, HO'),
       textInput('dungeonTier', 'Tier da DG', true, 'Ex: T8.1'),
       textInput('buildTier', 'Tier da build', true, 'Ex: T8 equivalente')
@@ -259,9 +259,13 @@ async function handleButton(interaction) {
     }
     if (action === 'raid_role') {
       const role = extra;
+      const select = raidWeaponSelect(eventId, role, interaction.user.id);
+      if (!select) {
+        return interaction.reply({ content: `Nao ha vagas livres para ${roleLabel(role)}.`, flags: MessageFlags.Ephemeral });
+      }
       return interaction.reply({
         content: 'Clique na arma para ver e selecionar sua build:',
-        components: [raidWeaponSelect(eventId, role)],
+        components: [select],
         flags: MessageFlags.Ephemeral
       });
     }
@@ -766,12 +770,14 @@ function auctionChannelSelect(draftId) {
   );
 }
 
-function raidWeaponSelect(eventId, role) {
+function raidWeaponSelect(eventId, role, discordId) {
+  const options = events.raidWeaponRoleOptions(eventId, role, discordId);
+  if (!options.length) return null;
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId(`event_raid_weapon_select:weapon:${eventId}:${role}`)
-      .setPlaceholder('Clique na arma para ver')
-      .addOptions(events.raidWeaponOptions(role))
+      .setPlaceholder(`Escolher ${roleLabel(role)}`)
+      .addOptions(options)
   );
 }
 

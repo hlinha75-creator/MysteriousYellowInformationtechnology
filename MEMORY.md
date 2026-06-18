@@ -627,11 +627,16 @@ Interface de eventos:
 - ao iniciar evento, a sala de voz usa o titulo do evento como nome.
 - simulador HTML usa imagens locais em `dashboard/assets/event-icons`;
 - para usar as mesmas imagens no bot real do Discord em botoes/textos, enviar como emojis personalizados do servidor e cadastrar os IDs no codigo.
-- Raid Avalon Full usa botao `Escolher vaga`;
-- `Escolher vaga` abre menu com slots especificos livres;
-- slots de Raid Avalon: Tank Martelo/Incubus/Quebra, Healer Hallow/Fallen/Raiz, Suporte SC/Danacao/Enig, DPS Repetidor 1/LC/Chill/Repetidor 2-9;
+- Raid Avalon Full usa botoes por funcao: Tank, Healer, Suporte, DPS;
+- ao clicar numa funcao, abre menu com slots especificos livres daquela funcao;
+- slots de Raid Avalon: Tank Martelo/Incubus/Quebra Reinos, Healer Hallow/Fallen/Raiz, Suporte SC/Danacao/Enig, DPS Aguia/Uivo Frio/Furabruma/Repetidor 1-8;
 - uma vaga de arma nao pode ser ocupada por duas pessoas ao mesmo tempo;
 - se o usuario ja tinha uma vaga, escolher outra troca a vaga dele.
+- novo anuncio de Raid Avalon deve ser compacto, sem duplicar DG/build/local em campos separados;
+- botoes da Raid Avalon ficam em linhas: Tank/Healer/Suporte/DPS, depois Assistir/Scout/Looter/Uper, depois gerenciamento;
+- emojis personalizados cadastrados no codigo para Tank, Healer, Support, DPS, Martelo, Incubus, RealBreaker, QuesaSanta, Fallen, Iron, Shadow, Damnation, Enig, LightCaller, Chill e Repetidor;
+- falta confirmar/cadastrar ID do emoji Furabruma;
+- IDs enviados para Shadow/Damnation/Enig sao iguais aos de QuesaSanta/Fallen/Iron e podem precisar correcao.
 
 Antes de terminar uma alteracao:
 - rodar `node --check` nos arquivos JS alterados;

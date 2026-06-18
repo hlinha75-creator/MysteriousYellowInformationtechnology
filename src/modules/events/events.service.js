@@ -16,18 +16,48 @@ const { formatSilver } = require('../../utils/silver');
 const { backupDatabase } = require('../../database/backup');
 
 const roleConfigs = {
-  tank: { label: '🛡️ Tank', slots: 'tank_slots', style: ButtonStyle.Primary },
-  healer: { label: '💚 Healer', slots: 'healer_slots', style: ButtonStyle.Success },
-  support: { label: '🚩 Suporte', slots: 'support_slots', style: ButtonStyle.Secondary },
-  dps: { label: '⚔️ DPS', slots: 'dps_slots', style: ButtonStyle.Danger }
+  tank: { label: 'Tank', slots: 'tank_slots', style: ButtonStyle.Primary },
+  healer: { label: 'Healer', slots: 'healer_slots', style: ButtonStyle.Success },
+  support: { label: 'Suporte', slots: 'support_slots', style: ButtonStyle.Secondary },
+  dps: { label: 'DPS', slots: 'dps_slots', style: ButtonStyle.Danger }
 };
 const eventRoles = Object.keys(roleConfigs);
+const emojiRefs = {
+  role: {
+    tank: { name: 'Tank', id: '1517095771659436153' },
+    healer: { name: 'Healer', id: '1517096201915334829' },
+    support: { name: 'Support', id: '1517095620769349662' },
+    dps: { name: 'DPS', id: '1517096370412982423' }
+  },
+  weapon: {
+    martelo: { name: 'Martelo', id: '1517096973352702032' },
+    incubus: { name: 'Incubus', id: '1517096493457342474' },
+    quebra: { name: 'RealBreaker', id: '1517097073768665180' },
+    quebra_reinos: { name: 'RealBreaker', id: '1517097073768665180' },
+    hallow: { name: 'QuesaSanta', id: '1517097701148459131' },
+    queda_santa: { name: 'QuesaSanta', id: '1517097701148459131' },
+    fallen: { name: 'Fallen', id: '1517097839107379211' },
+    raiz: { name: 'Iron', id: '1517098127490940968' },
+    raiz_ferrea: { name: 'Iron', id: '1517098127490940968' },
+    sc: { name: 'Shadow', id: '1517097701148459131' },
+    shadow_caller: { name: 'Shadow', id: '1517097701148459131' },
+    danacao: { name: 'Damnation', id: '1517097839107379211' },
+    damnation: { name: 'Damnation', id: '1517097839107379211' },
+    enig: { name: 'Enig', id: '1517098127490940968' },
+    enigmatico: { name: 'Enig', id: '1517098127490940968' },
+    aguia: { name: 'LightCaller', id: '1517098287251853312' },
+    lc: { name: 'LightCaller', id: '1517098287251853312' },
+    uivo_frio: { name: 'Chill', id: '1517098366155227279' },
+    chill: { name: 'Chill', id: '1517098366155227279' },
+    repetidor: { name: 'Repetidor', id: '1517098209749766255' }
+  }
+};
 const raidAvalonSlots = { tank: 3, healer: 3, support: 3, dps: 11 };
 const raidAvalonWeaponSlots = {
-  tank: ['Martelo', 'Incubus', 'Quebra'],
+  tank: ['Martelo', 'Incubus', 'Quebra Reinos'],
   healer: ['Hallow', 'Fallen', 'Raiz'],
   support: ['SC', 'Danacao', 'Enig'],
-  dps: ['Repetidor 1', 'LC', 'Chill', 'Repetidor 2', 'Repetidor 3', 'Repetidor 4', 'Repetidor 5', 'Repetidor 6', 'Repetidor 7', 'Repetidor 8', 'Repetidor 9']
+  dps: ['Aguia', 'Uivo Frio', 'Furabruma', 'Repetidor 1', 'Repetidor 2', 'Repetidor 3', 'Repetidor 4', 'Repetidor 5', 'Repetidor 6', 'Repetidor 7', 'Repetidor 8']
 };
 const raidAvalonWeapons = Object.fromEntries(
   Object.entries(raidAvalonWeaponSlots).map(([role, weapons]) => [role, [...new Set(weapons)]])
@@ -120,6 +150,10 @@ const raidAvalonWeaponInfo = {
   mistpiercer: {
     iconUrl: 'https://render.albiononline.com/v1/item/T8_2H_BOW_AVALON.png?count=1&quality=1',
     buildUrl: 'https://prnt.sc/rMl0DPRnsss7'
+  },
+  furabruma: {
+    iconUrl: 'https://render.albiononline.com/v1/item/T8_2H_BOW_AVALON.png?count=1&quality=1',
+    buildUrl: 'https://prnt.sc/rMl0DPRnsss7'
   }
 };
 const raidAvalonHelpers = {
@@ -132,12 +166,6 @@ function eventEmbed(event, participants = []) {
   const count = (role) => participants.filter((p) => p.role === role && !p.is_spectator).length;
   const elapsed = event.started_at ? formatDuration(Math.floor((Date.now() - Date.parse(event.started_at)) / 1000)) : '0m';
   const raidMeta = repo.getRaidAvalonEventMeta(event.id);
-  const raidFields = raidMeta
-    ? [
-      { name: 'Tier DG', value: raidMeta.dungeon_tier || 'Nao informado', inline: true },
-      { name: 'Tier Build', value: raidMeta.build_tier || 'Nao informado', inline: true }
-    ]
-    : [];
   const embed = new EmbedBuilder()
     .setTitle(formatEventTitle(event.title))
     .setColor(event.status === 'running' ? 0x38a169 : event.status === 'cancelled' ? 0xe53e3e : 0x3182ce)
@@ -145,23 +173,19 @@ function eventEmbed(event, participants = []) {
 
   if (raidMeta) {
     const fields = [
-      { name: 'Status', value: statusLabel(event.status), inline: true },
-      { name: 'Local', value: event.location || 'Nao informado', inline: true },
-      { name: 'Horario UTC-3', value: event.scheduled_time || 'Nao informado', inline: true },
-      ...raidFields,
       ...eventRoles.map((role) => ({
         name: `${roleStatsLabel(role)} ${count(role)}/${event[roleConfigs[role].slots]}`,
         value: roleOccupants(event, participants, role),
-        inline: true
+        inline: false
       })),
       { name: 'Auxiliares', value: raidHelpersSummary(participants), inline: false }
     ];
     if (event.status === 'running') {
-      fields.splice(1, 0, { name: 'Tempo em andamento', value: elapsed, inline: true });
-      fields.push({ name: 'Voz', value: event.voice_channel_id ? `<#${event.voice_channel_id}>` : 'Sala em criacao', inline: true });
+      fields.unshift({ name: 'Tempo em andamento', value: elapsed, inline: true });
     }
     return embed
-      .setDescription(`**${event.description || 'Raid Avalon Full'}**\nCriador: <@${event.creator_id}>`)
+      .setTitle(raidAnnouncementTitle(raidMeta))
+      .setDescription(raidAnnouncementDescription(event))
       .addFields(fields);
   }
 
@@ -170,7 +194,6 @@ function eventEmbed(event, participants = []) {
       .setDescription(`**${event.description || 'Evento em andamento'}**\nCriador: <@${event.creator_id}>\n${statusLabel(event.status)} | ${event.location || 'Local nao informado'} | ${event.scheduled_time || 'Horario nao informado'}`)
       .addFields(
         { name: 'Tempo em andamento', value: elapsed, inline: true },
-        ...raidFields,
         { name: 'Vagas', value: eventRoles.map((role) => `${roleStatsLabel(role)} ${count(role)}/${event[roleConfigs[role].slots]}`).join(' | '), inline: false },
         { name: 'Participantes', value: runningParticipantsSummary(participants), inline: false },
         { name: 'Voz', value: event.voice_channel_id ? `<#${event.voice_channel_id}>` : 'Sala em criacao', inline: true }
@@ -182,8 +205,7 @@ function eventEmbed(event, participants = []) {
     .addFields(
       { name: 'Status', value: statusLabel(event.status), inline: true },
       { name: 'Local', value: event.location || 'Nao informado', inline: true },
-      { name: 'Horario UTC-3', value: event.scheduled_time || 'Nao informado', inline: true },
-      ...raidFields,
+      { name: 'Horario UTC', value: event.scheduled_time || 'Nao informado', inline: true },
       ...eventRoles.map((role) => ({
         name: `${roleStatsLabel(role)} ${count(role)}/${event[roleConfigs[role].slots]}`,
         value: roleOccupants(event, participants, role),
@@ -219,8 +241,11 @@ function raidRoleSlotsSummary(participants, role) {
   const lines = (raidAvalonWeaponSlots[role] || []).map((weapon) => {
     const key = weaponKey(weapon);
     const match = remaining.get(key)?.shift();
-    if (!match) return `🔴 ${weapon}`;
-    return `🟢 <@${match.participant.discord_id}> | IP ${match.raid.item_power || '?'}`;
+    const label = `${weaponEmoji(weapon)} ${weapon}`.trim();
+    if (!match) return `${label} Livre`;
+    const career = repo.getRaidAvalonCareer({ discordId: match.participant.discord_id, weaponKey: match.raid.weapon_key });
+    const count = career?.points || 0;
+    return `${label} <@${match.participant.discord_id}> | ${match.raid.item_power || '?'} IP (${count})`;
   });
 
   return lines.join('\n') || 'Vazio';
@@ -280,7 +305,13 @@ function eventComponents(event) {
   const isRaid = isRaidAvalonEvent(event);
   if (isRaid) {
     rows.push(new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`event:raid_slot:${event.id}`).setLabel('Escolher vaga').setStyle(ButtonStyle.Success),
+      eventRoles.map((role) => new ButtonBuilder()
+        .setCustomId(`event:raid_role:${event.id}:${role}`)
+        .setLabel(roleButtonLabel(role))
+        .setEmoji(roleButtonEmoji(role))
+        .setStyle(roleConfigs[role].style))
+    ));
+    rows.push(new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId(`event:spectate:${event.id}`).setLabel('Assistir').setStyle(ButtonStyle.Secondary),
       ...Object.entries(raidAvalonHelpers).map(([key, label]) => new ButtonBuilder()
         .setCustomId(`event:raid_helper:${event.id}:${key}`)
@@ -939,7 +970,10 @@ function dedupeOverwrites(overwrites) {
 
 function roleLabel(role) {
   const labels = {
-    ...Object.fromEntries(Object.entries(roleConfigs).map(([key, config]) => [key, config.label])),
+    tank: `${roleEmoji('tank')} Tank`,
+    healer: `${roleEmoji('healer')} Healer`,
+    support: `${roleEmoji('support')} Suporte`,
+    dps: `${roleEmoji('dps')} DPS`,
     spectator: '👁️ Espectador',
     scout: 'Scout',
     looter: 'Looter',
@@ -950,10 +984,10 @@ function roleLabel(role) {
 
 function roleStatsLabel(role) {
   const labels = {
-    tank: '🔵 Tank',
-    healer: '🟢 Healer',
-    support: '🟡 Suporte',
-    dps: '🔴 DPS'
+    tank: `${roleEmoji('tank')} Tank`,
+    healer: `${roleEmoji('healer')} Healer`,
+    support: `${roleEmoji('support')} Suporte`,
+    dps: `${roleEmoji('dps')} DPS`
   };
   return labels[role] || roleLabel(role);
 }
@@ -962,24 +996,60 @@ function roleButtonLabel(role) {
   const labels = {
     tank: 'Tank',
     healer: 'Healer',
-    support: '🟡 Suporte',
+    support: 'Suporte',
     dps: 'DPS'
   };
   return labels[role] || role;
 }
 
 function roleButtonEmoji(role) {
-  const emojis = {
-    tank: '🛡️',
-    healer: '💚',
-    support: '🚩',
-    dps: '⚔️'
-  };
-  return emojis[role] || undefined;
+  return emojiRefs.role[role] || undefined;
 }
 
 function formatEventTitle(title) {
   return String(title || 'EVENTO').toLocaleUpperCase('pt-BR');
+}
+
+function roleEmoji(role) {
+  return formatCustomEmoji(emojiRefs.role[role]) || roleConfigs[role]?.label || role;
+}
+
+function weaponEmoji(weapon) {
+  const key = raidWeaponInfoKey(null, weapon);
+  return formatCustomEmoji(emojiRefs.weapon[key]) || '';
+}
+
+function formatCustomEmoji(ref) {
+  if (!ref?.name || !ref?.id) return '';
+  return `<:${ref.name}:${ref.id}>`;
+}
+
+function raidAnnouncementTitle(raidMeta) {
+  const dungeon = raidMeta?.dungeon_tier || '?';
+  const build = raidMeta?.build_tier || '?';
+  return `RAID FULL ${dungeon} COM BUILD ${build}`.toLocaleUpperCase('pt-BR');
+}
+
+function raidAnnouncementDescription(event) {
+  return [
+    `<@${event.creator_id}> · ${formatRaidSchedule(event.scheduled_time)}`,
+    `We mass from ${event.location || 'local nao informado'}`,
+    'Obs: Se tem duvida ou precisa de build vem 30 min cedo pro PORTAL DE MARTLOCK.'
+  ].join('\n');
+}
+
+function formatRaidSchedule(value) {
+  const time = String(value || '').trim() || 'horario nao informado';
+  const startAt = parseUtcMinus3EventTime(time);
+  if (!startAt) return time;
+  const diffMs = startAt.getTime() - Date.now();
+  const absMinutes = Math.max(0, Math.round(Math.abs(diffMs) / 60000));
+  const hours = Math.floor(absMinutes / 60);
+  const minutes = absMinutes % 60;
+  const relative = hours > 0
+    ? `${hours} hora${hours === 1 ? '' : 's'}${minutes ? ` e ${minutes} min` : ''}`
+    : `${minutes} min`;
+  return `Hoje as ${time} (${diffMs >= 0 ? 'em' : 'ha'} ${relative})`;
 }
 
 function isRaidAvalonEvent(event) {
@@ -1012,6 +1082,24 @@ function raidWeaponOptions(role) {
     label: weapon,
     value: weaponKey(weapon)
   }));
+}
+
+function raidWeaponRoleOptions(eventId, role, discordId) {
+  const occupied = new Map();
+  for (const participant of repo.listRaidAvalonParticipants(eventId)) {
+    if (participant.weapon_key) occupied.set(participant.weapon_key, participant.discord_id);
+  }
+
+  return (raidAvalonWeaponSlots[role] || []).map((weapon) => {
+    const key = weaponKey(weapon);
+    const owner = occupied.get(key);
+    if (owner && owner !== discordId) return null;
+    return {
+      label: weapon,
+      value: key,
+      description: owner === discordId ? 'Sua vaga atual' : 'Livre'
+    };
+  }).filter(Boolean);
 }
 
 function raidWeaponSlotOptions(eventId, discordId) {
@@ -1127,10 +1215,10 @@ async function refreshRaidAvalonCareerPanel(client) {
 
 function statusLabel(status) {
   const labels = {
-    created: '🟦 Aberto',
+    created: '🟢 Aberto',
     running: '🟢 Em andamento',
     review: '🟡 Em revisao',
-    pending_payment: '🟠 Pendente financeiro',
+    pending_payment: '🟡 Pendente financeiro',
     approved: '✅ Finalizado',
     cancelled: '🔴 Cancelado'
   };
@@ -1250,6 +1338,7 @@ module.exports = {
   raidWeaponIconUrl,
   raidWeaponName,
   raidWeaponOptions,
+  raidWeaponRoleOptions,
   raidWeaponSlotOptions,
   raidWeaponSuggestions,
   refreshEventMessage,
