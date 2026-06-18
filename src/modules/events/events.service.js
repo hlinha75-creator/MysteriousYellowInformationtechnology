@@ -24,10 +24,10 @@ const roleConfigs = {
 const eventRoles = Object.keys(roleConfigs);
 const raidAvalonSlots = { tank: 3, healer: 3, support: 3, dps: 11 };
 const raidAvalonWeaponSlots = {
-  tank: ['Martelo', 'Incubus', 'Quebra Reinos'],
-  healer: ['Queda Santa', 'Corrompido', 'Raiz Ferrea'],
-  support: ['Shadow Caller', 'Danacao', 'Enigmatico'],
-  dps: ['Repetidor', 'Aguia', 'Uivo Frio', 'Mist / Repetidor', 'Mist / Repetidor', 'Mist / Repetidor', 'Mist / Repetidor', 'Mist / Repetidor', 'Mist / Repetidor', 'Mist / Repetidor', 'Mist / Repetidor']
+  tank: ['Martelo', 'Incubus', 'Quebra'],
+  healer: ['Hallow', 'Fallen', 'Raiz'],
+  support: ['SC', 'Danacao', 'Enig'],
+  dps: ['Repetidor 1', 'LC', 'Chill', 'Repetidor 2', 'Repetidor 3', 'Repetidor 4', 'Repetidor 5', 'Repetidor 6', 'Repetidor 7', 'Repetidor 8', 'Repetidor 9']
 };
 const raidAvalonWeapons = Object.fromEntries(
   Object.entries(raidAvalonWeaponSlots).map(([role, weapons]) => [role, [...new Set(weapons)]])
@@ -45,7 +45,15 @@ const raidAvalonWeaponInfo = {
     iconUrl: 'https://render.albiononline.com/v1/item/T8_2H_AXE_AVALON.png?count=1&quality=1',
     buildUrl: 'https://prnt.sc/mn4C8rnsSsaY'
   },
+  quebra: {
+    iconUrl: 'https://render.albiononline.com/v1/item/T8_2H_AXE_AVALON.png?count=1&quality=1',
+    buildUrl: 'https://prnt.sc/mn4C8rnsSsaY'
+  },
   queda_santa: {
+    iconUrl: 'https://render.albiononline.com/v1/item/T8_MAIN_HOLYSTAFF_AVALON.png?count=1&quality=1',
+    buildUrl: 'https://prnt.sc/LOnzuabDHwiE'
+  },
+  hallow: {
     iconUrl: 'https://render.albiononline.com/v1/item/T8_MAIN_HOLYSTAFF_AVALON.png?count=1&quality=1',
     buildUrl: 'https://prnt.sc/LOnzuabDHwiE'
   },
@@ -53,11 +61,23 @@ const raidAvalonWeaponInfo = {
     iconUrl: 'https://render.albiononline.com/v1/item/T8_2H_HOLYSTAFF_HELL.png?count=1&quality=1',
     buildUrl: 'https://prnt.sc/J7lD2RLeVkti'
   },
+  fallen: {
+    iconUrl: 'https://render.albiononline.com/v1/item/T8_2H_HOLYSTAFF_HELL.png?count=1&quality=1',
+    buildUrl: 'https://prnt.sc/J7lD2RLeVkti'
+  },
   raiz_ferrea: {
     iconUrl: 'https://render.albiononline.com/v1/item/T8_MAIN_NATURESTAFF_AVALON.png?count=1&quality=1',
     buildUrl: 'https://prnt.sc/tbnvRFhoZPaG'
   },
+  raiz: {
+    iconUrl: 'https://render.albiononline.com/v1/item/T8_MAIN_NATURESTAFF_AVALON.png?count=1&quality=1',
+    buildUrl: 'https://prnt.sc/tbnvRFhoZPaG'
+  },
   shadow_caller: {
+    iconUrl: 'https://render.albiononline.com/v1/item/T8_MAIN_CURSEDSTAFF_AVALON.png?count=1&quality=1',
+    buildUrl: 'https://prnt.sc/mpbQ1v8vgR-f'
+  },
+  sc: {
     iconUrl: 'https://render.albiononline.com/v1/item/T8_MAIN_CURSEDSTAFF_AVALON.png?count=1&quality=1',
     buildUrl: 'https://prnt.sc/mpbQ1v8vgR-f'
   },
@@ -69,6 +89,10 @@ const raidAvalonWeaponInfo = {
     iconUrl: 'https://render.albiononline.com/v1/item/T8_2H_ENIGMATICSTAFF.png?count=1&quality=1',
     buildUrl: 'https://prnt.sc/sYmochYnSwfo'
   },
+  enig: {
+    iconUrl: 'https://render.albiononline.com/v1/item/T8_2H_ENIGMATICSTAFF.png?count=1&quality=1',
+    buildUrl: 'https://prnt.sc/sYmochYnSwfo'
+  },
   repetidor: {
     iconUrl: 'https://render.albiononline.com/v1/item/T8_2H_REPEATINGCROSSBOW_UNDEAD.png?count=1&quality=1',
     buildUrl: 'https://prnt.sc/zJhF3t_ePQIb'
@@ -77,7 +101,15 @@ const raidAvalonWeaponInfo = {
     iconUrl: 'https://render.albiononline.com/v1/item/T8_2H_SHAPESHIFTER_AVALON.png?count=1&quality=1',
     buildUrl: 'https://prnt.sc/GPBXB_qGTYTD'
   },
+  lc: {
+    iconUrl: 'https://render.albiononline.com/v1/item/T8_2H_SHAPESHIFTER_AVALON.png?count=1&quality=1',
+    buildUrl: 'https://prnt.sc/GPBXB_qGTYTD'
+  },
   uivo_frio: {
+    iconUrl: 'https://render.albiononline.com/v1/item/T8_MAIN_FROSTSTAFF_AVALON.png?count=1&quality=1',
+    buildUrl: 'https://prnt.sc/wekmGkxwXrl0'
+  },
+  chill: {
     iconUrl: 'https://render.albiononline.com/v1/item/T8_MAIN_FROSTSTAFF_AVALON.png?count=1&quality=1',
     buildUrl: 'https://prnt.sc/wekmGkxwXrl0'
   },
@@ -246,23 +278,23 @@ function eventComponents(event) {
 
   const rows = [];
   const isRaid = isRaidAvalonEvent(event);
-  if (event.status === 'created' || (event.status === 'running' && isRaid)) {
+  if (isRaid) {
+    rows.push(new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`event:raid_slot:${event.id}`).setLabel('Escolher vaga').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`event:spectate:${event.id}`).setLabel('Assistir').setStyle(ButtonStyle.Secondary),
+      ...Object.entries(raidAvalonHelpers).map(([key, label]) => new ButtonBuilder()
+        .setCustomId(`event:raid_helper:${event.id}:${key}`)
+        .setLabel(label)
+        .setStyle(ButtonStyle.Secondary))
+    ));
+  } else if (event.status === 'created') {
     rows.push(new ActionRowBuilder().addComponents(
       eventRoles.map((role) => new ButtonBuilder()
-        .setCustomId(`${isRaid ? 'event:raid_role' : 'event:join_role'}:${event.id}:${role}`)
+        .setCustomId(`event:join_role:${event.id}:${role}`)
         .setLabel(roleButtonLabel(role))
         .setEmoji(roleButtonEmoji(role))
         .setStyle(roleConfigs[role].style))
     ));
-    if (isRaid) {
-      rows.push(new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`event:spectate:${event.id}`).setLabel('Assistir').setStyle(ButtonStyle.Secondary),
-        ...Object.entries(raidAvalonHelpers).map(([key, label]) => new ButtonBuilder()
-          .setCustomId(`event:raid_helper:${event.id}:${key}`)
-          .setLabel(label)
-          .setStyle(ButtonStyle.Secondary))
-      ));
-    }
   }
 
   const buttons = event.status === 'running'
@@ -381,11 +413,16 @@ async function joinRaidAvalonRole(interaction, { eventId, role, weapon, itemPowe
   if (!event || ['cancelled', 'approved'].includes(event.status)) throw new Error('Evento indisponivel.');
   if (!repo.getRaidAvalonEventMeta(eventId)) throw new Error('Esse evento nao e uma Raid Avalon Full.');
   const normalizedWeapon = normalizeRaidWeapon(role, weapon);
+  const normalizedWeaponKey = weaponKey(normalizedWeapon);
+  const occupied = repo
+    .listRaidAvalonParticipants(eventId)
+    .find((participant) => participant.weapon_key === normalizedWeaponKey && participant.discord_id !== interaction.user.id);
+  if (occupied) throw new Error(`A vaga ${normalizedWeapon} ja esta ocupada por <@${occupied.discord_id}>.`);
   repo.upsertParticipant({ eventId, discordId: interaction.user.id, role, isSpectator: 0 });
   repo.upsertRaidAvalonParticipant({
     eventId,
     discordId: interaction.user.id,
-    weaponKey: weaponKey(normalizedWeapon),
+    weaponKey: normalizedWeaponKey,
     weaponName: normalizedWeapon,
     itemPower,
     helperRole: null
@@ -977,6 +1014,24 @@ function raidWeaponOptions(role) {
   }));
 }
 
+function raidWeaponSlotOptions(eventId, discordId) {
+  const occupied = new Map();
+  for (const participant of repo.listRaidAvalonParticipants(eventId)) {
+    if (participant.weapon_key) occupied.set(participant.weapon_key, participant.discord_id);
+  }
+
+  return eventRoles.flatMap((role) => (raidAvalonWeaponSlots[role] || []).map((weapon) => {
+    const key = weaponKey(weapon);
+    const owner = occupied.get(key);
+    if (owner && owner !== discordId) return null;
+    return {
+      label: weapon,
+      value: `${role}|${key}`,
+      description: owner === discordId ? `${roleButtonLabel(role)} - sua vaga atual` : `${roleButtonLabel(role)} - livre`
+    };
+  })).filter(Boolean);
+}
+
 function raidWeaponName(role, key) {
   const match = (raidAvalonWeapons[role] || []).find((weapon) => weaponKey(weapon) === key);
   if (!match) throw new Error('Arma invalida para essa funcao.');
@@ -995,6 +1050,7 @@ function raidWeaponIconUrl(role, keyOrName) {
 
 function raidWeaponInfoKey(role, keyOrName) {
   const rawKey = weaponKey(keyOrName);
+  if (/^repetidor_\d+$/.test(rawKey)) return 'repetidor';
   const byKnownWeapon = (raidAvalonWeapons[role] || []).find((weapon) => weaponKey(weapon) === rawKey);
   return weaponKey(byKnownWeapon || keyOrName);
 }
@@ -1194,6 +1250,7 @@ module.exports = {
   raidWeaponIconUrl,
   raidWeaponName,
   raidWeaponOptions,
+  raidWeaponSlotOptions,
   raidWeaponSuggestions,
   refreshEventMessage,
   refreshRunningEventMessages,

@@ -41,6 +41,14 @@ async function handleSelect(interaction) {
     ]);
   }
 
+  if (scope === 'event_raid_weapon_select' && action === 'slot') {
+    const [role, weaponKey] = interaction.values[0].split('|');
+    const weapon = events.raidWeaponName(role, weaponKey);
+    return showModal(interaction, `event:raid_join:${id}:${role}:${weaponKey}`, `Raid Full - ${weapon}`, [
+      input('itemPower', 'IP da arma', '', 'Ex: 1500')
+    ]);
+  }
+
   if (scope === 'poll' && action === 'vote') {
     const selected = await polls.vote({ interaction, pollId: Number(id), options: interaction.values });
     return interaction.reply({

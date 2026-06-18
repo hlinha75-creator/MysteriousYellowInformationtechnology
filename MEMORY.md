@@ -625,6 +625,13 @@ Interface de eventos:
 - inscricao em evento aberto usa botoes por funcao em vez de menu select;
 - Discord nao tem botao amarelo nativo, entao Suporte usa emoji amarelo em botao cinza;
 - ao iniciar evento, a sala de voz usa o titulo do evento como nome.
+- simulador HTML usa imagens locais em `dashboard/assets/event-icons`;
+- para usar as mesmas imagens no bot real do Discord em botoes/textos, enviar como emojis personalizados do servidor e cadastrar os IDs no codigo.
+- Raid Avalon Full usa botao `Escolher vaga`;
+- `Escolher vaga` abre menu com slots especificos livres;
+- slots de Raid Avalon: Tank Martelo/Incubus/Quebra, Healer Hallow/Fallen/Raiz, Suporte SC/Danacao/Enig, DPS Repetidor 1/LC/Chill/Repetidor 2-9;
+- uma vaga de arma nao pode ser ocupada por duas pessoas ao mesmo tempo;
+- se o usuario ja tinha uma vaga, escolher outra troca a vaga dele.
 
 Antes de terminar uma alteracao:
 - rodar `node --check` nos arquivos JS alterados;

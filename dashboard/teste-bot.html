@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Teste Visual NOTAG Bot</title>
+  <link rel="stylesheet" href="teste-bot.css">
+</head>
+<body>
+  <main class="bot-shell">
+    <aside class="sidebar" aria-label="Canais">
+      <div class="guild-mark">NF</div>
+      <nav class="channel-list">
+        <button class="channel active" data-view="events">⚔️ eventos</button>
+        <button class="channel" data-view="finance">💰 financeiro</button>
+        <button class="channel" data-view="balance">💵 consultar-saldo</button>
+        <button class="channel" data-view="registration">📝 registro</button>
+        <button class="channel" data-view="admin">🛠️ painel-adm</button>
+        <button class="channel" data-view="member">🤖 assistente-geral</button>
+      </nav>
+    </aside>
+
+    <section class="main-panel">
+      <header class="topbar">
+        <div>
+          <span id="channelName"># ⚔️ eventos</span>
+          <strong>Simulador local do bot</strong>
+        </div>
+        <button id="resetDemo" class="ghost-button" type="button">Resetar teste</button>
+      </header>
+
+      <section id="eventsView" class="view active-view">
+        <article class="bot-message">
+          <div class="avatar">NF</div>
+          <div class="message-body">
+            <div class="author">NOTAG <span>APP</span></div>
+            <div id="eventEmbed" class="discord-embed event-embed"></div>
+            <div id="eventActions" class="action-area"></div>
+          </div>
+        </article>
+      </section>
+
+      <section id="financeView" class="view">
+        <article class="bot-message">
+          <div class="avatar">NF</div>
+          <div class="message-body">
+            <div class="author">NOTAG <span>APP</span></div>
+            <div id="financeEmbed" class="discord-embed finance-embed"></div>
+            <div id="financeActions" class="action-area"></div>
+          </div>
+        </article>
+      </section>
+
+      <section id="balanceView" class="view">
+        <article class="bot-message">
+          <div class="avatar">NF</div>
+          <div class="message-body">
+            <div class="author">NOTAG <span>APP</span></div>
+            <div class="discord-embed">
+              <h2>Consultar saldo</h2>
+              <p>Veja saldo, solicite saque e acompanhe historico financeiro.</p>
+              <div class="metric-row">
+                <div><span>Seu saldo</span><strong id="balanceValue">0</strong></div>
+                <div><span>Recebido total</span><strong id="receivedValue">0</strong></div>
+              </div>
+            </div>
+            <div class="action-area">
+              <button class="primary" data-action="checkBalance">Consultar</button>
+              <button class="secondary" data-action="withdraw">Solicitar saque</button>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section id="registrationView" class="view">
+        <article class="bot-message">
+          <div class="avatar">NF</div>
+          <div class="message-body">
+            <div class="author">NOTAG <span>APP</span></div>
+            <div class="discord-embed">
+              <h2>Registro</h2>
+              <p>Visitante informa o nick do Albion, ganha Convidado e fica pendente para Staff/Recrutador aprovar Membro.</p>
+              <label class="field">
+                Nick Albion
+                <input id="albionName" type="text" value="Tmaiusculo" autocomplete="off">
+              </label>
+            </div>
+            <div class="action-area">
+              <button class="success" data-action="register">Registrar nick</button>
+              <button class="primary" data-action="approveRegister">Aprovar membro</button>
+              <button class="secondary" data-action="keepGuest">Manter convidado</button>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section id="adminView" class="view">
+        <article class="bot-message">
+          <div class="avatar">NF</div>
+          <div class="message-body">
+            <div class="author">NOTAG <span>APP</span></div>
+            <div class="discord-embed">
+              <h2>Painel ADM</h2>
+              <p>Atalhos de teste para depositar saldo, exportar CSV, importar saldos e verificar pendencias.</p>
+              <div class="admin-grid">
+                <button data-action="deposit">Criar deposito</button>
+                <button data-action="exportCsv">Exportar saldos</button>
+                <button data-action="importCsv">Importar CSV</button>
+                <button data-action="verifyGuild">Verificar guilda</button>
+              </div>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section id="memberView" class="view">
+        <article class="bot-message">
+          <div class="avatar">NF</div>
+          <div class="message-body">
+            <div class="author">NOTAG <span>APP</span></div>
+            <div class="discord-embed">
+              <h2>Painel do membro</h2>
+              <p>Simula consultas rapidas, perguntas para staff, sugestoes e assistente por palavra-chave.</p>
+              <div class="admin-grid">
+                <button data-action="seasonPoints">Pontos temporada</button>
+                <button data-action="influencePoints">Pontos influencia</button>
+                <button data-action="builds">Builds PvE</button>
+                <button data-action="askStaff">Perguntar staff</button>
+                <button data-action="anonymousReport">Denuncia anonima</button>
+                <button data-action="botHelp">Conversar com bot</button>
+              </div>
+            </div>
+          </div>
+        </article>
+      </section>
+    </section>
+
+    <aside class="state-panel" aria-label="Estado do teste">
+      <section>
+        <h2>Estado</h2>
+        <dl id="stateList"></dl>
+      </section>
+      <section>
+        <h2>Log do teste</h2>
+        <ol id="demoLog" class="log-list"></ol>
+      </section>
+    </aside>
+  </main>
+
+  <dialog id="eventModal">
+    <form method="dialog" class="modal-card">
+      <header>
+        <h2>Criar Evento</h2>
+        <button value="cancel" aria-label="Fechar">×</button>
+      </header>
+      <label>Titulo <input id="eventTitle" value="FastContent"></label>
+      <label>Descricao <input id="eventDescription" value="Pergunte na Call"></label>
+      <label>Local <input id="eventLocation" value="Pergunte na Call"></label>
+      <label>Horario UTC-3 <input id="eventTime" value=""></label>
+      <label>Vagas Tank, Healer, Sup, DPS <input id="eventSlots" value="3,3,3,11"></label>
+      <menu>
+        <button value="cancel" class="secondary">Cancelar</button>
+        <button id="saveEvent" value="default" class="primary">Enviar</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <script src="teste-bot.js"></script>
+</body>
+</html>

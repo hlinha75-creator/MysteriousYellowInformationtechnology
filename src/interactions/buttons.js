@@ -246,6 +246,17 @@ async function handleButton(interaction) {
   if (scope === 'event') {
     const eventId = Number(id);
     const event = eventsRepo.getEvent(eventId);
+    if (action === 'raid_slot') {
+      const select = raidWeaponSlotSelect(eventId, interaction.user.id);
+      if (!select) {
+        return interaction.reply({ content: 'Nao ha vagas livres nesta Raid Avalon.', flags: MessageFlags.Ephemeral });
+      }
+      return interaction.reply({
+        content: 'Escolha sua vaga/arma:',
+        components: [select],
+        flags: MessageFlags.Ephemeral
+      });
+    }
     if (action === 'raid_role') {
       const role = extra;
       return interaction.reply({
@@ -761,6 +772,17 @@ function raidWeaponSelect(eventId, role) {
       .setCustomId(`event_raid_weapon_select:weapon:${eventId}:${role}`)
       .setPlaceholder('Clique na arma para ver')
       .addOptions(events.raidWeaponOptions(role))
+  );
+}
+
+function raidWeaponSlotSelect(eventId, discordId) {
+  const options = events.raidWeaponSlotOptions(eventId, discordId);
+  if (!options.length) return null;
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`event_raid_weapon_select:slot:${eventId}`)
+      .setPlaceholder('Escolher vaga da Raid Avalon')
+      .addOptions(options)
   );
 }
 

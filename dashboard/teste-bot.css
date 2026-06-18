@@ -1,0 +1,531 @@
+:root {
+  color-scheme: dark;
+  --bg: #1e1f22;
+  --side: #2b2d31;
+  --panel: #313338;
+  --embed: #2b2d31;
+  --line: #3f4248;
+  --text: #f2f3f5;
+  --muted: #b5bac1;
+  --blue: #5865f2;
+  --green: #23a55a;
+  --yellow: #f0b232;
+  --red: #da373c;
+  --cyan: #00a8fc;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 38px;
+  border: 0;
+  border-radius: 6px;
+  color: #fff;
+  background: #4e5058;
+  padding: 8px 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button:hover {
+  filter: brightness(1.08);
+}
+
+.bot-shell {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr) 260px;
+  min-height: 100vh;
+}
+
+.sidebar {
+  background: var(--side);
+  border-right: 1px solid #1a1b1e;
+  padding: 12px 8px;
+}
+
+.guild-mark {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 10px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2d7ff9, #7c3aed);
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.channel-list {
+  display: grid;
+  gap: 6px;
+}
+
+.channel {
+  min-height: 32px;
+  justify-content: start;
+  width: 100%;
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+}
+
+.channel.active,
+.channel:hover {
+  background: #404249;
+  color: #fff;
+}
+
+.main-panel {
+  min-width: 0;
+  background: var(--panel);
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  border-bottom: 1px solid var(--line);
+  padding: 8px 14px;
+}
+
+.topbar div {
+  display: grid;
+  gap: 3px;
+}
+
+.topbar span {
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.topbar strong {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.view {
+  display: none;
+  padding: 14px 12px 48px;
+}
+
+.active-view {
+  display: block;
+}
+
+.bot-message {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 8px;
+  max-width: 860px;
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 25%, #41c9ff, #3047c7 55%, #15172c);
+  border: 2px solid #7dd3fc;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.author {
+  margin-bottom: 4px;
+  color: #fff;
+  font-weight: 800;
+}
+
+.author span {
+  margin-left: 5px;
+  border-radius: 4px;
+  background: var(--blue);
+  padding: 1px 4px;
+  font-size: 11px;
+}
+
+.discord-embed {
+  max-width: 800px;
+  border-left: 4px solid var(--blue);
+  border-radius: 4px;
+  background: var(--embed);
+  padding: 10px 12px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.finance-embed {
+  border-left-color: var(--yellow);
+}
+
+.event-embed.running {
+  border-left-color: var(--green);
+}
+
+.event-embed.review {
+  border-left-color: var(--yellow);
+}
+
+.discord-embed h2,
+.state-panel h2,
+.modal-card h2 {
+  margin: 0 0 6px;
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.discord-embed p {
+  margin: 0 0 8px;
+  color: var(--muted);
+}
+
+.event-meta,
+.role-grid,
+.metric-row,
+.admin-grid {
+  display: grid;
+  gap: 6px;
+}
+
+.event-meta {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 8px 0;
+}
+
+.role-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.weapon-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.role-card,
+.weapon-card,
+.event-meta div,
+.metric-row div {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 7px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.role-card strong,
+.event-meta span,
+.metric-row span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.role-card b,
+.event-meta b,
+.metric-row strong {
+  display: block;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+}
+
+.role-card {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+}
+
+.role-card b {
+  grid-column: 1 / -1;
+}
+
+.role-card img,
+.weapon-card img,
+button img {
+  display: block;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.weapon-card {
+  display: grid;
+  place-items: center;
+  gap: 3px;
+  min-height: 64px;
+  padding: 5px 3px;
+  text-align: center;
+  color: #fff;
+}
+
+.weapon-card img {
+  width: 34px;
+  height: 34px;
+}
+
+.weapon-card span {
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.weapon-card strong {
+  max-width: 100%;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.weapon-card.free {
+  outline: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.weapon-card.busy {
+  filter: saturate(0.72);
+  opacity: 0.78;
+}
+
+.participants {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.action-area {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.primary {
+  background: var(--blue);
+}
+
+.success {
+  background: var(--green);
+}
+
+.danger {
+  background: var(--red);
+}
+
+.secondary,
+.ghost-button {
+  background: #4e5058;
+}
+
+.tank {
+  background: var(--blue);
+}
+
+.healer {
+  background: var(--green);
+}
+
+.support {
+  background: #7a5a12;
+}
+
+.dps {
+  background: var(--red);
+}
+
+.admin-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.state-panel {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  border-left: 1px solid #1a1b1e;
+  background: #232428;
+  padding: 12px;
+}
+
+.state-panel section {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #2b2d31;
+  padding: 10px;
+}
+
+dl {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+  font-size: 12px;
+  margin: 0;
+}
+
+dt {
+  color: var(--muted);
+}
+
+dd {
+  margin: 0;
+  font-weight: 800;
+  text-align: right;
+}
+
+.log-list {
+  display: grid;
+  gap: 6px;
+  max-height: 430px;
+  margin: 0;
+  padding-left: 20px;
+  color: var(--muted);
+  font-size: 12px;
+  overflow: auto;
+}
+
+.field,
+.modal-card label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+input {
+  width: 100%;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #1e1f22;
+  color: var(--text);
+  padding: 0 10px;
+}
+
+dialog {
+  width: min(560px, calc(100vw - 28px));
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+}
+
+dialog::backdrop {
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.modal-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 18px;
+}
+
+.modal-card header,
+.modal-card menu {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+}
+
+.modal-card header button {
+  width: 38px;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 28px;
+}
+
+@media (max-width: 1050px) {
+  .bot-shell {
+    grid-template-columns: 190px minmax(0, 1fr);
+  }
+
+  .state-panel {
+    grid-column: 1 / -1;
+    border-top: 1px solid #1a1b1e;
+    border-left: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .bot-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    overflow-x: auto;
+  }
+
+  .guild-mark {
+    flex: 0 0 auto;
+    margin-bottom: 0;
+  }
+
+  .channel-list {
+    display: flex;
+    min-width: max-content;
+  }
+
+  .topbar {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .view {
+    padding: 16px 12px 48px;
+  }
+
+  .bot-message {
+    grid-template-columns: 1fr;
+  }
+
+  .avatar {
+    display: none;
+  }
+
+  .event-meta,
+  .role-grid,
+  .weapon-grid,
+  .metric-row,
+  .admin-grid {
+    grid-template-columns: 1fr;
+  }
+}
