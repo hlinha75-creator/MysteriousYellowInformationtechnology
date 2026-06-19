@@ -304,10 +304,46 @@ function listRaidAvalonCareer(limit = 30) {
     .prepare(`
       SELECT *
       FROM raid_avalon_weapon_career
+      WHERE points > 0
       ORDER BY points DESC, updated_at DESC
       LIMIT ?
     `)
     .all(limit);
+}
+
+function listRaidAvalonCareerByWeapon(limit = 20) {
+  return getDatabase()
+    .prepare(`
+      SELECT
+        weapon_key,
+        weapon_name,
+        COUNT(*) AS members,
+        SUM(points) AS points
+      FROM raid_avalon_weapon_career
+      WHERE points > 0
+        AND weapon_key NOT LIKE 'classe_%'
+      GROUP BY weapon_key, weapon_name
+      ORDER BY points DESC, members DESC, weapon_name COLLATE NOCASE
+      LIMIT ?
+    `)
+    .all(limit);
+}
+
+function getPersistentMessage(key) {
+  return getDatabase().prepare('SELECT * FROM persistent_bot_messages WHERE message_key = ?').get(key);
+}
+
+function setPersistentMessage({ key, channelId, messageId }) {
+  return getDatabase()
+    .prepare(`
+      INSERT INTO persistent_bot_messages (message_key, channel_id, message_id, updated_at)
+      VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(message_key) DO UPDATE SET
+        channel_id = excluded.channel_id,
+        message_id = excluded.message_id,
+        updated_at = CURRENT_TIMESTAMP
+    `)
+    .run(key, channelId, messageId);
 }
 
 function markReviewApproved({ eventId, approvedBy }) {
@@ -340,6 +376,7 @@ module.exports = {
   getEventByVoiceChannel,
   getOpenVoiceSession,
   getParticipant,
+  getPersistentMessage,
   getRaidAvalonCareer,
   getRaidAvalonEventMeta,
   getRaidAvalonParticipant,
@@ -351,11 +388,13 @@ module.exports = {
   listPendingReminderEvents,
   listParticipants,
   listRaidAvalonCareer,
+  listRaidAvalonCareerByWeapon,
   listRaidAvalonParticipants,
   markReviewApproved,
   refreshParticipantSeconds,
   removeParticipant,
   setParticipantPayout,
+  setPersistentMessage,
   setParticipantReview,
   startVoiceSession,
   updateEvent,

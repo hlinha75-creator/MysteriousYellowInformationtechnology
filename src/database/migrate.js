@@ -600,6 +600,20 @@ const migrations = [
         );
       `);
     }
+  },
+  {
+    version: 20,
+    name: 'persistent_bot_messages',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS persistent_bot_messages (
+          message_key TEXT PRIMARY KEY,
+          channel_id TEXT NOT NULL,
+          message_id TEXT NOT NULL,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+    }
   }
 ];
 

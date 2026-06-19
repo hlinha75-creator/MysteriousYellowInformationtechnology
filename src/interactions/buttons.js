@@ -631,6 +631,14 @@ async function handleButton(interaction) {
     return interaction.reply({ content: 'Fila de pendencias atualizada.', flags: MessageFlags.Ephemeral });
   }
 
+  if (interaction.customId === 'admin:refresh_career_panel') {
+    if (!can(interaction.member, 'approvePayment')) {
+      return interaction.reply({ content: 'Sem permissao para atualizar carreira.', flags: MessageFlags.Ephemeral });
+    }
+    await events.refreshRaidAvalonCareerPanel(interaction.client);
+    return interaction.reply({ content: 'Painel de carreira atualizado.', flags: MessageFlags.Ephemeral });
+  }
+
   if (interaction.customId === 'admin:verify_pending_registrations') {
     if (!can(interaction.member, 'approveRegistration')) {
       return interaction.reply({ content: 'Voce nao tem permissao para verificar pedidos pendentes.', flags: MessageFlags.Ephemeral });

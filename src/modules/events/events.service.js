@@ -1232,6 +1232,7 @@ function raidWeaponInfoKey(role, keyOrName) {
 }
 
 async function grantRaidAvalonRewards({ guild, eventId }) {
+  repo.refreshParticipantSeconds(eventId);
   const isRaid = Boolean(repo.getRaidAvalonEventMeta(eventId));
   const participants = repo.listParticipants(eventId).filter((participant) => !participant.is_spectator);
   let granted = 0;
@@ -1294,17 +1295,78 @@ async function grantRaidAvalonRewards({ guild, eventId }) {
 async function refreshRaidAvalonCareerPanel(client) {
   const channel = await client.channels.fetch(ids.channels.adminPanel).catch(() => null);
   if (!channel) return null;
-  const rows = repo.listRaidAvalonCareer(30);
-  const lines = rows.map((row, index) => `${index + 1}. <@${row.discord_id}> | ${row.weapon_name} | ${row.points} ponto(s)`);
-  return channel.send({
+  const payload = raidAvalonCareerPanelPayload();
+  const previous = repo.getPersistentMessage('raid_avalon_career_panel');
+  let message = previous?.message_id
+    ? await channel.messages.fetch(previous.message_id).catch(() => null)
+    : null;
+
+  if (!message) {
+    message = await findExistingCareerPanelMessage(channel, client.user?.id);
+  }
+
+  if (message) {
+    await message.edit(payload);
+    repo.setPersistentMessage({ key: 'raid_avalon_career_panel', channelId: channel.id, messageId: message.id });
+    await deleteDuplicateCareerPanelMessages(channel, message.id, client.user?.id).catch(() => {});
+    return message;
+  }
+
+  const created = await channel.send(payload);
+  repo.setPersistentMessage({ key: 'raid_avalon_career_panel', channelId: channel.id, messageId: created.id });
+  return created;
+}
+
+async function findExistingCareerPanelMessage(channel, botId) {
+  const messages = await channel.messages.fetch({ limit: 50 }).catch(() => null);
+  if (!messages) return null;
+  return messages.find((message) => isCareerPanelMessage(message, botId)) || null;
+}
+
+async function deleteDuplicateCareerPanelMessages(channel, keepMessageId, botId) {
+  const messages = await channel.messages.fetch({ limit: 50 }).catch(() => null);
+  if (!messages) return;
+  const duplicates = messages.filter((message) => message.id !== keepMessageId && isCareerPanelMessage(message, botId));
+  for (const message of duplicates.values()) {
+    await message.delete().catch(() => {});
+  }
+}
+
+function isCareerPanelMessage(message, botId) {
+  if (botId && message.author?.id !== botId) return false;
+  const title = message.embeds?.[0]?.title || '';
+  return ['Raid Avalon - carreira por arma', 'Carreira geral por arma'].includes(title);
+}
+
+function raidAvalonCareerPanelPayload() {
+  const weaponRows = repo.listRaidAvalonCareerByWeapon(16);
+  const memberRows = repo.listRaidAvalonCareer(12);
+  const weaponLines = weaponRows.map((row, index) => {
+    const totalUses = Math.floor(Number(row.points || 0));
+    return `${index + 1}. ${weaponEmoji(row.weapon_name)} **${row.weapon_name}** - ${totalUses} ponto(s) | ${row.members} membro(s)`;
+  });
+  const memberLines = memberRows.map((row, index) => {
+    return `${index + 1}. <@${row.discord_id}> | ${weaponEmoji(row.weapon_name)} ${row.weapon_name} | ${row.points} ponto(s)`;
+  });
+
+  return {
     embeds: [
       new EmbedBuilder()
-        .setTitle('Raid Avalon - carreira por arma')
-        .setDescription(lines.length ? lines.join('\n') : 'Nenhum ponto registrado ainda.')
+        .setTitle('Carreira geral por arma')
+        .setDescription([
+          'Conta qualquer content aprovado no financeiro.',
+          'Regra: 30 minutos = 1 ponto na classe e 1 ponto na arma/função.',
+          '',
+          '**Armas mais usadas**',
+          weaponLines.length ? weaponLines.join('\n') : 'Nenhum ponto registrado ainda.',
+          '',
+          '**Top membros por arma**',
+          memberLines.length ? memberLines.join('\n') : 'Nenhum ponto registrado ainda.'
+        ].join('\n'))
         .setColor(0x805ad5)
         .setTimestamp(new Date())
     ]
-  });
+  };
 }
 
 function normalizeParticipantRole(role) {
@@ -1499,6 +1561,7 @@ module.exports = {
   raidWeaponSlotOptions,
   raidWeaponSuggestions,
   refreshEventMessage,
+  refreshRaidAvalonCareerPanel,
   refreshRunningEventMessages,
   removeParticipantReview,
   returnEventToReview,
