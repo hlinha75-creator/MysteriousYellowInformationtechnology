@@ -15,6 +15,7 @@ const auctions = require('../modules/auctions/auctions.service');
 const auctionsRepo = require('../modules/auctions/auctions.repository');
 const memberList = require('../modules/members/memberList.service');
 const memberPanel = require('../modules/members/memberPanel.service');
+const operations = require('../modules/operations/operations.service');
 const { formatSilver } = require('../utils/silver');
 const registration = require('../modules/registration/registration.service');
 const { safeSend } = require('../utils/discord');
@@ -131,6 +132,13 @@ async function handleButton(interaction) {
 
   if (scope === 'poll') {
     const pollId = Number(id);
+
+    if (action === 'view_names') {
+      return interaction.reply({
+        embeds: [polls.pollNamesEmbed(pollId)],
+        flags: MessageFlags.Ephemeral
+      });
+    }
 
     if (action === 'close') {
       const poll = await polls.closePoll({ interaction, pollId });
@@ -613,6 +621,14 @@ async function handleButton(interaction) {
       components: [adminRemoveBalanceUserSelect()],
       flags: MessageFlags.Ephemeral
     });
+  }
+
+  if (interaction.customId === 'admin:refresh_pending_queue') {
+    if (!can(interaction.member, 'approvePayment')) {
+      return interaction.reply({ content: 'Sem permissao para atualizar pendencias.', flags: MessageFlags.Ephemeral });
+    }
+    await operations.refreshPendingQueueMessage(interaction);
+    return interaction.reply({ content: 'Fila de pendencias atualizada.', flags: MessageFlags.Ephemeral });
   }
 
   if (interaction.customId === 'admin:verify_pending_registrations') {

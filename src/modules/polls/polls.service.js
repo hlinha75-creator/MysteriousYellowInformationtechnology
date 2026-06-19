@@ -102,6 +102,32 @@ function pollEmbed(poll) {
     .setTimestamp(new Date());
 }
 
+function pollNamesEmbed(pollId) {
+  const poll = repo.getPoll(pollId);
+  if (!poll) throw new Error('Enquete nao encontrada.');
+  const votes = repo.listVotes(poll.id);
+  const counts = tally(poll, votes);
+  const embed = new EmbedBuilder()
+    .setTitle(`Votos da enquete #${poll.id}`)
+    .setDescription(`**${poll.question}**`)
+    .setColor(0x2d3748)
+    .setTimestamp(new Date());
+
+  for (const option of poll.options.slice(0, 25)) {
+    const voters = votes
+      .filter((vote) => vote.options.includes(option))
+      .map((vote) => `<@${vote.user_id}>`);
+    const count = counts.get(option) || 0;
+    embed.addFields({
+      name: `${option} - ${count} voto(s)`,
+      value: compactMentions(voters, 950) || 'Ninguem ainda.',
+      inline: false
+    });
+  }
+
+  return embed;
+}
+
 async function ensureDailyBlackForFunPoll(client) {
   const now = new Date();
   if (now.getUTCHours() !== 10) return null;
@@ -205,6 +231,10 @@ function pollComponents(poll) {
     ),
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
+        .setCustomId(`poll:view_names:${poll.id}`)
+        .setLabel('Ver nomes')
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
         .setCustomId(`poll:close:${poll.id}`)
         .setLabel('Fechar enquete')
         .setStyle(ButtonStyle.Danger)
@@ -243,12 +273,8 @@ function pollResultsSummary(poll, votes, counts) {
   let hiddenOptions = 0;
 
   for (const option of poll.options) {
-    const voters = votes
-      .filter((vote) => vote.options.includes(option))
-      .map((vote) => `<@${vote.user_id}>`);
     const count = counts.get(option) || 0;
-    const votersText = compactMentions(voters, 650);
-    const line = `**${option}** - ${count} voto(s)\n${votersText || 'Ninguem ainda.'}`;
+    const line = `**${option}** - ${count} voto(s)`;
     const nextLength = used + line.length + (lines.length > 0 ? 2 : 0);
     if (nextLength > 3900) {
       hiddenOptions += 1;
@@ -341,5 +367,6 @@ module.exports = {
   defaultOptions,
   defaultQuestion,
   pollEmbed,
+  pollNamesEmbed,
   vote
 };

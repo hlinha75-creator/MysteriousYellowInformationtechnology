@@ -14,6 +14,7 @@ const guildVerification = require('./modules/albion/guildVerification.service');
 const faq = require('./modules/faq/faq.service');
 const balanceBackup = require('./modules/csv/balanceBackup.service');
 const polls = require('./modules/polls/polls.service');
+const operations = require('./modules/operations/operations.service');
 const { handleInteraction } = require('./interactions/router');
 
 migrate();
@@ -44,6 +45,7 @@ client.once('clientReady', () => {
   console.log(`Notag bot online como ${client.user.tag}`);
   events.cleanupExpiredReviewChannels(client).catch((error) => console.error('Falha ao limpar canais de revisao:', error));
   balanceBackup.postDailyBackupIfNeeded(client).catch((error) => console.error('Falha ao postar backup diario de saldos:', error));
+  operations.postWeeklyAlbionReminderIfNeeded(client).catch((error) => console.error('Falha ao postar lembrete semanal Albion:', error));
   setInterval(() => {
     events.refreshRunningEventMessages(client).catch((error) => console.error('Falha ao atualizar eventos em andamento:', error));
   }, 60000);
@@ -61,6 +63,9 @@ client.once('clientReady', () => {
   }, 60 * 60 * 1000);
   setInterval(() => {
     balanceBackup.postDailyBackupIfNeeded(client).catch((error) => console.error('Falha ao postar backup diario de saldos:', error));
+  }, 60 * 60 * 1000);
+  setInterval(() => {
+    operations.postWeeklyAlbionReminderIfNeeded(client).catch((error) => console.error('Falha ao postar lembrete semanal Albion:', error));
   }, 60 * 60 * 1000);
 });
 

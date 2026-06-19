@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Revisao NOTAG Bot</title>
+  <link rel="stylesheet" href="./revisao-projeto.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Painel local do ADM</p>
+        <h1>Revisao operacional do NOTAG Bot</h1>
+        <p class="summary">Mapa mental, riscos, pendencias e rotina manual para manter eventos, saldos e informacoes do Albion sob controle.</p>
+      </div>
+      <div class="status-card">
+        <span>Atualizado</span>
+        <strong>19/06/2026</strong>
+        <small>Arquivo local, sem servidor</small>
+      </div>
+    </header>
+
+    <section class="score-grid" aria-label="Indicadores principais">
+      <article>
+        <span>Prioridade</span>
+        <strong>Manutencao</strong>
+        <p>O bot funciona, mas os maiores arquivos cresceram demais.</p>
+      </article>
+      <article>
+        <span>Risco</span>
+        <strong>Horarios</strong>
+        <p>Existem rastros de UTC e UTC-3 misturados.</p>
+      </article>
+      <article>
+        <span>Seguranca</span>
+        <strong>Saldos</strong>
+        <p>Ledger + backup estao corretos, mas falta treino de restore.</p>
+      </article>
+      <article>
+        <span>Operacao</span>
+        <strong>Checklist</strong>
+        <p>Dados do Albion podem ser manuais, desde que haja lembrete.</p>
+      </article>
+    </section>
+
+    <nav class="tabs" aria-label="Areas da revisao">
+      <button class="tab active" data-view="mapa">Mapa</button>
+      <button class="tab" data-view="prioridades">Prioridades</button>
+      <button class="tab" data-view="rotina">Rotina ADM</button>
+      <button class="tab" data-view="membros">Membros</button>
+      <button class="tab" data-view="staff">Staff</button>
+      <button class="tab" data-view="limpeza">Limpeza</button>
+    </nav>
+
+    <section id="mapa" class="view active">
+      <div class="mindmap">
+        <div class="center-node">NOTAG Bot</div>
+        <article class="node node-a">
+          <h2>Eventos</h2>
+          <p>Raid, Black For-Fun, voz, loot split, revisao, temp role.</p>
+        </article>
+        <article class="node node-b">
+          <h2>Financeiro</h2>
+          <p>Saldos, ledger, saque, deposito, CSV, backup.</p>
+        </article>
+        <article class="node node-c">
+          <h2>Membros</h2>
+          <p>Registro, builds, pontos, pergunta para staff, canais visiveis.</p>
+        </article>
+        <article class="node node-d">
+          <h2>Staff</h2>
+          <p>Aprovacoes, verificacao de guilda, imports semanais, auditoria.</p>
+        </article>
+        <article class="node node-e">
+          <h2>Albion manual</h2>
+          <p>CSV/TSV de guilda, pontos de temporada, builds e anuncios.</p>
+        </article>
+        <article class="node node-f">
+          <h2>Riscos</h2>
+          <p>Arquivos grandes, horarios mistos, permissao de cargos, spam.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="prioridades" class="view">
+      <div class="toolbar">
+        <label for="riskFilter">Filtrar risco</label>
+        <select id="riskFilter">
+          <option value="todos">Todos</option>
+          <option value="critico">Critico</option>
+          <option value="alto">Alto</option>
+          <option value="medio">Medio</option>
+          <option value="baixo">Baixo</option>
+        </select>
+      </div>
+      <div id="priorityList" class="cards"></div>
+    </section>
+
+    <section id="rotina" class="view">
+      <div class="split">
+        <article class="panel">
+          <h2>Checklist semanal manual</h2>
+          <p>Use este bloco como lembrete local. Ele salva os marcados no navegador.</p>
+          <div id="weeklyChecklist" class="checklist"></div>
+        </article>
+        <article class="panel">
+          <h2>Quando mexer no Albion manualmente</h2>
+          <ul class="plain-list">
+            <li>Enviar CSV/TSV da guild para aprovar pendentes.</li>
+            <li>Atualizar pontos de temporada e influencia quando exportar do site.</li>
+            <li>Preencher links pendentes de builds PvE.</li>
+            <li>Conferir se cargos temporarios dos eventos foram apagados.</li>
+            <li>Fazer um teste de restauracao de backup antes de precisar dele.</li>
+          </ul>
+        </article>
+        <article class="panel">
+          <h2>Treino de restauracao</h2>
+          <p>Restaurar e pegar um backup antigo e abrir em uma copia local para provar que os saldos voltam. O objetivo nao e mexer no Discloud, e treinar antes de uma emergencia real.</p>
+          <ul class="plain-list">
+            <li>Baixar o backup de saldos do Discord.</li>
+            <li>Guardar uma copia do banco atual antes de qualquer teste.</li>
+            <li>Restaurar em ambiente local ou Replit de teste.</li>
+            <li>Comparar 5 membros conhecidos: saldo, nome Albion e ultima atualizacao.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section id="membros" class="view">
+      <div class="lane">
+        <article class="panel">
+          <h2>O que o membro precisa sentir</h2>
+          <p>Um caminho simples: registrar, entrar no evento, ver build, consultar saldo e pedir ajuda sem procurar em dez canais.</p>
+          <ul class="plain-list">
+            <li>Deixar o canal assistente como a porta principal de ajuda.</li>
+            <li>Usar respostas efemeras sempre que for confirmacao individual.</li>
+            <li>Manter a embed de evento clara: cargo, arma, IP, horario e quem ocupou vaga.</li>
+            <li>Mostrar avisos de erro com acao: “nao ha vaga, use Assistir”.</li>
+          </ul>
+        </article>
+        <article class="panel warning">
+          <h2>Pontos cegos para membro</h2>
+          <p>Se DM estiver fechada, o membro nao ve historico privado de saldo. Isso precisa aparecer em log ou aviso alternativo.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="staff" class="view">
+      <div class="lane">
+        <article class="panel">
+          <h2>Fila que a staff deveria ver</h2>
+          <ul class="plain-list">
+            <li>Eventos aguardando aprovacao ou devolvidos ao criador.</li>
+            <li>Saques solicitados, pagos, recusados e antigos demais.</li>
+            <li>Registros pendentes e nomes que nao bateram com a guild.</li>
+            <li>Backups criados hoje e ultimo teste de restore.</li>
+            <li>Links de builds ainda vazios.</li>
+          </ul>
+        </article>
+        <article class="panel">
+          <h2>Melhorias pequenas com grande efeito</h2>
+          <ul class="plain-list">
+            <li>Criar um comando `npm run verify` para checar JS e migracao antes do push.</li>
+            <li>Adicionar chave no `.env` para ligar/desligar Black For-Fun automatico.</li>
+            <li>Registrar falhas de DM, cargo temporario e mover membro em audit log.</li>
+            <li>Separar `buttons.js` por area: eventos, financeiro, registro, membros.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section id="limpeza" class="view">
+      <div class="cards static-cards">
+        <article>
+          <span class="badge medio">Arquivar</span>
+          <h2>Mockups antigos do dashboard</h2>
+          <p>Ha varios HTMLs de teste em `dashboard`. Guarde os que explicam decisao e arquive o resto para nao confundir.</p>
+        </article>
+        <article>
+          <span class="badge alto">Revisar</span>
+          <h2>Servidor de dashboard</h2>
+          <p>O bot nao inicia mais o dashboard, mas o codigo ainda existe. Se a ideia for apenas painel local, ele pode virar documento estatico.</p>
+        </article>
+        <article>
+          <span class="badge alto">Renomear depois</span>
+          <h2>`raid_avalon_weapon_career`</h2>
+          <p>A tabela agora representa pontos de carreira por classe/funcao em varios eventos. O nome antigo pode confundir manutencao futura.</p>
+        </article>
+        <article>
+          <span class="badge critico">Padronizar</span>
+          <h2>UTC contra UTC-3</h2>
+          <p>A interface nova fala UTC, mas documentos e mockups antigos ainda falam UTC-3. Escolha um padrao e limpe o resto.</p>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <script src="./revisao-projeto.js"></script>
+</body>
+</html>

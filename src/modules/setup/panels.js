@@ -8,6 +8,7 @@ const ids = require('../../config/ids');
 const { getDatabase } = require('../../database/connection');
 const memberList = require('../members/memberList.service');
 const memberPanel = require('../members/memberPanel.service');
+const operations = require('../operations/operations.service');
 
 const archiveEmbed = new EmbedBuilder()
   .setTitle('Arquivar')
@@ -64,17 +65,7 @@ const panels = [
   {
     type: 'admin',
     channelId: ids.channels.adminPanel,
-    embeds: [
-      new EmbedBuilder().setTitle('Painel ADM').setDescription('Acoes administrativas de saldo.').setColor(0xdd6b20),
-      archiveEmbed
-    ],
-    components: [
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('admin:remove_balance').setLabel('Retirar saldo').setStyle(ButtonStyle.Danger),
-        new ButtonBuilder().setCustomId('admin:verify_pending_registrations').setLabel('Verificar pedidos pendentes').setStyle(ButtonStyle.Secondary)
-      ),
-      ...archiveComponents
-    ]
+    dynamic: adminPanelPayload
   },
   {
     type: 'deposit',
@@ -103,6 +94,24 @@ const panels = [
     components: archiveComponents
   }
 ];
+
+function adminPanelPayload() {
+  const queue = operations.pendingQueuePayload();
+  return {
+    embeds: [
+      new EmbedBuilder().setTitle('Painel ADM').setDescription('Acoes administrativas e fila de pendencias.').setColor(0xdd6b20),
+      ...queue.embeds,
+      archiveEmbed
+    ],
+    components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('admin:remove_balance').setLabel('Retirar saldo').setStyle(ButtonStyle.Danger)
+      ),
+      ...queue.components,
+      ...archiveComponents
+    ]
+  };
+}
 
 async function upsertSetupPanels(client) {
   const db = getDatabase();

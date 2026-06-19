@@ -585,6 +585,21 @@ const migrations = [
         db.exec('ALTER TABLE events ADD COLUMN auto_started INTEGER NOT NULL DEFAULT 0');
       }
     }
+  },
+  {
+    version: 19,
+    name: 'operation_reminders',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS operation_reminders (
+          reminder_key TEXT PRIMARY KEY,
+          type TEXT NOT NULL,
+          message_id TEXT,
+          channel_id TEXT,
+          sent_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+    }
   }
 ];
 
