@@ -46,9 +46,7 @@ function pendingQueueComponents() {
     new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('admin:refresh_pending_queue').setLabel('Atualizar fila').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId('admin:refresh_career_panel').setLabel('Atualizar carreira').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('admin:verify_pending_registrations').setLabel('Verificar registros').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('csv:export_balances').setLabel('Backup saldos').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('csv:export_transactions').setLabel('Logs financeiro').setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId('admin:verify_pending_registrations').setLabel('Verificar registros').setStyle(ButtonStyle.Secondary)
     )
   ];
 }
