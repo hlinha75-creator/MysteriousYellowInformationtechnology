@@ -34,11 +34,11 @@ const emojiRefs = {
     incubus: { name: 'Incubus', id: '1517096493457342474' },
     quebra: { name: 'RealBreaker', id: '1517097073768665180' },
     quebra_reinos: { name: 'RealBreaker', id: '1517097073768665180' },
-    hallow: { name: 'QuesaSanta', id: '1517097701148459131' },
-    queda_santa: { name: 'QuesaSanta', id: '1517097701148459131' },
-    fallen: { name: 'Fallen', id: '1517097839107379211' },
-    raiz: { name: 'Iron', id: '1517098127490940968' },
-    raiz_ferrea: { name: 'Iron', id: '1517098127490940968' },
+    hallow: { name: 'QuesaSanta', id: '1481801328161329152' },
+    queda_santa: { name: 'QuesaSanta', id: '1481801328161329152' },
+    fallen: { name: 'Fallen', id: '1517097238336110742' },
+    raiz: { name: 'Iron', id: '1517097588518813767' },
+    raiz_ferrea: { name: 'Iron', id: '1517097588518813767' },
     sc: { name: 'Shadow', id: '1517097701148459131' },
     shadow_caller: { name: 'Shadow', id: '1517097701148459131' },
     danacao: { name: 'Damnation', id: '1517097839107379211' },
@@ -49,6 +49,7 @@ const emojiRefs = {
     lc: { name: 'LightCaller', id: '1517098287251853312' },
     uivo_frio: { name: 'Chill', id: '1517098366155227279' },
     chill: { name: 'Chill', id: '1517098366155227279' },
+    furabruma: { name: 'Furabruma', id: '1517189201232138240' },
     repetidor: { name: 'Repetidor', id: '1517098209749766255' }
   }
 };
@@ -161,6 +162,12 @@ const raidAvalonHelpers = {
   looter: 'Looter',
   uper: 'Uper'
 };
+const defaultFunctionByRole = {
+  tank: 'Incubus',
+  healer: 'Hallow',
+  support: 'SC',
+  dps: 'Furabruma'
+};
 
 function eventEmbed(event, participants = []) {
   const count = (role) => participants.filter((p) => p.role === role && !p.is_spectator).length;
@@ -242,7 +249,7 @@ function raidRoleSlotsSummary(participants, role) {
     const key = weaponKey(weapon);
     const match = remaining.get(key)?.shift();
     const label = `${weaponEmoji(weapon)} ${weapon}`.trim();
-    if (!match) return `${label} Livre`;
+    if (!match) return `${label} 🟢 Livre`;
     const career = repo.getRaidAvalonCareer({ discordId: match.participant.discord_id, weaponKey: match.raid.weapon_key });
     const count = career?.points || 0;
     return `${label} <@${match.participant.discord_id}> | ${match.raid.item_power || '?'} IP (${count})`;
@@ -312,7 +319,7 @@ function eventComponents(event) {
         .setStyle(roleConfigs[role].style))
     ));
     rows.push(new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`event:spectate:${event.id}`).setLabel('Assistir').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`event:spectate:${event.id}:raid`).setLabel('Assistir').setStyle(ButtonStyle.Secondary),
       ...Object.entries(raidAvalonHelpers).map(([key, label]) => new ButtonBuilder()
         .setCustomId(`event:raid_helper:${event.id}:${key}`)
         .setLabel(label)
@@ -331,20 +338,20 @@ function eventComponents(event) {
   const buttons = event.status === 'running'
     ? isRaid
     ? [
-      new ButtonBuilder().setCustomId(`event:pause:${event.id}`).setLabel('Pausar participação').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`event:finish:${event.id}`).setLabel('Finalizar').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId(`event:cancel:${event.id}`).setLabel('Cancelar').setStyle(ButtonStyle.Danger)
+      new ButtonBuilder().setCustomId(`event:pause:${event.id}:raid`).setLabel('Pausar participação').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`event:finish:${event.id}:raid`).setLabel('Finalizar').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`event:cancel:${event.id}:raid`).setLabel('Cancelar').setStyle(ButtonStyle.Danger)
     ]
     : [
-      new ButtonBuilder().setCustomId(`event:auto_join:${event.id}`).setLabel('Quero participar').setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId(`event:spectate:${event.id}`).setLabel('Assistir').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`event:pause:${event.id}`).setLabel('Pausar participação').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`event:finish:${event.id}`).setLabel('Finalizar').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId(`event:cancel:${event.id}`).setLabel('Cancelar').setStyle(ButtonStyle.Danger)
+      new ButtonBuilder().setCustomId(`event:auto_join:${event.id}:main`).setLabel('Quero participar').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`event:spectate:${event.id}:main`).setLabel('Assistir').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`event:pause:${event.id}:main`).setLabel('Pausar participação').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`event:finish:${event.id}:main`).setLabel('Finalizar').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`event:cancel:${event.id}:main`).setLabel('Cancelar').setStyle(ButtonStyle.Danger)
     ]
     : [
-      new ButtonBuilder().setCustomId(`event:start:${event.id}`).setLabel('Iniciar').setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId(`event:cancel:${event.id}`).setLabel('Cancelar').setStyle(ButtonStyle.Danger)
+      new ButtonBuilder().setCustomId(`event:start:${event.id}:main`).setLabel('Iniciar').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`event:cancel:${event.id}:main`).setLabel('Cancelar').setStyle(ButtonStyle.Danger)
     ];
 
   rows.push(new ActionRowBuilder().addComponents(buttons));
@@ -398,6 +405,9 @@ async function createEventFromFields(interaction, fields) {
     components: eventComponents(event)
   });
   repo.updateEvent(event.id, { message_id: message.id });
+  if (interaction.guild) {
+    await ensureEventTempRole(interaction.guild, event).catch(() => null);
+  }
 
   audit.createAuditLog({
     type: 'event_created',
@@ -432,6 +442,7 @@ async function joinEvent(interaction, eventId, role) {
   const event = repo.getEvent(eventId);
   if (!event || ['cancelled', 'approved'].includes(event.status)) throw new Error('Evento indisponivel.');
   repo.upsertParticipant({ eventId, discordId: interaction.user.id, role, isSpectator: 0 });
+  await addEventRoleToMember(interaction.guild, event, interaction.user.id).catch(() => {});
   audit.createAuditLog({ type: 'event_joined', actorId: interaction.user.id, targetId: String(eventId), afterValue: role });
   if (event.status === 'running') {
     await moveMemberToEventVoice(interaction, event);
@@ -450,6 +461,7 @@ async function joinRaidAvalonRole(interaction, { eventId, role, weapon, itemPowe
     .find((participant) => participant.weapon_key === normalizedWeaponKey && participant.discord_id !== interaction.user.id);
   if (occupied) throw new Error(`A vaga ${normalizedWeapon} ja esta ocupada por <@${occupied.discord_id}>.`);
   repo.upsertParticipant({ eventId, discordId: interaction.user.id, role, isSpectator: 0 });
+  await addEventRoleToMember(interaction.guild, event, interaction.user.id).catch(() => {});
   repo.upsertRaidAvalonParticipant({
     eventId,
     discordId: interaction.user.id,
@@ -507,6 +519,7 @@ async function spectateEvent(interaction, eventId) {
   const event = repo.getEvent(eventId);
   if (!event || !['created', 'running'].includes(event.status)) throw new Error('Evento nao esta aberto.');
   repo.upsertParticipant({ eventId, discordId: interaction.user.id, role: 'spectator', isSpectator: 1 });
+  await addEventRoleToMember(interaction.guild, event, interaction.user.id).catch(() => {});
   audit.createAuditLog({ type: 'event_spectator', actorId: interaction.user.id, targetId: String(eventId) });
   if (event.status === 'running') await moveMemberToEventVoice(interaction, event);
   await refreshEventMessage(interaction.client, eventId);
@@ -520,6 +533,36 @@ async function autoJoinRunningEvent(interaction, eventId) {
   if (!role) throw new Error('Nao ha vagas livres neste evento. Use Assistir se quiser acompanhar.');
   await joinEvent(interaction, eventId, role);
   return role;
+}
+
+async function addParticipantDirect({ guild, eventId, discordId, role }) {
+  const event = repo.getEvent(eventId);
+  if (!event) throw new Error('Evento nao encontrado.');
+  repo.upsertParticipant({ eventId, discordId, role, isSpectator: 0 });
+  await addEventRoleToMember(guild, event, discordId).catch(() => {});
+}
+
+async function autoStartBlackForFunEvents(client) {
+  const guild = await client.guilds.fetch(ids.guildId).catch(() => null);
+  if (!guild) return;
+  const events = repo.listAutoStartCandidates();
+  for (const event of events) {
+    const startAt = parseEventTime(event.scheduled_time);
+    if (!startAt) continue;
+    const msUntilStart = startAt.getTime() - Date.now();
+    if (msUntilStart > 15 * 60 * 1000 || msUntilStart < -10 * 60 * 1000) continue;
+    await startEventWithGuild({
+      client,
+      guild,
+      eventId: event.id,
+      actorId: client.user?.id || 'system'
+    }).catch((error) => console.error(`Falha ao iniciar ${event.event_code}:`, error));
+    repo.updateEvent(event.id, { auto_started: 1 });
+  }
+}
+
+function findEventByTitleAndSchedule({ title, scheduledTime }) {
+  return repo.findEventByTitleAndSchedule({ title, scheduledTime });
 }
 
 function firstAvailableRole(event, participants) {
@@ -545,11 +588,20 @@ async function moveMemberToEventVoice(interaction, event) {
 }
 
 async function startEvent(interaction, eventId) {
+  return startEventWithGuild({
+    client: interaction.client,
+    guild: interaction.guild,
+    eventId,
+    actorId: interaction.user.id
+  });
+}
+
+async function startEventWithGuild({ client, guild, eventId, actorId }) {
   const event = repo.getEvent(eventId);
   if (!event) throw new Error('Evento nao encontrado.');
   if (event.status !== 'created') throw new Error('Evento nao pode ser iniciado.');
 
-  const voice = await interaction.guild.channels.create({
+  const voice = await guild.channels.create({
     name: eventVoiceChannelName(event),
     type: ChannelType.GuildVoice,
     parent: ids.categories.activeEvents,
@@ -559,19 +611,18 @@ async function startEvent(interaction, eventId) {
   const now = new Date().toISOString();
   repo.updateEvent(eventId, { status: 'running', voice_channel_id: voice.id, started_at: now });
   const startedEvent = repo.getEvent(eventId);
-  await deleteWarningMessage(interaction.client, startedEvent).catch(() => {});
-  await removeWarningRole(interaction.guild, startedEvent).catch(() => {});
+  await deleteWarningMessage(client, startedEvent).catch(() => {});
   const participants = repo.listParticipants(eventId).filter((participant) => !participant.is_spectator);
   for (const participant of participants) {
-    const member = await interaction.guild.members.fetch(participant.discord_id).catch(() => null);
+    const member = await guild.members.fetch(participant.discord_id).catch(() => null);
     if (member?.voice?.channel) {
       await member.voice.setChannel(voice).catch(() => {});
       repo.startVoiceSession({ eventId, discordId: participant.discord_id, joinedAt: now });
     }
   }
 
-  audit.createAuditLog({ type: 'event_started', actorId: interaction.user.id, targetId: String(eventId), afterValue: voice.id });
-  await refreshEventMessage(interaction.client, eventId);
+  audit.createAuditLog({ type: 'event_started', actorId, targetId: String(eventId), afterValue: voice.id });
+  await refreshEventMessage(client, eventId);
   return voice;
 }
 
@@ -594,7 +645,6 @@ async function finishEvent(interaction, eventId) {
   await voice?.delete(`Evento ${event.event_code} finalizado`).catch(() => {});
   const reviewedEvent = repo.getEvent(eventId);
   await deleteWarningMessage(interaction.client, reviewedEvent).catch(() => {});
-  await removeWarningRole(interaction.guild, reviewedEvent).catch(() => {});
 
   audit.createAuditLog({ type: 'event_finished', actorId: interaction.user.id, targetId: String(eventId) });
   await deleteEventMessage(interaction.client, eventId);
@@ -825,6 +875,43 @@ function submitEventToFinance({ eventId, actorId }) {
   audit.createAuditLog({ type: 'event_submitted_to_finance', actorId, targetId: String(eventId), reason: event.event_code });
 }
 
+async function returnEventToReview({ client, eventId, actorId }) {
+  const event = repo.getEvent(eventId);
+  if (!event || event.status !== 'pending_payment') throw new Error('Evento nao esta pendente no financeiro.');
+  const review = repo.getReview(eventId);
+  if (!review) throw new Error('Revisao do evento nao encontrada.');
+
+  repo.updateEvent(eventId, { status: 'review' });
+  repo.upsertReview({
+    eventId,
+    lootTotal: review.loot_total,
+    repair: review.repair,
+    silverBags: review.silver_bags,
+    taxPercent: review.tax_percent,
+    netLoot: review.net_loot,
+    status: 'review'
+  });
+  repo.updateReviewMetadata(eventId, {
+    review_channel_delete_after: null
+  });
+
+  const channel = review.review_channel_id
+    ? await client.channels.fetch(review.review_channel_id).catch(() => null)
+    : null;
+  if (channel) {
+    await channel.setParent(ids.categories.activeEvents, { lockPermissions: false }).catch(() => {});
+    await channel.send({
+      content: `Evento devolvido pelo financeiro para o criador revisar. <@${event.creator_id}>`,
+      embeds: [reviewEmbed(eventId)],
+      components: reviewComponents(eventId, 'review'),
+      allowedMentions: { users: [event.creator_id] }
+    }).catch(() => {});
+  }
+
+  audit.createAuditLog({ type: 'event_payment_returned_to_review', actorId, targetId: String(eventId), reason: event.event_code });
+  return channel;
+}
+
 const approveEventPayment = transaction(({ eventId, actorId }) => {
   const event = repo.getEvent(eventId);
   if (!event || event.status !== 'pending_payment') throw new Error('Evento nao esta pendente de pagamento.');
@@ -896,7 +983,8 @@ function reviewComponents(eventId, mode = 'review') {
   if (mode === 'finance') {
     return [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`event:approve:${eventId}`).setLabel('Aprovar pagamento').setStyle(ButtonStyle.Success)
+        new ButtonBuilder().setCustomId(`event:approve:${eventId}`).setLabel('Aprovar pagamento').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`event:return_review:${eventId}`).setLabel('Recusar e devolver').setStyle(ButtonStyle.Danger)
       )
     ];
   }
@@ -1144,53 +1232,59 @@ function raidWeaponInfoKey(role, keyOrName) {
 }
 
 async function grantRaidAvalonRewards({ guild, eventId }) {
-  if (!repo.getRaidAvalonEventMeta(eventId)) return { granted: 0, points: 0, skipped: 0 };
+  const isRaid = Boolean(repo.getRaidAvalonEventMeta(eventId));
   const participants = repo.listParticipants(eventId).filter((participant) => !participant.is_spectator);
   let granted = 0;
   let points = 0;
   let skipped = 0;
 
   for (const participant of participants) {
-    const raid = repo.getRaidAvalonParticipant({ eventId, discordId: participant.discord_id });
-    if (!raid?.weapon_key || !raid?.weapon_name) {
+    const seconds = participant.manual_seconds ?? participant.calculated_seconds ?? 0;
+    const pointsToAdd = Math.floor(seconds / 1800);
+    if (pointsToAdd <= 0) {
       skipped += 1;
       continue;
     }
 
-    const member = await guild.members.fetch(participant.discord_id).catch(() => null);
-    if (!member) {
+    const role = normalizeParticipantRole(participant.role);
+    const functionName = eventFunctionName(eventId, participant);
+    if (!role || !functionName) {
       skipped += 1;
       continue;
     }
-
-    const roleName = `Raid Avalon - ${raid.weapon_name}`;
-    let role = guild.roles.cache.find((item) => item.name.toLowerCase() === roleName.toLowerCase());
-    if (!role) {
-      role = await guild.roles.create({ name: roleName, mentionable: false, reason: `Tag da arma ${raid.weapon_name} na Raid Avalon` }).catch(() => null);
-    }
-    if (!role) {
-      skipped += 1;
-      continue;
-    }
-
-    const alreadyHadTag = member.roles.cache.has(role.id);
-    if (role && !alreadyHadTag) {
-      const added = await member.roles.add(role, `Completou Raid Avalon com ${raid.weapon_name}`).then(() => true).catch(() => false);
-      if (!added) {
-        skipped += 1;
-        continue;
-      }
-      granted += 1;
-    }
-    if (alreadyHadTag) points += 1;
 
     repo.upsertRaidAvalonCareer({
       discordId: participant.discord_id,
-      weaponKey: raid.weapon_key,
-      weaponName: raid.weapon_name,
-      roleId: role?.id,
-      addPoint: alreadyHadTag
+      weaponKey: `classe_${role}`,
+      weaponName: `Classe ${roleButtonLabel(role)}`,
+      roleId: null,
+      pointsToAdd
     });
+
+    let roleId = null;
+    if (isRaid) {
+      const member = await guild.members.fetch(participant.discord_id).catch(() => null);
+      const roleName = `Raid Avalon - ${functionName}`;
+      let discordRole = guild.roles.cache.find((item) => item.name.toLowerCase() === roleName.toLowerCase());
+      if (!discordRole) {
+        discordRole = await guild.roles.create({ name: roleName, mentionable: false, reason: `Tag da funcao ${functionName} na Raid Avalon` }).catch(() => null);
+      }
+      roleId = discordRole?.id || null;
+      if (member && discordRole && !member.roles.cache.has(discordRole.id)) {
+        const added = await member.roles.add(discordRole, `Completou Raid Avalon com ${functionName}`).then(() => true).catch(() => false);
+        if (added) granted += 1;
+      }
+    }
+
+    repo.upsertRaidAvalonCareer({
+      discordId: participant.discord_id,
+      weaponKey: weaponKey(functionName),
+      weaponName: functionName,
+      roleId,
+      pointsToAdd
+    });
+
+    points += pointsToAdd * 2;
   }
 
   await refreshRaidAvalonCareerPanel(guild.client).catch(() => {});
@@ -1211,6 +1305,17 @@ async function refreshRaidAvalonCareerPanel(client) {
         .setTimestamp(new Date())
     ]
   });
+}
+
+function normalizeParticipantRole(role) {
+  return eventRoles.includes(role) ? role : null;
+}
+
+function eventFunctionName(eventId, participant) {
+  const raid = repo.getRaidAvalonParticipant({ eventId, discordId: participant.discord_id });
+  if (raid?.weapon_name) return raid.weapon_name;
+  const role = normalizeParticipantRole(participant.role);
+  return role ? defaultFunctionByRole[role] : null;
 }
 
 function statusLabel(status) {
@@ -1249,39 +1354,68 @@ function closeParticipantOpenSession(eventId, discordId, leftAt) {
 }
 
 async function checkEventStartWarnings(client) {
-  const events = repo.listPendingWarningEvents();
+  const events = repo.listPendingReminderEvents();
+  const guild = await client.guilds.fetch(ids.guildId).catch(() => null);
+  if (!guild) return;
   for (const event of events) {
-    const startAt = parseUtcMinus3EventTime(event.scheduled_time);
+    const startAt = parseEventTime(event.scheduled_time);
     if (!startAt) continue;
     const msUntilStart = startAt.getTime() - Date.now();
-    if (msUntilStart > 60000 || msUntilStart < -60000) continue;
-    await sendEventStartWarning(client, event).catch((error) => console.error(`Falha ao avisar ${event.event_code}:`, error));
+    await ensureEventTempRole(guild, event).catch(() => null);
+
+    if (!event.reminder_10_sent && msUntilStart <= 10 * 60 * 1000 && msUntilStart > 0) {
+      await sendEventReminder(client, event, 'faltam 10 minutos').catch((error) => console.error(`Falha ao avisar ${event.event_code}:`, error));
+      repo.updateEvent(event.id, { reminder_10_sent: 1 });
+    }
+
+    if (!event.reminder_start_sent && msUntilStart <= 0 && msUntilStart > -10 * 60 * 1000) {
+      await sendEventReminder(client, event, 'comecou agora').catch((error) => console.error(`Falha ao avisar ${event.event_code}:`, error));
+      repo.updateEvent(event.id, { reminder_start_sent: 1 });
+    }
+
+    if (event.warning_role_id && event.temp_role_delete_after && Date.parse(event.temp_role_delete_after) <= Date.now()) {
+      await removeWarningRole(guild, event).catch(() => {});
+    }
   }
 }
 
-async function sendEventStartWarning(client, event) {
-  const guild = await client.guilds.fetch(ids.guildId);
-  const participants = repo.listParticipants(event.id).filter((participant) => !participant.is_spectator);
-  if (participants.length === 0) {
-    repo.updateEvent(event.id, { warning_sent: 1 });
-    return;
+async function ensureEventTempRole(guild, event) {
+  if (event.warning_role_id) {
+    const role = await guild.roles.fetch(event.warning_role_id).catch(() => null);
+    if (role) return role;
   }
-
   const role = await guild.roles.create({
-    name: `Evento ${event.event_code}`,
+    name: eventTempRoleName(event),
     mentionable: true,
-    reason: `Aviso temporario do evento ${event.event_code}`
+    reason: `Tag temporaria do evento ${event.event_code}`
   });
-
+  const deleteAfter = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  repo.updateEvent(event.id, { warning_role_id: role.id, temp_role_delete_after: deleteAfter });
+  const participants = repo.listParticipants(event.id);
   for (const participant of participants) {
-    const member = await guild.members.fetch(participant.discord_id).catch(() => null);
-    await member?.roles.add(role).catch(() => {});
+    await addEventRoleToMember(guild, { ...event, warning_role_id: role.id }, participant.discord_id).catch(() => {});
+  }
+  return role;
+}
+
+async function addEventRoleToMember(guild, event, discordId) {
+  if (!event?.warning_role_id) return;
+  const member = await guild.members.fetch(discordId).catch(() => null);
+  await member?.roles.add(event.warning_role_id, `Participante do evento ${event.event_code}`).catch(() => {});
+}
+
+async function sendEventReminder(client, event, text) {
+  const guild = await client.guilds.fetch(ids.guildId);
+  const role = await ensureEventTempRole(guild, event);
+  const participants = repo.listParticipants(event.id).filter((participant) => !participant.is_spectator);
+  for (const participant of participants) {
+    await addEventRoleToMember(guild, { ...event, warning_role_id: role.id }, participant.discord_id).catch(() => {});
   }
 
-  const channel = await client.channels.fetch(ids.channels.participate);
-  const message = await channel.send(`${role} falta 1 minuto para o evento **${formatEventTitle(event.title)}** começar. O evento nao inicia automaticamente; aguardem o criador iniciar.`);
-  repo.updateEvent(event.id, { warning_role_id: role.id, warning_message_id: message.id, warning_sent: 1 });
-  audit.createAuditLog({ type: 'event_start_warning_sent', targetId: String(event.id), afterValue: role.id, reason: event.event_code });
+  const channel = await client.channels.fetch(ids.channels.notagChat);
+  const message = await channel.send(`${role} ${text} para **${formatEventTitle(event.title)}**.`);
+  repo.updateEvent(event.id, { warning_message_id: message.id, warning_sent: 1 });
+  audit.createAuditLog({ type: 'event_start_warning_sent', targetId: String(event.id), afterValue: role.id, reason: `${event.event_code}: ${text}` });
 }
 
 async function deleteWarningMessage(client, event) {
@@ -1314,8 +1448,30 @@ function parseUtcMinus3EventTime(value) {
   return startUtc;
 }
 
+function parseEventTime(value) {
+  const text = String(value || '').trim();
+  const match = text.match(/(\d{1,2}):?(\d{2})?|(\d{1,2})h/i);
+  if (!match) return null;
+  const hour = Number(match[1] || match[3]);
+  const minute = Number(match[2] || 0);
+  const now = new Date();
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hour, minute, 0));
+  if (hour <= 3 && now.getUTCHours() > 6) start.setUTCDate(start.getUTCDate() + 1);
+  return start;
+}
+
+function eventTempRoleName(event) {
+  const start = parseEventTime(event.scheduled_time) || new Date();
+  const day = String(start.getUTCDate()).padStart(2, '0');
+  const month = String(start.getUTCMonth() + 1).padStart(2, '0');
+  const hour = String(start.getUTCHours()).padStart(2, '0');
+  return `${day}${month}as${hour}h`;
+}
+
 module.exports = {
   approveEventPayment,
+  addParticipantDirect,
+  autoStartBlackForFunEvents,
   addParticipantReview,
   autoJoinRunningEvent,
   cancelEvent,
@@ -1328,6 +1484,7 @@ module.exports = {
   deleteEventMessage,
   editParticipantReview,
   finishEvent,
+  findEventByTitleAndSchedule,
   grantRaidAvalonRewards,
   joinEvent,
   joinRaidAvalonHelper,
@@ -1344,6 +1501,7 @@ module.exports = {
   refreshEventMessage,
   refreshRunningEventMessages,
   removeParticipantReview,
+  returnEventToReview,
   reviewComponents,
   reviewEmbed,
   saveLootReview,

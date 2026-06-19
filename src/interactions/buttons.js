@@ -390,9 +390,27 @@ async function handleButton(interaction) {
       await events.scheduleReviewChannelDeletion(interaction.client, eventId, 14);
       await balanceBackup.postEventBalanceBackup(interaction.client, eventId);
       const raidText = raidRewards.granted || raidRewards.points
-        ? ` Tags Raid Avalon: ${raidRewards.granted} nova(s), ${raidRewards.points} ponto(s).`
+        ? ` Carreira: ${raidRewards.points} ponto(s) registrado(s), ${raidRewards.granted} tag(s) nova(s).`
         : '';
       return interaction.editReply({ content: `Pagamento aprovado e saldos depositados.${raidText}` });
+    }
+    if (action === 'return_review') {
+      if (!can(interaction.member, 'approvePayment')) {
+        return interaction.reply({ content: 'Voce nao tem permissao para devolver evento.', flags: MessageFlags.Ephemeral });
+      }
+      const current = eventsRepo.getEvent(eventId);
+      if (!current || current.status !== 'pending_payment') {
+        await interaction.message.edit({ components: [] }).catch(() => {});
+        return interaction.reply({ content: 'Este evento nao esta pendente de pagamento. O botao foi removido.', flags: MessageFlags.Ephemeral });
+      }
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      const reviewChannel = await events.returnEventToReview({ client: interaction.client, eventId, actorId: interaction.user.id });
+      await interaction.message.edit({
+        content: `Evento #${eventId} devolvido para revisao por <@${interaction.user.id}>.${reviewChannel ? ` Revisao: <#${reviewChannel.id}>` : ''}`,
+        embeds: [events.reviewEmbed(eventId)],
+        components: []
+      }).catch(() => {});
+      return interaction.editReply({ content: `Evento devolvido para o criador revisar.${reviewChannel ? ` Canal: <#${reviewChannel.id}>` : ''}` });
     }
     if (action === 'cancel') {
       return showModal(interaction, `event:cancel_modal:${eventId}`, 'Cancelar Evento', [

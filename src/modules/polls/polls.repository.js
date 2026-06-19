@@ -1,14 +1,20 @@
 const { getDatabase } = require('../../database/connection');
 
-function createPoll({ creatorId, question, options }) {
+function createPoll({ creatorId, question, options, pollKey = null }) {
   const result = getDatabase()
-    .prepare('INSERT INTO polls (creator_id, question, options_json) VALUES (?, ?, ?)')
-    .run(creatorId, question, JSON.stringify(options));
+    .prepare('INSERT INTO polls (creator_id, question, options_json, poll_key) VALUES (?, ?, ?, ?)')
+    .run(creatorId, question, JSON.stringify(options), pollKey);
   return getPoll(result.lastInsertRowid);
 }
 
 function getPoll(id) {
   const row = getDatabase().prepare('SELECT * FROM polls WHERE id = ?').get(id);
+  if (!row) return null;
+  return { ...row, options: JSON.parse(row.options_json || '[]') };
+}
+
+function getPollByKey(pollKey) {
+  const row = getDatabase().prepare('SELECT * FROM polls WHERE poll_key = ?').get(pollKey);
   if (!row) return null;
   return { ...row, options: JSON.parse(row.options_json || '[]') };
 }
@@ -24,6 +30,20 @@ function closePoll(id) {
   getDatabase()
     .prepare("UPDATE polls SET status = 'closed', closed_at = CURRENT_TIMESTAMP WHERE id = ?")
     .run(id);
+  return getPoll(id);
+}
+
+function markStaffAlerted(id) {
+  getDatabase()
+    .prepare('UPDATE polls SET staff_alerted_at = CURRENT_TIMESTAMP WHERE id = ?')
+    .run(id);
+  return getPoll(id);
+}
+
+function setAutoEvent({ id, eventId }) {
+  getDatabase()
+    .prepare('UPDATE polls SET auto_event_id = ? WHERE id = ?')
+    .run(eventId, id);
   return getPoll(id);
 }
 
@@ -50,7 +70,10 @@ module.exports = {
   closePoll,
   createPoll,
   getPoll,
+  getPollByKey,
   listVotes,
+  markStaffAlerted,
   setPollMessage,
+  setAutoEvent,
   upsertVote
 };

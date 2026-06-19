@@ -634,9 +634,39 @@ Interface de eventos:
 - se o usuario ja tinha uma vaga, escolher outra troca a vaga dele.
 - novo anuncio de Raid Avalon deve ser compacto, sem duplicar DG/build/local em campos separados;
 - botoes da Raid Avalon ficam em linhas: Tank/Healer/Suporte/DPS, depois Assistir/Scout/Looter/Uper, depois gerenciamento;
-- emojis personalizados cadastrados no codigo para Tank, Healer, Support, DPS, Martelo, Incubus, RealBreaker, QuesaSanta, Fallen, Iron, Shadow, Damnation, Enig, LightCaller, Chill e Repetidor;
-- falta confirmar/cadastrar ID do emoji Furabruma;
+- emojis personalizados cadastrados no codigo para Tank, Healer, Support, DPS, Martelo, Incubus, RealBreaker, QuesaSanta, Fallen, Iron, Shadow, Damnation, Enig, LightCaller, Chill, Furabruma e Repetidor;
+- IDs corrigidos: QuesaSanta `1481801328161329152`, Fallen `1517097238336110742`, Iron `1517097588518813767`, Furabruma `1517189201232138240`;
+- emoji Furabruma cadastrado com ID `1517189201232138240`;
 - IDs enviados para Shadow/Damnation/Enig sao iguais aos de QuesaSanta/Fallen/Iron e podem precisar correcao.
+- pontos de carreira sao por tempo: a cada 30 minutos conta +1 ponto;
+- ao aprovar pagamento, cada participante recebe pontos na classe e na funcao/arma;
+- exemplo: 3h de Tank/Martelo = +6 em Classe Tank e +6 em Martelo;
+- em eventos comuns sem arma, usar funcao padrao: Tank=Incubus, Healer=Hallow/Queda Santa, Suporte=SC/Chama Sombra, DPS=Furabruma;
+- financeiro tem botao `Recusar e devolver`, que volta evento para revisao e reabre/avisa o canal do criador.
+
+Painel do membro / Builds:
+- botao `Builds PvE` mostra catalogo por conteudo;
+- Furabruma preenchida com img `https://prnt.sc/ShmbQMoteKMi` e detalhes `https://albionfreemarket.com/builds/details/6a33dba765245f624c119f2e`;
+- Repetidor preenchido com img `https://prnt.sc/j8TM6Ug0Qsve` e detalhes `https://albionfreemarket.com/builds/details/6a3418bb65245f624c119f56`;
+- demais builds ficam como `img pendente` e `detalhes pendente` para preencher depois.
+- botoes de evento sem parametro extra usam sufixo no custom_id (`:main` ou `:raid`) para evitar erro Discord `COMPONENT_CUSTOM_ID_DUPLICATED`.
+
+Enquete diaria Black For-Fun:
+- todo dia as 10:00 UTC o bot cria enquete no canal membro `1481363760110243910`;
+- pergunta disponibilidade entre 10h e 03h para content black "for fun";
+- membros podem escolher varios horarios;
+- ao passar de 10 votantes, menciona staff/caller/adm uma vez;
+- ao chegar em 20 votantes, cria evento normal `Black For-Fun` no horario mais votado;
+- composicao do evento automatico: Tank 2, Healer 2, Suporte 1, DPS 15;
+- interessados no horario vencedor sao adicionados no evento automaticamente;
+- 15 minutos antes do horario mais votado o bot inicia o evento e move quem estiver em voz.
+
+Tag temporaria de evento:
+- todo evento criado ganha cargo temporario mencionavel com nome `DDMMasHHh`;
+- exemplo: `1906as07h`;
+- cargo e dado aos participantes conforme entram no evento;
+- bot menciona o cargo no chat membro 10 minutos antes e novamente no horario;
+- cargo deve ser deletado automaticamente apos 24 horas.
 
 Antes de terminar uma alteracao:
 - rodar `node --check` nos arquivos JS alterados;

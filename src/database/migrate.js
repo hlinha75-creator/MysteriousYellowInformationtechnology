@@ -554,6 +554,37 @@ const migrations = [
         );
       `);
     }
+  },
+  {
+    version: 18,
+    name: 'daily_black_poll_and_event_reminders',
+    up(db) {
+      const pollColumns = db.prepare('PRAGMA table_info(polls)').all().map((column) => column.name);
+      if (!pollColumns.includes('poll_key')) {
+        db.exec('ALTER TABLE polls ADD COLUMN poll_key TEXT');
+      }
+      if (!pollColumns.includes('staff_alerted_at')) {
+        db.exec('ALTER TABLE polls ADD COLUMN staff_alerted_at TEXT');
+      }
+      if (!pollColumns.includes('auto_event_id')) {
+        db.exec('ALTER TABLE polls ADD COLUMN auto_event_id INTEGER');
+      }
+      db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_polls_poll_key ON polls (poll_key)');
+
+      const eventColumns = db.prepare('PRAGMA table_info(events)').all().map((column) => column.name);
+      if (!eventColumns.includes('reminder_10_sent')) {
+        db.exec('ALTER TABLE events ADD COLUMN reminder_10_sent INTEGER NOT NULL DEFAULT 0');
+      }
+      if (!eventColumns.includes('reminder_start_sent')) {
+        db.exec('ALTER TABLE events ADD COLUMN reminder_start_sent INTEGER NOT NULL DEFAULT 0');
+      }
+      if (!eventColumns.includes('temp_role_delete_after')) {
+        db.exec('ALTER TABLE events ADD COLUMN temp_role_delete_after TEXT');
+      }
+      if (!eventColumns.includes('auto_started')) {
+        db.exec('ALTER TABLE events ADD COLUMN auto_started INTEGER NOT NULL DEFAULT 0');
+      }
+    }
   }
 ];
 

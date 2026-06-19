@@ -11,6 +11,9 @@ const repo = require('./polls.repository');
 
 const defaultQuestion = 'Voce quer Raid Avalon hoje? Que horas?';
 const defaultOptions = ['17h', '18h', '19h', '20h', '21h', '22h', '23h'];
+const blackForFunQuestion = 'Qual horario entre 10h e 03h voce esta disponivel para um content na black "for fun"?';
+const blackForFunOptions = ['10h', '11h', '12h', '13h', '14h', '15h', '16h', '17h', '18h', '19h', '20h', '21h', '22h', '23h', '00h', '01h', '02h', '03h'];
+const botCreatorId = 'system';
 
 async function createPollFromModal(interaction) {
   const question = fieldOrDefault(interaction, 'question', defaultQuestion);
@@ -34,6 +37,7 @@ async function vote({ interaction, pollId, options }) {
   const valid = options.filter((option) => poll.options.includes(option));
   repo.upsertVote({ pollId, userId: interaction.user.id, options: valid });
   await refreshPollMessage(interaction.client, pollId);
+  await maybeHandleBlackForFunMilestones(interaction.client, pollId);
   return valid;
 }
 
@@ -96,6 +100,97 @@ function pollEmbed(poll) {
     )
     .setColor(poll.status === 'closed' ? 0x718096 : 0x3182ce)
     .setTimestamp(new Date());
+}
+
+async function ensureDailyBlackForFunPoll(client) {
+  const now = new Date();
+  if (now.getUTCHours() !== 10) return null;
+  const key = dailyBlackPollKey(now);
+  let poll = repo.getPollByKey(key);
+  if (poll) return poll;
+
+  poll = repo.createPoll({
+    creatorId: client.user?.id || botCreatorId,
+    question: blackForFunQuestion,
+    options: blackForFunOptions,
+    pollKey: key
+  });
+
+  const channel = await client.channels.fetch(ids.channels.notagChat);
+  const message = await channel.send({
+    content: `<@&${ids.roles.member}>`,
+    embeds: [pollEmbed(poll)],
+    components: pollComponents(poll),
+    allowedMentions: { roles: [ids.roles.member] }
+  });
+  repo.setPollMessage({ id: poll.id, channelId: channel.id, messageId: message.id });
+  return repo.getPoll(poll.id);
+}
+
+async function maybeHandleBlackForFunMilestones(client, pollId) {
+  const poll = repo.getPoll(pollId);
+  if (!poll?.poll_key?.startsWith('black_for_fun:') || poll.status !== 'open') return;
+  const votes = repo.listVotes(poll.id);
+  const totalVoters = votes.length;
+
+  if (totalVoters >= 10 && !poll.staff_alerted_at) {
+    const channel = await client.channels.fetch(ids.channels.notagChat).catch(() => null);
+    await channel?.send({
+      content: `${staffMentions()} enquete Black For-Fun passou de 10 membros interessados. Mais votado: ${winningOption(poll.id)?.option || 'sem votos'}.`,
+      allowedMentions: { roles: staffRoleIds() }
+    }).catch(() => {});
+    repo.markStaffAlerted(poll.id);
+  }
+
+  if (totalVoters >= 20 && !poll.auto_event_id) {
+    await createBlackForFunEvent(client, poll.id);
+  }
+}
+
+async function createBlackForFunEvent(client, pollId) {
+  const poll = repo.getPoll(pollId);
+  const winner = winningOption(poll.id);
+  if (!winner) return null;
+  const scheduledTime = winner.option.replace('h', ':00');
+  const existing = events.findEventByTitleAndSchedule?.({ title: 'Black For-Fun', scheduledTime });
+  if (existing) {
+    repo.setAutoEvent({ id: poll.id, eventId: existing.id });
+    return existing;
+  }
+
+  const guild = await client.guilds.fetch(ids.guildId);
+  const event = await events.createEventFromFields({
+    client,
+    guild,
+    user: { id: client.user?.id || botCreatorId }
+  }, {
+    creatorId: client.user?.id || botCreatorId,
+    title: 'Black For-Fun',
+    description: 'Content na black for fun criado automaticamente pela enquete diaria.',
+    location: 'Black Zone',
+    scheduledTime,
+    tankSlots: 2,
+    healerSlots: 2,
+    supportSlots: 1,
+    dpsSlots: 15
+  });
+
+  const voters = repo.listVotes(poll.id).filter((vote) => vote.options.includes(winner.option)).slice(0, 20);
+  const roles = ['tank', 'tank', 'healer', 'healer', 'support', ...Array(15).fill('dps')];
+  for (const [index, vote] of voters.entries()) {
+    events.addParticipantDirect({ guild, eventId: event.id, discordId: vote.user_id, role: roles[index] || 'dps' });
+  }
+  await events.refreshEventMessage(client, event.id);
+  repo.setAutoEvent({ id: poll.id, eventId: event.id });
+
+  const channel = await client.channels.fetch(ids.channels.notagChat).catch(() => null);
+  await channel?.send(`Evento **Black For-Fun** criado automaticamente para ${winner.option} com ${voters.length} interessado(s).`).catch(() => {});
+  return event;
+}
+
+async function checkBlackForFunAutoStart(client) {
+  await ensureDailyBlackForFunPoll(client).catch((error) => console.error('Falha ao criar enquete diaria Black For-Fun:', error));
+  await events.autoStartBlackForFunEvents(client).catch((error) => console.error('Falha ao iniciar Black For-Fun automatico:', error));
 }
 
 function pollComponents(poll) {
@@ -221,6 +316,18 @@ function mentionRoleIds() {
   ].filter(Boolean);
 }
 
+function staffRoleIds() {
+  return [ids.roles.staff, ids.roles.adm, ids.roles.caller].filter(Boolean);
+}
+
+function staffMentions() {
+  return staffRoleIds().map((roleId) => `<@&${roleId}>`).join(' ');
+}
+
+function dailyBlackPollKey(date) {
+  return `black_for_fun:${date.toISOString().slice(0, 10)}`;
+}
+
 function mentionContent() {
   return mentionRoleIds().map((roleId) => `<@&${roleId}>`).join(' ');
 }
@@ -228,6 +335,7 @@ function mentionContent() {
 module.exports = {
   closeDecisionComponents,
   closePoll,
+  checkBlackForFunAutoStart,
   createEventFromPoll,
   createPollFromModal,
   defaultOptions,

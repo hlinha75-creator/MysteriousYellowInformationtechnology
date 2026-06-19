@@ -17,6 +17,85 @@ const normalPointsPath = path.join(pointsDir, 'pontos_normais.csv');
 const seasonPointsPath = path.join(pointsDir, 'pontos_temporada.csv');
 const buildsUrl = 'https://notag.xyz/builds/pve/Raid/';
 const graphUrl = 'https://notag.xyz/S32/pizza.html';
+const buildCatalog = [
+  {
+    category: 'Padrao PVE universal',
+    items: [
+      ['Incubus'],
+      ['Queda Santa'],
+      ['Chama Sombra'],
+      ['Repetidor', 'https://prnt.sc/j8TM6Ug0Qsve', 'https://albionfreemarket.com/builds/details/6a3418bb65245f624c119f56'],
+      ['Prisma'],
+      ['Furabruma', 'https://prnt.sc/ShmbQMoteKMi', 'https://albionfreemarket.com/builds/details/6a33dba765245f624c119f2e'],
+      ['Fulgurante']
+    ]
+  },
+  {
+    category: 'Raid Full',
+    items: [
+      ['Tank Martelo'],
+      ['Tank Incubus'],
+      ['Tank Quebra Reinos'],
+      ['Healer Queda Santa'],
+      ['Healer Corrompido'],
+      ['Healer Raiz Ferrea'],
+      ['Suporte Chama Sombra'],
+      ['Suporte Danacao'],
+      ['Suporte Enig'],
+      ['DPS Aguia'],
+      ['DPS Uivo Frio'],
+      ['DPS Repetidor', 'https://prnt.sc/j8TM6Ug0Qsve', 'https://albionfreemarket.com/builds/details/6a3418bb65245f624c119f56'],
+      ['DPS Furabruma', 'https://prnt.sc/ShmbQMoteKMi', 'https://albionfreemarket.com/builds/details/6a33dba765245f624c119f2e']
+    ]
+  },
+  {
+    category: 'Raid Reduzida',
+    items: [
+      ['Tank Martelo'],
+      ['Tank Incubus'],
+      ['Healer Corrompido'],
+      ['Suporte Chama Sombra'],
+      ['Suporte Danacao'],
+      ['DPS Aguia'],
+      ['DPS Uivo Frio'],
+      ['DPS Repetidor', 'https://prnt.sc/j8TM6Ug0Qsve', 'https://albionfreemarket.com/builds/details/6a3418bb65245f624c119f56']
+    ]
+  },
+  {
+    category: 'DG Grupo',
+    items: [
+      ['Tank Incubus'],
+      ['Healer Queda Santa'],
+      ['Suporte Chama Sombra'],
+      ['DPS Repetidor', 'https://prnt.sc/j8TM6Ug0Qsve', 'https://albionfreemarket.com/builds/details/6a3418bb65245f624c119f56'],
+      ['DPS Furabruma', 'https://prnt.sc/ShmbQMoteKMi', 'https://albionfreemarket.com/builds/details/6a33dba765245f624c119f2e']
+    ]
+  },
+  {
+    category: 'Bau Dourado',
+    items: [
+      ['Tank Incubus'],
+      ['Healer Queda Santa'],
+      ['Suporte Chama Sombra'],
+      ['DPS Repetidor', 'https://prnt.sc/j8TM6Ug0Qsve', 'https://albionfreemarket.com/builds/details/6a3418bb65245f624c119f56'],
+      ['DPS Furabruma', 'https://prnt.sc/ShmbQMoteKMi', 'https://albionfreemarket.com/builds/details/6a33dba765245f624c119f2e'],
+      ['DPS Fulgurante'],
+      ['DPS Prisma']
+    ]
+  },
+  {
+    category: 'Cacada',
+    items: [
+      ['Tank Incubus'],
+      ['Healer Queda Santa'],
+      ['Suporte Chama Sombra'],
+      ['DPS Virotes'],
+      ['DPS Adaga 1H'],
+      ['DPS Susurrante'],
+      ['DPS Diabrete']
+    ]
+  }
+];
 
 function panelPayload() {
   return {
@@ -82,18 +161,24 @@ function pointsEmbed(userId, kind) {
 
 function buildsEmbed() {
   return baseEmbed('Builds PvE')
-    .setDescription(`Builds temporarias: ${buildsUrl}`)
-    .addFields({
-      name: 'Conteudos',
-      value: [
-        'Raid Avalon full',
-        'Raid reduzida',
-        'Gold Chest',
-        'DG Grupo',
-        'WorldBoss'
-      ].join('\n'),
+    .setDescription([
+      'Catalogo simples para consulta rapida.',
+      `Pagina geral temporaria: ${buildsUrl}`,
+      'Onde aparecer `pendente`, a staff ainda vai preencher os links.'
+    ].join('\n'))
+    .addFields(buildCatalog.map((section) => ({
+      name: section.category,
+      value: section.items.map(buildLine).join('\n'),
       inline: false
-    });
+    })));
+}
+
+function buildLine([name, imageUrl, detailUrl]) {
+  const links = [
+    imageUrl ? `[img](${imageUrl})` : 'img pendente',
+    detailUrl ? `[detalhes](${detailUrl})` : 'detalhes pendente'
+  ].join(' | ');
+  return `**${name}** - ${links}`;
 }
 
 function historyEmbed(userId) {

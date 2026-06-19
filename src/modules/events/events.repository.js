@@ -31,6 +31,12 @@ function getEventByVoiceChannel(voiceChannelId) {
   return getDatabase().prepare('SELECT * FROM events WHERE voice_channel_id = ? AND status = ?').get(voiceChannelId, 'running');
 }
 
+function findEventByTitleAndSchedule({ title, scheduledTime }) {
+  return getDatabase()
+    .prepare('SELECT * FROM events WHERE title = ? AND scheduled_time = ? AND status != ? ORDER BY id DESC LIMIT 1')
+    .get(title, scheduledTime, 'cancelled');
+}
+
 function listActiveEvents() {
   return getDatabase().prepare("SELECT * FROM events WHERE status = 'running'").all();
 }
@@ -38,6 +44,35 @@ function listActiveEvents() {
 function listPendingWarningEvents() {
   return getDatabase()
     .prepare("SELECT * FROM events WHERE status = 'created' AND COALESCE(warning_sent, 0) = 0 AND scheduled_time IS NOT NULL")
+    .all();
+}
+
+function listPendingReminderEvents() {
+  return getDatabase()
+    .prepare(`
+      SELECT *
+      FROM events
+      WHERE status IN ('created', 'running')
+        AND scheduled_time IS NOT NULL
+        AND (
+          COALESCE(reminder_10_sent, 0) = 0
+          OR COALESCE(reminder_start_sent, 0) = 0
+          OR (warning_role_id IS NOT NULL AND temp_role_delete_after IS NOT NULL AND temp_role_delete_after <= CURRENT_TIMESTAMP)
+        )
+    `)
+    .all();
+}
+
+function listAutoStartCandidates() {
+  return getDatabase()
+    .prepare(`
+      SELECT *
+      FROM events
+      WHERE status = 'created'
+        AND title = 'Black For-Fun'
+        AND scheduled_time IS NOT NULL
+        AND COALESCE(auto_started, 0) = 0
+    `)
     .all();
 }
 
@@ -239,7 +274,8 @@ function getRaidAvalonCareer({ discordId, weaponKey }) {
     .get(discordId, weaponKey);
 }
 
-function upsertRaidAvalonCareer({ discordId, weaponKey, weaponName, roleId, addPoint = false }) {
+function upsertRaidAvalonCareer({ discordId, weaponKey, weaponName, roleId, addPoint = false, pointsToAdd = null }) {
+  const points = pointsToAdd ?? (addPoint ? 1 : 0);
   return getDatabase()
     .prepare(`
       INSERT INTO raid_avalon_weapon_career
@@ -258,8 +294,8 @@ function upsertRaidAvalonCareer({ discordId, weaponKey, weaponName, roleId, addP
       weaponKey,
       weaponName,
       roleId,
-      points: addPoint ? 1 : 0,
-      lastPointAt: addPoint ? new Date().toISOString() : null
+      points,
+      lastPointAt: points > 0 ? new Date().toISOString() : null
     });
 }
 
@@ -298,6 +334,7 @@ module.exports = {
   createEvent,
   createRaidAvalonEventMeta,
   clearParticipantPayouts,
+  findEventByTitleAndSchedule,
   getEvent,
   getEventByCode,
   getEventByVoiceChannel,
@@ -308,8 +345,10 @@ module.exports = {
   getRaidAvalonParticipant,
   getReview,
   listActiveEvents,
+  listAutoStartCandidates,
   listExpiredReviewChannels,
   listPendingWarningEvents,
+  listPendingReminderEvents,
   listParticipants,
   listRaidAvalonCareer,
   listRaidAvalonParticipants,
