@@ -212,7 +212,7 @@ function eventEmbed(event, participants = []) {
     .addFields(
       { name: 'Status', value: statusLabel(event.status), inline: true },
       { name: 'Local', value: event.location || 'Nao informado', inline: true },
-      { name: 'Horario UTC', value: event.scheduled_time || 'Nao informado', inline: true },
+      { name: 'Horario Albion', value: event.scheduled_time || 'Nao informado', inline: true },
       ...eventRoles.map((role) => ({
         name: `${roleStatsLabel(role)} ${count(role)}/${event[roleConfigs[role].slots]}`,
         value: roleOccupants(event, participants, role),
@@ -547,7 +547,7 @@ async function autoStartBlackForFunEvents(client) {
   if (!guild) return;
   const events = repo.listAutoStartCandidates();
   for (const event of events) {
-    const startAt = parseEventTime(event.scheduled_time);
+    const startAt = parseAlbionEventTime(event.scheduled_time);
     if (!startAt) continue;
     const msUntilStart = startAt.getTime() - Date.now();
     if (msUntilStart > 15 * 60 * 1000 || msUntilStart < -10 * 60 * 1000) continue;
@@ -1142,16 +1142,17 @@ function raidAnnouncementTitle(raidMeta) {
 
 function raidAnnouncementDescription(event) {
   return [
-    `<@${event.creator_id}> · ${formatRaidSchedule(event.scheduled_time)}`,
+    `<@${event.creator_id}> - ${formatRaidSchedule(event.scheduled_time)}`,
     `We mass from ${event.location || 'local nao informado'}`,
     'Obs: Se tem duvida ou precisa de build vem 30 min cedo pro PORTAL DE MARTLOCK.'
   ].join('\n');
 }
 
 function formatRaidSchedule(value) {
-  const time = String(value || '').trim() || 'horario nao informado';
-  const startAt = parseUtcMinus3EventTime(time);
-  if (!startAt) return time;
+  const text = String(value || '').trim();
+  if (!text) return 'horario nao informado';
+  const startAt = parseAlbionEventTime(text);
+  if (!startAt) return text;
   const diffMs = startAt.getTime() - Date.now();
   const absMinutes = Math.max(0, Math.round(Math.abs(diffMs) / 60000));
   const hours = Math.floor(absMinutes / 60);
@@ -1159,7 +1160,16 @@ function formatRaidSchedule(value) {
   const relative = hours > 0
     ? `${hours} hora${hours === 1 ? '' : 's'}${minutes ? ` e ${minutes} min` : ''}`
     : `${minutes} min`;
-  return `Hoje as ${time} (${diffMs >= 0 ? 'em' : 'ha'} ${relative})`;
+  return `${formatAlbionScheduleText(text, startAt)} (${diffMs >= 0 ? 'em' : 'ha'} ${relative})`;
+}
+
+function formatAlbionScheduleText(text, startAt) {
+  const dateMatch = String(text || '').match(/\b(\d{1,2})[/-](\d{1,2})(?:[/-]\d{2,4})?\b/);
+  const time = `${String(startAt.getUTCHours()).padStart(2, '0')}:${String(startAt.getUTCMinutes()).padStart(2, '0')}`;
+  if (dateMatch) {
+    return `${dateMatch[1].padStart(2, '0')}/${dateMatch[2].padStart(2, '0')} as ${time}`;
+  }
+  return `Hoje as ${time}`;
 }
 
 function isRaidAvalonEvent(event) {
@@ -1529,7 +1539,7 @@ async function checkEventStartWarnings(client) {
   const guild = await client.guilds.fetch(ids.guildId).catch(() => null);
   if (!guild) return;
   for (const event of events) {
-    const startAt = parseEventTime(event.scheduled_time);
+    const startAt = parseAlbionEventTime(event.scheduled_time);
     if (!startAt) continue;
     const msUntilStart = startAt.getTime() - Date.now();
     await ensureEventTempRole(guild, event).catch(() => null);
@@ -1604,35 +1614,36 @@ async function removeWarningRole(guild, event) {
   repo.updateEvent(event.id, { warning_role_id: null });
 }
 
-function parseUtcMinus3EventTime(value) {
+function parseAlbionEventTime(value) {
   const text = String(value || '').trim();
-  const match = text.match(/(\d{1,2}):(\d{2})/);
+  const textWithoutDate = text.replace(/\b\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b/, ' ');
+  const match = textWithoutDate.match(/\b(\d{1,2}):(\d{2})\b/)
+    || textWithoutDate.match(/\b(\d{1,2})h\b/i)
+    || textWithoutDate.match(/\b(\d{1,2})\b/);
   if (!match) return null;
-  const now = new Date();
-  const utcMinus3Now = new Date(now.getTime() - 3 * 60 * 60 * 1000);
-  const year = utcMinus3Now.getUTCFullYear();
-  const month = utcMinus3Now.getUTCMonth();
-  const day = utcMinus3Now.getUTCDate();
   const hour = Number(match[1]);
-  const minute = Number(match[2]);
-  const startUtc = new Date(Date.UTC(year, month, day, hour + 3, minute, 0));
-  return startUtc;
-}
-
-function parseEventTime(value) {
-  const text = String(value || '').trim();
-  const match = text.match(/(\d{1,2}):?(\d{2})?|(\d{1,2})h/i);
-  if (!match) return null;
-  const hour = Number(match[1] || match[3]);
   const minute = Number(match[2] || 0);
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
   const now = new Date();
-  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hour, minute, 0));
-  if (hour <= 3 && now.getUTCHours() > 6) start.setUTCDate(start.getUTCDate() + 1);
+  const dateMatch = text.match(/\b(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?\b/);
+  let year = now.getUTCFullYear();
+  let month = now.getUTCMonth();
+  let day = now.getUTCDate();
+  if (dateMatch) {
+    day = Number(dateMatch[1]);
+    month = Number(dateMatch[2]) - 1;
+    if (dateMatch[3]) {
+      year = Number(dateMatch[3]);
+      if (year < 100) year += 2000;
+    }
+  }
+  const start = new Date(Date.UTC(year, month, day, hour, minute, 0));
+  if (!dateMatch && hour <= 3 && now.getUTCHours() > 6) start.setUTCDate(start.getUTCDate() + 1);
   return start;
 }
 
 function eventTempRoleName(event) {
-  const start = parseEventTime(event.scheduled_time) || new Date();
+  const start = parseAlbionEventTime(event.scheduled_time) || new Date();
   const day = String(start.getUTCDate()).padStart(2, '0');
   const month = String(start.getUTCMonth() + 1).padStart(2, '0');
   const hour = String(start.getUTCHours()).padStart(2, '0');

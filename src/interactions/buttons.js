@@ -60,7 +60,7 @@ async function handleButton(interaction) {
       textInput('title', 'Titulo', false, 'Padrao: FastContent'),
       textInput('description', 'Descricao', false, 'Padrao: Pergunte na Call'),
       textInput('location', 'Local', false, 'Padrao: Pergunte na Call'),
-      textInput('scheduledTime', 'Horario UTC', false, 'Padrao: 10 minutos a frente'),
+      textInput('scheduledTime', 'Horario Albion', false, 'Padrao: 10 minutos a frente'),
       textInput('slots', 'Vagas Tank, Healer, Sup, DPS ex: 3,3,2,12', false, 'Padrao: 1,1,1,17')
     ]);
   }
@@ -70,7 +70,7 @@ async function handleButton(interaction) {
       return interaction.reply({ content: 'Voce nao tem permissao para criar Raid Avalon Full.', flags: MessageFlags.Ephemeral });
     }
     return showModal(interaction, 'event:create_raid_full', 'Raid Avalon Full', [
-      textInput('scheduledTime', 'Dia e hora UTC', true, 'Ex: hoje 20:30 ou 16/06 20:30'),
+      textInput('scheduledTime', 'Dia e hora Albion', true, 'Ex: hoje 20:30 ou 16/06 20:30'),
       textInput('location', 'Local', true, 'Ex: Martlock, Portal, HO'),
       textInput('dungeonTier', 'Tier da DG', true, 'Ex: T8.1'),
       textInput('buildTier', 'Tier da build', true, 'Ex: T8 equivalente')

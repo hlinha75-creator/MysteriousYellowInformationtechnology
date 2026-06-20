@@ -114,7 +114,7 @@ async function handleModal(interaction) {
     const title = fieldOrDefault(interaction, 'title', 'FastContent');
     const description = fieldOrDefault(interaction, 'description', 'Pergunte na Call');
     const location = fieldOrDefault(interaction, 'location', 'Pergunte na Call');
-    const scheduledTime = fieldOrDefault(interaction, 'scheduledTime', defaultUtcMinus3Time(10));
+    const scheduledTime = fieldOrDefault(interaction, 'scheduledTime', defaultAlbionTime(10));
     const slots = parseSlots(fieldOrDefault(interaction, 'slots', '1,1,1,17'));
     if (slots.length !== 4 || slots.some((value) => Number.isNaN(value) || value < 0)) {
       throw new Error('Use 4 numeros para vagas. Ex: 3,3,2,12 ou Tank 3 Healer 3 Sup 2 DPS 12.');
@@ -138,7 +138,7 @@ async function handleModal(interaction) {
     }
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const event = await events.createRaidAvalonFullFromModal(interaction, {
-      scheduledTime: fieldOrDefault(interaction, 'scheduledTime', defaultUtcMinus3Time(10)),
+      scheduledTime: fieldOrDefault(interaction, 'scheduledTime', defaultAlbionTime(10)),
       location: fieldOrDefault(interaction, 'location', 'Pergunte na Call'),
       dungeonTier: fieldOrDefault(interaction, 'dungeonTier', 'Nao informado'),
       buildTier: fieldOrDefault(interaction, 'buildTier', 'Nao informado')
@@ -346,10 +346,10 @@ function fieldOrDefault(interaction, id, fallback) {
   return value || fallback;
 }
 
-function defaultUtcMinus3Time(minutesAhead) {
-  const utcMinus3 = new Date(Date.now() + minutesAhead * 60 * 1000 - 3 * 60 * 60 * 1000);
-  const hours = String(utcMinus3.getUTCHours()).padStart(2, '0');
-  const minutes = String(utcMinus3.getUTCMinutes()).padStart(2, '0');
+function defaultAlbionTime(minutesAhead) {
+  const albionTime = new Date(Date.now() + minutesAhead * 60 * 1000);
+  const hours = String(albionTime.getUTCHours()).padStart(2, '0');
+  const minutes = String(albionTime.getUTCMinutes()).padStart(2, '0');
   return `${hours}:${minutes}`;
 }
 

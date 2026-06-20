@@ -201,7 +201,7 @@ O modal de criar evento pode ser enviado vazio. Padroes:
 - Titulo: `FastContent`
 - Descricao: `Pergunte na Call`
 - Local: `Pergunte na Call`
-- Horario UTC-3: 10 minutos a frente da hora atual
+- Horario Albion/server: 10 minutos a frente do relogio do Albion
 - Vagas: `1,1,1,17`
 
 Formato de vagas:
@@ -216,7 +216,7 @@ Evento aberto deve mostrar:
 - titulo;
 - descricao;
 - local;
-- horario UTC-3;
+- horario Albion/server;
 - vagas por funcao;
 - quem ocupou cada vaga.
 
@@ -340,7 +340,7 @@ Tutoriais atuais:
 
 ## Aviso de 1 Minuto
 
-Todos usam UTC-3 como referencia de horario de Albion.
+Todos os eventos usam o horario do Albion/server como referencia. O bot compara esse horario como UTC, nao como hora local do Brasil.
 
 Quando faltar 1 minuto para o evento:
 - criar cargo temporario;
@@ -517,7 +517,7 @@ Estrelinhas:
 - se o bot nao conseguir renomear por hierarquia, registrar mesmo assim e avisar no resumo quando possivel.
 
 Ranking e sorteio:
-- todo dia as 18:00 UTC-3;
+- todo dia as 18:00 no horario Albion/server;
 - postar no chat NOTAG;
 - ranking top 20 acumulado;
 - sorteio diario junto com ranking;
