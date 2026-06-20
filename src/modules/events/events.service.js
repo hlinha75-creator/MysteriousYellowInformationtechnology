@@ -954,17 +954,6 @@ function reviewEmbed(eventId) {
     const seconds = participant.manual_seconds ?? participant.calculated_seconds ?? 0;
     return `${raidParticipantLabel(participant)} | ${roleLabel(participant.role)} | ${formatDuration(seconds)} | ${formatSilver(participant.payout_amount)}`;
   });
-  const finalizedBy = review?.approved_by ? `<@${review.approved_by}>` : 'desconhecido';
-  const help = event.status === 'approved'
-    ? `Finalizado por ${finalizedBy}.`
-    : event.status === 'pending_payment'
-    ? 'Aguardando staff/tesoureiro/adm aprovar o pagamento.'
-    : [
-      'Editar membro: escolha alguem na lista e ajuste funcao/tempo.',
-      'Adicionar membro: coloca alguem que faltou no split.',
-      'Remover membro: escolha alguem na lista para tirar do split.',
-      'Tempo sempre em minutos. Ex: 75 = 1h15min.'
-    ].join('\n');
 
   return new EmbedBuilder()
     .setTitle(event.status === 'approved' ? 'Evento finalizado' : event.status === 'pending_payment' ? 'Pagamento pendente' : 'Revisao de participacao')
@@ -972,8 +961,7 @@ function reviewEmbed(eventId) {
     .addFields(
       { name: 'Loot liquido', value: formatSilver(review?.net_loot || 0), inline: true },
       { name: 'Evidencias', value: embedFieldValue(review?.evidence_notes || 'Anexe/cole DPS meter, fama total e CSV do loot logger no canal de revisao.'), inline: false },
-      { name: event.status === 'approved' ? 'Status' : 'Como ajustar', value: embedFieldValue(help), inline: false },
-      { name: 'Participantes', value: embedFieldValue(lines.length ? lines.slice(0, 20).join('\n') : 'Nenhum participante com tempo contabilizado.'), inline: false }
+      { name: 'Participantes', value: embedLinesValue(lines, 'Nenhum participante com tempo contabilizado.'), inline: false }
     )
     .setColor(0xd69e2e)
     .setTimestamp(new Date());
@@ -983,6 +971,34 @@ function embedFieldValue(value, maxLength = 1024) {
   const text = String(value || '-').trim() || '-';
   if (text.length <= maxLength) return text;
   return `${text.slice(0, maxLength - 20)}\n... texto cortado`;
+}
+
+function embedLinesValue(lines, emptyText, maxLength = 1024) {
+  if (!lines.length) return emptyText;
+  const visible = [];
+  let hidden = 0;
+  for (const line of lines) {
+    const text = String(line || '').trim();
+    if (!text) continue;
+    const candidate = [...visible, text].join('\n');
+    if (candidate.length > maxLength - 32) {
+      hidden += 1;
+    } else {
+      visible.push(text);
+    }
+  }
+
+  if (hidden > 0) {
+    let suffix = `... e mais ${hidden}`;
+    while ([...visible, suffix].join('\n').length > maxLength && visible.length > 0) {
+      visible.pop();
+      hidden += 1;
+      suffix = `... e mais ${hidden}`;
+    }
+    visible.push(suffix);
+  }
+
+  return visible.join('\n') || emptyText;
 }
 
 function reviewComponents(eventId, mode = 'review') {
@@ -1031,8 +1047,8 @@ function dpsMeterEmbed(eventId) {
       { name: 'Criador', value: `<@${event.creator_id}>`, inline: true },
       { name: 'Horario', value: event.scheduled_time || 'Nao informado', inline: true },
       { name: 'Loot liquido', value: formatSilver(review?.net_loot || 0), inline: true },
-      { name: 'Evidencias', value: review?.evidence_notes || 'Aguardando prints/links/CSV no canal de revisao.', inline: false },
-      { name: 'Participantes', value: lines.length ? lines.slice(0, 30).join('\n') : 'Nenhum participante.', inline: false }
+      { name: 'Evidencias', value: embedFieldValue(review?.evidence_notes || 'Aguardando prints/links/CSV no canal de revisao.'), inline: false },
+      { name: 'Participantes', value: embedLinesValue(lines, 'Nenhum participante.'), inline: false }
     )
     .setColor(0x805ad5)
     .setTimestamp(new Date());
