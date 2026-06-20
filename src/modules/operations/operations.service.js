@@ -48,6 +48,13 @@ function pendingQueueComponents() {
       new ButtonBuilder().setCustomId('admin:refresh_career_panel').setLabel('Atualizar carreira').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('admin:preview_career_rebuild').setLabel('Previa recalc carreira').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('admin:verify_pending_registrations').setLabel('Verificar registros').setStyle(ButtonStyle.Secondary)
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('albion_weekly:help:rank').setLabel('Importar Rank PvE').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('albion_weekly:help:logs').setLabel('Importar Logs Albion').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('albion_weekly:summary:current').setLabel('Resumo Albion').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('albion_weekly:export:pve').setLabel('Exportar PvE').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('albion_weekly:export:logs').setLabel('Exportar Logs').setStyle(ButtonStyle.Secondary)
     )
   ];
 }

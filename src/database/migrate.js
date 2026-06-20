@@ -644,6 +644,56 @@ const migrations = [
           ON career_point_transactions (discord_id);
       `);
     }
+  },
+  {
+    version: 22,
+    name: 'albion_weekly_imports',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS albion_imports (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          import_type TEXT NOT NULL,
+          week_key TEXT NOT NULL,
+          source_name TEXT,
+          rows_count INTEGER NOT NULL DEFAULT 0,
+          summary_json TEXT,
+          imported_by TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(import_type, week_key)
+        );
+
+        CREATE TABLE IF NOT EXISTS albion_pve_rankings (
+          import_id INTEGER NOT NULL,
+          week_key TEXT NOT NULL,
+          rank INTEGER NOT NULL,
+          albion_name TEXT NOT NULL,
+          guild_role TEXT,
+          amount INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (import_id, albion_name),
+          FOREIGN KEY (import_id) REFERENCES albion_imports(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_albion_pve_rankings_week
+          ON albion_pve_rankings (week_key, rank);
+
+        CREATE TABLE IF NOT EXISTS albion_guild_logs (
+          import_id INTEGER NOT NULL,
+          week_key TEXT NOT NULL,
+          event_date TEXT NOT NULL,
+          actor_name TEXT NOT NULL,
+          action_type TEXT NOT NULL,
+          raw_reason TEXT NOT NULL,
+          target_hint TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (import_id, event_date, actor_name, raw_reason),
+          FOREIGN KEY (import_id) REFERENCES albion_imports(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_albion_guild_logs_week
+          ON albion_guild_logs (week_key, action_type);
+      `);
+    }
   }
 ];
 

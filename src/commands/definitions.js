@@ -49,11 +49,13 @@ const commands = [
         { name: 'Financeiro', value: 'transactions' },
         { name: 'Auditoria', value: 'audit' },
         { name: 'Voz diaria', value: 'voice_daily' },
-        { name: 'Voz bruta', value: 'voice' }
+        { name: 'Voz bruta', value: 'voice' },
+        { name: 'Albion Rank PvE', value: 'albion_pve' },
+        { name: 'Albion Logs', value: 'albion_logs' }
       ))
     .addStringOption((option) => option
       .setName('data')
-      .setDescription('Data para Voz diaria no formato AAAA-MM-DD. Sem preencher, usa hoje.')),
+      .setDescription('Data para voz AAAA-MM-DD ou semana Albion 2026-W25.')),
   new SlashCommandBuilder()
     .setName('importar')
     .setDescription('Importa CSV de saldos. Use o painel/fluxo com confirmacao.')
@@ -65,6 +67,35 @@ const commands = [
       .setName('arquivo')
       .setDescription('CSV/TSV com os nicks oficiais da guild no Albion.')
       .setRequired(true)),
+  new SlashCommandBuilder()
+    .setName('albion')
+    .setDescription('Importa e consulta dados semanais manuais do Albion.')
+    .addSubcommand((subcommand) => subcommand
+      .setName('importar_rank')
+      .setDescription('Importa o Rank PvE semanal do Albion.')
+      .addAttachmentOption((option) => option
+        .setName('arquivo')
+        .setDescription('Arquivo TXT/CSV/TSV do Rank PvE.')
+        .setRequired(true))
+      .addStringOption((option) => option
+        .setName('semana')
+        .setDescription('Semana do arquivo. Ex: 2026-W25. Sem preencher, usa semana atual.')))
+    .addSubcommand((subcommand) => subcommand
+      .setName('importar_logs')
+      .setDescription('Importa os logs gerais semanais da guild Albion.')
+      .addAttachmentOption((option) => option
+        .setName('arquivo')
+        .setDescription('Arquivo TXT/CSV/TSV dos logs gerais.')
+        .setRequired(true))
+      .addStringOption((option) => option
+        .setName('semana')
+        .setDescription('Semana do arquivo. Ex: 2026-W25. Sem preencher, usa semana atual.')))
+    .addSubcommand((subcommand) => subcommand
+      .setName('resumo')
+      .setDescription('Mostra resumo semanal dos dados importados do Albion.')
+      .addStringOption((option) => option
+        .setName('semana')
+        .setDescription('Semana para consultar. Ex: 2026-W25. Sem preencher, usa semana atual.'))),
   new SlashCommandBuilder()
     .setName('relatorio_diario')
     .setDescription('Gera relatorio diario comparando membros Albion e voz Discord.')

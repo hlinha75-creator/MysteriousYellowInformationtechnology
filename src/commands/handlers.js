@@ -23,6 +23,7 @@ const auctions = require('../modules/auctions/auctions.service');
 const objectives = require('../modules/objectives/objectives.service');
 const dailyReport = require('../modules/reports/dailyReport.service');
 const registration = require('../modules/registration/registration.service');
+const albionWeekly = require('../modules/albion/weekly.service');
 
 function input(id, label, style = TextInputStyle.Short, required = true) {
   return new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setRequired(required);
@@ -130,7 +131,11 @@ async function handleCommand(interaction) {
           ? csv.voiceAttachment()
           : type === 'voice_daily'
             ? csv.voiceDailyAttachment(date || undefined)
-            : csv.auditAttachment();
+            : type === 'albion_pve'
+              ? albionWeekly.pveRankCsvAttachment(date || undefined)
+              : type === 'albion_logs'
+                ? albionWeekly.guildLogsCsvAttachment(date || undefined)
+                : csv.auditAttachment();
     return interaction.reply({ content: 'Exportacao gerada.', files: [attachment], flags: MessageFlags.Ephemeral });
   }
 
@@ -195,6 +200,43 @@ async function handleCommand(interaction) {
         new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId(`registration_bulk:confirm:${id}`).setLabel('Confirmar cargos').setStyle(ButtonStyle.Success),
           new ButtonBuilder().setCustomId(`registration_bulk:cancel:${id}`).setLabel('Cancelar').setStyle(ButtonStyle.Secondary)
+        )
+      ]
+    });
+  }
+
+  if (interaction.commandName === 'albion') {
+    if (!can(interaction.member, 'importCsv')) {
+      return interaction.reply({ content: 'Voce nao tem permissao para importar dados do Albion.', flags: MessageFlags.Ephemeral });
+    }
+
+    const subcommand = interaction.options.getSubcommand();
+    const weekKey = interaction.options.getString('semana') || albionWeekly.currentWeekKey();
+
+    if (subcommand === 'resumo') {
+      return interaction.reply({ embeds: [albionWeekly.weeklySummaryEmbed(weekKey)], flags: MessageFlags.Ephemeral });
+    }
+
+    const attachment = interaction.options.getAttachment('arquivo');
+    if (!attachment?.url) {
+      return interaction.reply({ content: 'Anexe um arquivo TXT/CSV/TSV valido.', flags: MessageFlags.Ephemeral });
+    }
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const response = await fetch(attachment.url);
+    if (!response.ok) throw new Error('Nao consegui baixar o arquivo anexado.');
+    const text = await response.text();
+    const preview = subcommand === 'importar_rank'
+      ? albionWeekly.previewPveRank(text, { weekKey, sourceName: attachment.name, actorId: interaction.user.id })
+      : albionWeekly.previewGuildLogs(text, { weekKey, sourceName: attachment.name, actorId: interaction.user.id });
+    const previewId = albionWeekly.savePreview(preview);
+
+    return interaction.editReply({
+      content: albionWeekly.previewText(preview),
+      components: [
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId(`albion_weekly:confirm:${previewId}`).setLabel('Confirmar importacao').setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId(`albion_weekly:cancel:${previewId}`).setLabel('Cancelar').setStyle(ButtonStyle.Secondary)
         )
       ]
     });

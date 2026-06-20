@@ -9,6 +9,7 @@ const audit = require('../modules/audit/audit.repository');
 const csv = require('../modules/csv/csv.service');
 const balanceBackup = require('../modules/csv/balanceBackup.service');
 const albionVerification = require('../modules/albion/guildVerification.service');
+const albionWeekly = require('../modules/albion/weekly.service');
 const deposit = require('../modules/deposit/deposit.service');
 const polls = require('../modules/polls/polls.service');
 const auctions = require('../modules/auctions/auctions.service');
@@ -722,6 +723,56 @@ async function handleButton(interaction) {
       registration.takePendingGuildRegistrationPreview(id, interaction.user.id);
       await interaction.message.edit({ components: [] }).catch(() => {});
       return interaction.reply({ content: 'Verificacao cancelada. Nenhum cargo foi alterado.', flags: MessageFlags.Ephemeral });
+    }
+  }
+
+  if (scope === 'albion_weekly') {
+    if (!can(interaction.member, 'importCsv')) {
+      return interaction.reply({ content: 'Voce nao tem permissao para importar dados do Albion.', flags: MessageFlags.Ephemeral });
+    }
+
+    if (action === 'help') {
+      const command = id === 'rank'
+        ? '/albion importar_rank arquivo:<rank pve.txt> semana:2026-W25'
+        : '/albion importar_logs arquivo:<logs geral albion.txt> semana:2026-W25';
+      return interaction.reply({
+        content: [
+          `Use o comando:`,
+          `\`${command}\``,
+          '',
+          'O bot vai mostrar uma previa antes de salvar.'
+        ].join('\n'),
+        flags: MessageFlags.Ephemeral
+      });
+    }
+
+    if (action === 'summary') {
+      return interaction.reply({
+        embeds: [albionWeekly.weeklySummaryEmbed()],
+        flags: MessageFlags.Ephemeral
+      });
+    }
+
+    if (action === 'export') {
+      const file = id === 'pve'
+        ? albionWeekly.pveRankCsvAttachment()
+        : albionWeekly.guildLogsCsvAttachment();
+      return interaction.reply({ content: 'Exportacao Albion gerada.', files: [file], flags: MessageFlags.Ephemeral });
+    }
+
+    if (action === 'confirm') {
+      const preview = albionWeekly.takePreview(id);
+      const saved = albionWeekly.applyPreview(preview);
+      return interaction.update({
+        content: `Importacao Albion salva. Tipo: ${preview.type}. Semana: ${preview.weekKey}. Linhas: ${saved.rows_count}.`,
+        embeds: [albionWeekly.weeklySummaryEmbed(preview.weekKey)],
+        components: []
+      });
+    }
+
+    if (action === 'cancel') {
+      albionWeekly.cancelPreview(id);
+      return interaction.update({ content: 'Importacao Albion cancelada.', components: [] });
     }
   }
 
