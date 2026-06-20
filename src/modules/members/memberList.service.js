@@ -75,7 +75,7 @@ async function filteredEmbed(guild, filterKey) {
 async function collectMembers(guild) {
   const users = userMap();
   const pendingIds = new Set(pendingRegistrations().map((row) => row.discord_id));
-  const members = await guild.members.fetch();
+  const members = await fetchGuildMembersWithRetry(guild);
   return [...members.values()]
     .filter((member) => !member.user.bot)
     .map((member) => {
@@ -95,6 +95,33 @@ async function collectMembers(guild) {
       };
     })
     .sort((a, b) => displaySort(a).localeCompare(displaySort(b), 'pt-BR', { sensitivity: 'base' }));
+}
+
+async function fetchGuildMembersWithRetry(guild) {
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      return await guild.members.fetch();
+    } catch (error) {
+      const retryAfter = retryAfterMs(error);
+      if (!retryAfter || attempt === 3) {
+        throw new Error('Discord limitou a exportacao da lista de membros. Tente novamente em alguns segundos.');
+      }
+      await sleep(retryAfter + 1000);
+    }
+  }
+  throw new Error('Discord limitou a exportacao da lista de membros. Tente novamente em alguns segundos.');
+}
+
+function retryAfterMs(error) {
+  const direct = Number(error?.data?.retry_after ?? error?.retry_after ?? error?.retryAfter ?? 0);
+  if (Number.isFinite(direct) && direct > 0) return Math.ceil(direct * 1000);
+  const match = String(error?.message || '').match(/retry after ([\d.]+) seconds/i);
+  if (!match) return 0;
+  return Math.ceil(Number(match[1]) * 1000);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function overviewEmbed(rows) {

@@ -124,6 +124,7 @@ async function handleCommand(interaction) {
     }
     const type = interaction.options.getString('tipo');
     const date = interaction.options.getString('data');
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const attachment = type === 'balances'
       ? csv.balancesAttachment()
       : type === 'transactions'
@@ -137,9 +138,9 @@ async function handleCommand(interaction) {
               : type === 'albion_pve'
                 ? albionWeekly.pveRankCsvAttachment(date || undefined)
                 : type === 'albion_logs'
-                  ? albionWeekly.guildLogsCsvAttachment(date || undefined)
-                  : csv.auditAttachment();
-    return interaction.reply({ content: 'Exportacao gerada.', files: [attachment], flags: MessageFlags.Ephemeral });
+                ? albionWeekly.guildLogsCsvAttachment(date || undefined)
+                : csv.auditAttachment();
+    return interaction.editReply({ content: 'Exportacao gerada.', files: [attachment] });
   }
 
   if (interaction.commandName === 'importar') {
