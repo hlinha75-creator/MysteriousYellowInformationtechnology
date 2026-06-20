@@ -50,6 +50,7 @@ const commands = [
         { name: 'Auditoria', value: 'audit' },
         { name: 'Voz diaria', value: 'voice_daily' },
         { name: 'Voz bruta', value: 'voice' },
+        { name: 'Membros Discord', value: 'members_discord' },
         { name: 'Albion Rank PvE', value: 'albion_pve' },
         { name: 'Albion Logs', value: 'albion_logs' }
       ))

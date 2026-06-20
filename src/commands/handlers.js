@@ -24,6 +24,7 @@ const objectives = require('../modules/objectives/objectives.service');
 const dailyReport = require('../modules/reports/dailyReport.service');
 const registration = require('../modules/registration/registration.service');
 const albionWeekly = require('../modules/albion/weekly.service');
+const memberList = require('../modules/members/memberList.service');
 
 function input(id, label, style = TextInputStyle.Short, required = true) {
   return new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setRequired(required);
@@ -131,11 +132,13 @@ async function handleCommand(interaction) {
           ? csv.voiceAttachment()
           : type === 'voice_daily'
             ? csv.voiceDailyAttachment(date || undefined)
-            : type === 'albion_pve'
-              ? albionWeekly.pveRankCsvAttachment(date || undefined)
-              : type === 'albion_logs'
-                ? albionWeekly.guildLogsCsvAttachment(date || undefined)
-                : csv.auditAttachment();
+            : type === 'members_discord'
+              ? await memberList.csvAttachment(interaction.guild)
+              : type === 'albion_pve'
+                ? albionWeekly.pveRankCsvAttachment(date || undefined)
+                : type === 'albion_logs'
+                  ? albionWeekly.guildLogsCsvAttachment(date || undefined)
+                  : csv.auditAttachment();
     return interaction.reply({ content: 'Exportacao gerada.', files: [attachment], flags: MessageFlags.Ephemeral });
   }
 
