@@ -1,4 +1,4 @@
-const { getDatabase } = require('../../database/connection');
+const { getDatabase, transaction } = require('../../database/connection');
 
 function nextEventCode() {
   const row = getDatabase().prepare('SELECT seq FROM sqlite_sequence WHERE name = ?').get('events');
@@ -39,6 +39,17 @@ function findEventByTitleAndSchedule({ title, scheduledTime }) {
 
 function listActiveEvents() {
   return getDatabase().prepare("SELECT * FROM events WHERE status = 'running'").all();
+}
+
+function listApprovedEventsForCareer() {
+  return getDatabase()
+    .prepare(`
+      SELECT e.*
+      FROM events e
+      WHERE e.status = 'approved'
+      ORDER BY e.id ASC
+    `)
+    .all();
 }
 
 function listPendingWarningEvents() {
@@ -299,6 +310,65 @@ function upsertRaidAvalonCareer({ discordId, weaponKey, weaponName, roleId, addP
     });
 }
 
+const addCareerPointTransaction = transaction((data) => {
+  const points = Number(data.points || 0);
+  if (points <= 0) return { inserted: false, points: 0 };
+
+  const result = getDatabase()
+    .prepare(`
+      INSERT OR IGNORE INTO career_point_transactions
+        (event_id, discord_id, point_type, role, weapon_key, weapon_name, seconds, points, source, created_by)
+      VALUES
+        (@eventId, @discordId, @pointType, @role, @weaponKey, @weaponName, @seconds, @points, @source, @createdBy)
+    `)
+    .run({
+      eventId: data.eventId,
+      discordId: data.discordId,
+      pointType: data.pointType,
+      role: data.role || null,
+      weaponKey: data.weaponKey,
+      weaponName: data.weaponName,
+      seconds: data.seconds || 0,
+      points,
+      source: data.source || 'event_approval',
+      createdBy: data.createdBy || null
+    });
+
+  if (result.changes === 0) return { inserted: false, points: 0 };
+
+  upsertRaidAvalonCareer({
+    discordId: data.discordId,
+    weaponKey: data.weaponKey,
+    weaponName: data.weaponName,
+    roleId: data.roleId || null,
+    pointsToAdd: points
+  });
+
+  return { inserted: true, points };
+});
+
+const clearCareerPointData = transaction(() => {
+  getDatabase().prepare('DELETE FROM career_point_transactions').run();
+  getDatabase().prepare('DELETE FROM raid_avalon_weapon_career').run();
+});
+
+const replaceCareerPointData = transaction((entries) => {
+  getDatabase().prepare('DELETE FROM career_point_transactions').run();
+  getDatabase().prepare('DELETE FROM raid_avalon_weapon_career').run();
+  let inserted = 0;
+  let points = 0;
+  for (const entry of entries) {
+    const result = addCareerPointTransaction(entry);
+    if (result.inserted) inserted += 1;
+    points += result.points;
+  }
+  return { inserted, points };
+});
+
+function countCareerPointTransactions() {
+  return Number(getDatabase().prepare('SELECT COUNT(*) AS total FROM career_point_transactions').get()?.total || 0);
+}
+
 function listRaidAvalonCareer(limit = 30) {
   return getDatabase()
     .prepare(`
@@ -367,6 +437,9 @@ function listExpiredReviewChannels(nowIso) {
 
 module.exports = {
   closeOpenVoiceSession,
+  addCareerPointTransaction,
+  clearCareerPointData,
+  countCareerPointTransactions,
   createEvent,
   createRaidAvalonEventMeta,
   clearParticipantPayouts,
@@ -382,6 +455,7 @@ module.exports = {
   getRaidAvalonParticipant,
   getReview,
   listActiveEvents,
+  listApprovedEventsForCareer,
   listAutoStartCandidates,
   listExpiredReviewChannels,
   listPendingWarningEvents,
@@ -393,6 +467,7 @@ module.exports = {
   markReviewApproved,
   refreshParticipantSeconds,
   removeParticipant,
+  replaceCareerPointData,
   setParticipantPayout,
   setPersistentMessage,
   setParticipantReview,

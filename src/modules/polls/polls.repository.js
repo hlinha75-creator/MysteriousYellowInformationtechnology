@@ -26,6 +26,13 @@ function setPollMessage({ id, channelId, messageId }) {
   return getPoll(id);
 }
 
+function updatePollContent({ id, question, options }) {
+  getDatabase()
+    .prepare('UPDATE polls SET question = ?, options_json = ? WHERE id = ?')
+    .run(question, JSON.stringify(options), id);
+  return getPoll(id);
+}
+
 function closePoll(id) {
   getDatabase()
     .prepare("UPDATE polls SET status = 'closed', closed_at = CURRENT_TIMESTAMP WHERE id = ?")
@@ -66,14 +73,45 @@ function listVotes(pollId) {
     .map((row) => ({ ...row, options: JSON.parse(row.options_json || '[]') }));
 }
 
+function listPollsByKeyPrefix(prefix, limit = 14) {
+  return getDatabase()
+    .prepare(`
+      SELECT *
+      FROM polls
+      WHERE poll_key LIKE ?
+      ORDER BY created_at DESC
+      LIMIT ?
+    `)
+    .all(`${prefix}%`, limit)
+    .map((row) => ({ ...row, options: JSON.parse(row.options_json || '[]') }));
+}
+
+function blackForFunVoiceSummary(days = 14) {
+  return getDatabase()
+    .prepare(`
+      SELECT
+        COUNT(DISTINCT e.id) AS events,
+        COUNT(DISTINCT evs.discord_id) AS members,
+        COALESCE(SUM(evs.seconds), 0) AS seconds
+      FROM events e
+      LEFT JOIN event_voice_sessions evs ON evs.event_id = e.id
+      WHERE e.title = 'Black For-Fun'
+        AND e.created_at >= datetime('now', ?)
+    `)
+    .get(`-${Number(days) || 14} days`);
+}
+
 module.exports = {
   closePoll,
   createPoll,
   getPoll,
   getPollByKey,
+  blackForFunVoiceSummary,
+  listPollsByKeyPrefix,
   listVotes,
   markStaffAlerted,
   setPollMessage,
   setAutoEvent,
+  updatePollContent,
   upsertVote
 };

@@ -614,6 +614,36 @@ const migrations = [
         );
       `);
     }
+  },
+  {
+    version: 21,
+    name: 'career_point_transactions',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS career_point_transactions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          event_id INTEGER NOT NULL,
+          discord_id TEXT NOT NULL,
+          point_type TEXT NOT NULL,
+          role TEXT,
+          weapon_key TEXT NOT NULL,
+          weapon_name TEXT NOT NULL,
+          seconds INTEGER NOT NULL DEFAULT 0,
+          points INTEGER NOT NULL DEFAULT 0,
+          source TEXT NOT NULL DEFAULT 'event_approval',
+          created_by TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(event_id, discord_id, point_type, weapon_key),
+          FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_career_point_transactions_event
+          ON career_point_transactions (event_id);
+
+        CREATE INDEX IF NOT EXISTS idx_career_point_transactions_member
+          ON career_point_transactions (discord_id);
+      `);
+    }
   }
 ];
 

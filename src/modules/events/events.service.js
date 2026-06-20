@@ -971,12 +971,18 @@ function reviewEmbed(eventId) {
     .setDescription(`**${formatEventTitle(event.title)}**\n${event.event_code}`)
     .addFields(
       { name: 'Loot liquido', value: formatSilver(review?.net_loot || 0), inline: true },
-      { name: 'Evidencias', value: review?.evidence_notes || 'Anexe/cole DPS meter, fama total e CSV do loot logger no canal de revisao.', inline: false },
-      { name: event.status === 'approved' ? 'Status' : 'Como ajustar', value: help, inline: false },
-      { name: 'Participantes', value: lines.length ? lines.slice(0, 20).join('\n') : 'Nenhum participante com tempo contabilizado.', inline: false }
+      { name: 'Evidencias', value: embedFieldValue(review?.evidence_notes || 'Anexe/cole DPS meter, fama total e CSV do loot logger no canal de revisao.'), inline: false },
+      { name: event.status === 'approved' ? 'Status' : 'Como ajustar', value: embedFieldValue(help), inline: false },
+      { name: 'Participantes', value: embedFieldValue(lines.length ? lines.slice(0, 20).join('\n') : 'Nenhum participante com tempo contabilizado.'), inline: false }
     )
     .setColor(0xd69e2e)
     .setTimestamp(new Date());
+}
+
+function embedFieldValue(value, maxLength = 1024) {
+  const text = String(value || '-').trim() || '-';
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength - 20)}\n... texto cortado`;
 }
 
 function reviewComponents(eventId, mode = 'review') {
@@ -1231,36 +1237,24 @@ function raidWeaponInfoKey(role, keyOrName) {
   return weaponKey(byKnownWeapon || keyOrName);
 }
 
-async function grantRaidAvalonRewards({ guild, eventId }) {
+async function grantRaidAvalonRewards({ guild, eventId, actorId = null }) {
   repo.refreshParticipantSeconds(eventId);
   const isRaid = Boolean(repo.getRaidAvalonEventMeta(eventId));
   const participants = repo.listParticipants(eventId).filter((participant) => !participant.is_spectator);
   let granted = 0;
   let points = 0;
   let skipped = 0;
+  let duplicates = 0;
 
   for (const participant of participants) {
     const seconds = participant.manual_seconds ?? participant.calculated_seconds ?? 0;
-    const pointsToAdd = Math.floor(seconds / 1800);
-    if (pointsToAdd <= 0) {
-      skipped += 1;
-      continue;
-    }
-
     const role = normalizeParticipantRole(participant.role);
     const functionName = eventFunctionName(eventId, participant);
-    if (!role || !functionName) {
+    const pointInfo = careerPointInfo({ eventId, participant, role, functionName, seconds, source: 'event_approval' });
+    if (!pointInfo) {
       skipped += 1;
       continue;
     }
-
-    repo.upsertRaidAvalonCareer({
-      discordId: participant.discord_id,
-      weaponKey: `classe_${role}`,
-      weaponName: `Classe ${roleButtonLabel(role)}`,
-      roleId: null,
-      pointsToAdd
-    });
 
     let roleId = null;
     if (isRaid) {
@@ -1277,19 +1271,118 @@ async function grantRaidAvalonRewards({ guild, eventId }) {
       }
     }
 
-    repo.upsertRaidAvalonCareer({
-      discordId: participant.discord_id,
-      weaponKey: weaponKey(functionName),
-      weaponName: functionName,
-      roleId,
-      pointsToAdd
-    });
+    const classResult = repo.addCareerPointTransaction({ ...pointInfo.classEntry, createdBy: actorId });
+    const weaponResult = repo.addCareerPointTransaction({ ...pointInfo.weaponEntry, roleId, createdBy: actorId });
 
-    points += pointsToAdd * 2;
+    points += classResult.points + weaponResult.points;
+    if (!classResult.inserted && !weaponResult.inserted) duplicates += 1;
   }
 
   await refreshRaidAvalonCareerPanel(guild.client).catch(() => {});
-  return { granted, points, skipped };
+  return { granted, points, skipped, duplicates };
+}
+
+function careerPointInfo({ eventId, participant, role, functionName, seconds, source }) {
+  const pointsToAdd = Math.floor(Number(seconds || 0) / 1800);
+  if (pointsToAdd <= 0 || !role || !functionName) return null;
+  const weapon = careerWeaponInfo(functionName);
+  return {
+    classEntry: {
+      eventId,
+      discordId: participant.discord_id,
+      pointType: 'class',
+      role,
+      weaponKey: `classe_${role}`,
+      weaponName: `Classe ${roleButtonLabel(role)}`,
+      seconds,
+      points: pointsToAdd,
+      source
+    },
+    weaponEntry: {
+      eventId,
+      discordId: participant.discord_id,
+      pointType: 'weapon',
+      role,
+      weaponKey: weapon.key,
+      weaponName: weapon.name,
+      seconds,
+      points: pointsToAdd,
+      source
+    },
+    points: pointsToAdd * 2
+  };
+}
+
+function careerWeaponInfo(functionName) {
+  const key = weaponKey(functionName);
+  if (/^repetidor_\d+$/.test(key)) return { key: 'repetidor', name: 'Repetidor' };
+  return { key, name: functionName };
+}
+
+function previewCareerRebuild() {
+  return buildCareerRebuildPlan({ refreshSeconds: true }).summary;
+}
+
+function rebuildCareerPoints({ actorId }) {
+  const plan = buildCareerRebuildPlan({ refreshSeconds: true, createdBy: actorId });
+  const result = repo.replaceCareerPointData(plan.entries);
+  return {
+    ...plan.summary,
+    insertedTransactions: result.inserted,
+    insertedPoints: result.points
+  };
+}
+
+function buildCareerRebuildPlan({ refreshSeconds = false, createdBy = null } = {}) {
+  const events = repo.listApprovedEventsForCareer();
+  const entries = [];
+  const members = new Set();
+  let participantsWithPoints = 0;
+  let skipped = 0;
+  let eventsWithPoints = 0;
+
+  for (const event of events) {
+    if (refreshSeconds) repo.refreshParticipantSeconds(event.id);
+    let eventPoints = 0;
+    const participants = repo.listParticipants(event.id).filter((participant) => !participant.is_spectator);
+    for (const participant of participants) {
+      const seconds = participant.manual_seconds ?? participant.calculated_seconds ?? 0;
+      const role = normalizeParticipantRole(participant.role);
+      const functionName = eventFunctionName(event.id, participant);
+      const pointInfo = careerPointInfo({
+        eventId: event.id,
+        participant,
+        role,
+        functionName,
+        seconds,
+        source: 'career_rebuild'
+      });
+      if (!pointInfo) {
+        skipped += 1;
+        continue;
+      }
+      entries.push({ ...pointInfo.classEntry, createdBy });
+      entries.push({ ...pointInfo.weaponEntry, createdBy });
+      participantsWithPoints += 1;
+      eventPoints += pointInfo.points;
+      members.add(participant.discord_id);
+    }
+    if (eventPoints > 0) eventsWithPoints += 1;
+  }
+
+  return {
+    entries,
+    summary: {
+      approvedEvents: events.length,
+      eventsWithPoints,
+      uniqueMembers: members.size,
+      participantsWithPoints,
+      skippedParticipants: skipped,
+      transactionsToCreate: entries.length,
+      pointsToCreate: entries.reduce((total, entry) => total + Number(entry.points || 0), 0),
+      existingTransactions: repo.countCareerPointTransactions()
+    }
+  };
 }
 
 async function refreshRaidAvalonCareerPanel(client) {
@@ -1553,6 +1646,7 @@ module.exports = {
   joinRaidAvalonRole,
   pauseParticipation,
   postDpsMeterSummary,
+  previewCareerRebuild,
   raidWeaponBuildUrl,
   raidWeaponIconUrl,
   raidWeaponName,
@@ -1564,6 +1658,7 @@ module.exports = {
   refreshRaidAvalonCareerPanel,
   refreshRunningEventMessages,
   removeParticipantReview,
+  rebuildCareerPoints,
   returnEventToReview,
   reviewComponents,
   reviewEmbed,

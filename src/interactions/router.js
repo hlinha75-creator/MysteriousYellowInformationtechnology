@@ -24,7 +24,7 @@ async function handleInteraction(interaction) {
     }
   } catch (error) {
     if (error.code === 10062 || error.code === 40060) return;
-    const message = error.message || 'Erro inesperado.';
+    const message = readableInteractionError(error);
     if (!isUserFacingError(error)) {
       console.error('Erro em interaction:', error);
     }
@@ -36,6 +36,35 @@ async function handleInteraction(interaction) {
 
 function isUserFacingError(error) {
   return error?.isUserFacing === true || (error instanceof Error && error.name === 'Error' && !error.code);
+}
+
+function readableInteractionError(error) {
+  const details = collectErrorMessages(error);
+  if (details.length > 0) return details.slice(0, 3).join(' | ');
+  return error.message || 'Erro inesperado.';
+}
+
+function collectErrorMessages(error) {
+  const messages = [];
+  if (error?.errors instanceof Map) {
+    for (const value of error.errors.values()) {
+      messages.push(...collectErrorMessages(value));
+    }
+  }
+  if (Array.isArray(error?.errors)) {
+    for (const value of error.errors) {
+      messages.push(...collectErrorMessages(value));
+    }
+  }
+  if (Array.isArray(error)) {
+    for (const value of error) {
+      messages.push(...collectErrorMessages(value));
+    }
+  }
+  if (error?.message && error.message !== 'Received one or more errors') {
+    messages.push(error.message);
+  }
+  return [...new Set(messages.map((message) => String(message).slice(0, 220)))];
 }
 
 module.exports = {

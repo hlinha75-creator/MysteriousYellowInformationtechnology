@@ -140,6 +140,16 @@ async function handleButton(interaction) {
       });
     }
 
+    if (action === 'history') {
+      if (!can(interaction.member, 'createPoll')) {
+        return interaction.reply({ content: 'Somente staff/caller/recrutador autorizado pode ver o historico.', flags: MessageFlags.Ephemeral });
+      }
+      return interaction.reply({
+        embeds: [polls.primeTimeHistoryEmbed(14)],
+        flags: MessageFlags.Ephemeral
+      });
+    }
+
     if (action === 'close') {
       const poll = await polls.closePoll({ interaction, pollId });
       return interaction.reply({
@@ -388,7 +398,7 @@ async function handleButton(interaction) {
       }
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const transactions = events.approveEventPayment({ eventId, actorId: interaction.user.id });
-      const raidRewards = await events.grantRaidAvalonRewards({ guild: interaction.guild, eventId });
+      const raidRewards = await events.grantRaidAvalonRewards({ guild: interaction.guild, eventId, actorId: interaction.user.id });
       await finance.notifyBalanceTransactions({ client: interaction.client, transactions });
       await interaction.message.edit({
         content: `Evento #${eventId} finalizado por <@${interaction.user.id}>.`,
@@ -639,6 +649,40 @@ async function handleButton(interaction) {
     return interaction.reply({ content: 'Painel de carreira atualizado.', flags: MessageFlags.Ephemeral });
   }
 
+  if (interaction.customId === 'admin:preview_career_rebuild') {
+    if (!can(interaction.member, 'approvePayment')) {
+      return interaction.reply({ content: 'Sem permissao para recalcular carreira.', flags: MessageFlags.Ephemeral });
+    }
+    const preview = events.previewCareerRebuild();
+    return interaction.reply({
+      content: careerRebuildPreviewText(preview),
+      components: [
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId(`admin:confirm_career_rebuild:${interaction.user.id}`).setLabel('Confirmar recalculo').setStyle(ButtonStyle.Danger),
+          new ButtonBuilder().setCustomId('admin:cancel_career_rebuild').setLabel('Cancelar').setStyle(ButtonStyle.Secondary)
+        )
+      ],
+      flags: MessageFlags.Ephemeral
+    });
+  }
+
+  if (scope === 'admin' && action === 'confirm_career_rebuild') {
+    if (id !== interaction.user.id) {
+      return interaction.reply({ content: 'Essa confirmacao nao foi criada para voce.', flags: MessageFlags.Ephemeral });
+    }
+    if (!can(interaction.member, 'approvePayment')) {
+      return interaction.reply({ content: 'Sem permissao para recalcular carreira.', flags: MessageFlags.Ephemeral });
+    }
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const result = events.rebuildCareerPoints({ actorId: interaction.user.id });
+    await events.refreshRaidAvalonCareerPanel(interaction.client);
+    return interaction.editReply({ content: careerRebuildResultText(result) });
+  }
+
+  if (interaction.customId === 'admin:cancel_career_rebuild') {
+    return interaction.reply({ content: 'Recalculo de carreira cancelado.', flags: MessageFlags.Ephemeral });
+  }
+
   if (interaction.customId === 'admin:verify_pending_registrations') {
     if (!can(interaction.member, 'approveRegistration')) {
       return interaction.reply({ content: 'Voce nao tem permissao para verificar pedidos pendentes.', flags: MessageFlags.Ephemeral });
@@ -775,6 +819,41 @@ async function clearSourceMessage(interaction, fallbackContent) {
   await interaction.message.delete().catch(async () => {
     await interaction.message.edit({ content: fallbackContent, embeds: [], components: [] }).catch(() => {});
   });
+}
+
+function careerRebuildPreviewText(preview) {
+  return [
+    '**Previa do recalculo de carreira**',
+    '',
+    'Esse processo vai apagar a carreira atual e recriar a partir dos eventos aprovados.',
+    'Ele usa o ledger para evitar ponto duplicado por evento/membro/arma.',
+    '',
+    `Eventos aprovados encontrados: ${preview.approvedEvents}`,
+    `Eventos com pontos: ${preview.eventsWithPoints}`,
+    `Membros afetados: ${preview.uniqueMembers}`,
+    `Participacoes com pontos: ${preview.participantsWithPoints}`,
+    `Participacoes ignoradas: ${preview.skippedParticipants}`,
+    `Movimentos que serao criados: ${preview.transactionsToCreate}`,
+    `Pontos totais previstos: ${preview.pointsToCreate}`,
+    `Movimentos atuais no ledger: ${preview.existingTransactions}`,
+    '',
+    'Confirme apenas se voce quer reconstruir a carreira inteira com base no banco atual.'
+  ].join('\n');
+}
+
+function careerRebuildResultText(result) {
+  return [
+    '**Carreira recalculada**',
+    '',
+    `Eventos aprovados analisados: ${result.approvedEvents}`,
+    `Eventos com pontos: ${result.eventsWithPoints}`,
+    `Membros afetados: ${result.uniqueMembers}`,
+    `Movimentos criados: ${result.insertedTransactions}`,
+    `Pontos inseridos: ${result.insertedPoints}`,
+    `Participacoes ignoradas: ${result.skippedParticipants}`,
+    '',
+    'O painel de carreira foi atualizado.'
+  ].join('\n');
 }
 
 module.exports = {

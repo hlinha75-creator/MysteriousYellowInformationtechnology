@@ -46,6 +46,7 @@ function pendingQueueComponents() {
     new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('admin:refresh_pending_queue').setLabel('Atualizar fila').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId('admin:refresh_career_panel').setLabel('Atualizar carreira').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('admin:preview_career_rebuild').setLabel('Previa recalc carreira').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('admin:verify_pending_registrations').setLabel('Verificar registros').setStyle(ButtonStyle.Secondary)
     )
   ];
@@ -122,10 +123,11 @@ async function postWeeklyAlbionReminderIfNeeded(client) {
 function weeklyChecklistText() {
   return [
     '1. Enviar CSV/TSV atual da guild Albion para verificar registros pendentes.',
-    '2. Atualizar pontos de temporada/influencia se tiver arquivo novo.',
-    '3. Revisar links pendentes de builds PvE.',
-    '4. Conferir backup de saldos no canal de arquivos.',
-    '5. Olhar eventos financeiros pendentes, saques e logs do Discloud.'
+    '2. Enviar lista/rank PvE e logs gerais do Albion quando tiver arquivo novo.',
+    '3. Guardar prints de pontos de temporada quando virar ciclo de 60 dias.',
+    '4. Revisar links pendentes de builds PvE.',
+    '5. Conferir backup de saldos no canal de arquivos.',
+    '6. Olhar eventos financeiros pendentes, saques e logs do Discloud.'
   ].join('\n');
 }
 

@@ -11,7 +11,7 @@ const repo = require('./polls.repository');
 
 const defaultQuestion = 'Voce quer Raid Avalon hoje? Que horas?';
 const defaultOptions = ['17h', '18h', '19h', '20h', '21h', '22h', '23h'];
-const blackForFunQuestion = 'Qual horario entre 10h e 03h voce esta disponivel para um content na black "for fun"?';
+const blackForFunQuestion = 'Qual melhor horario para voce fazer conteudo de grupo hoje?';
 const blackForFunOptions = ['10h', '11h', '12h', '13h', '14h', '15h', '16h', '17h', '18h', '19h', '20h', '21h', '22h', '23h', '00h', '01h', '02h', '03h'];
 const botCreatorId = 'system';
 
@@ -89,17 +89,25 @@ function pollEmbed(poll) {
   const counts = tally(poll, votes);
   const totalVoters = votes.length;
   const winner = winningOption(poll.id);
-  return new EmbedBuilder()
-    .setTitle(poll.status === 'closed' ? 'Enquete fechada' : 'Enquete')
+  const embed = new EmbedBuilder()
+    .setTitle(pollTitle(poll))
     .setDescription(`**${poll.question}**`)
-    .addFields(
-      { name: 'Placar', value: pollResultsSummary(poll, votes, counts), inline: false },
-      { name: 'Votantes', value: String(totalVoters), inline: true },
-      { name: 'Mais votado', value: winner ? `${winner.option} (${winner.count})` : 'Sem votos', inline: true },
-      { name: 'Criador', value: `<@${poll.creator_id}>`, inline: true }
-    )
     .setColor(poll.status === 'closed' ? 0x718096 : 0x3182ce)
     .setTimestamp(new Date());
+
+  if (poll.options.length <= 21) {
+    embed.addFields(...compactPollFields(poll, counts));
+  } else {
+    embed.addFields({ name: 'Placar', value: pollResultsSummary(poll, votes, counts), inline: false });
+  }
+
+  embed.addFields(
+    { name: 'Votantes', value: String(totalVoters), inline: true },
+    { name: 'Mais votado', value: winner ? `${winner.option} (${winner.count})` : 'Sem votos', inline: true },
+    { name: 'Criador', value: poll.creator_id === botCreatorId ? 'NOTAG' : `<@${poll.creator_id}>`, inline: true }
+  );
+
+  return embed;
 }
 
 function pollNamesEmbed(pollId) {
@@ -133,7 +141,13 @@ async function ensureDailyBlackForFunPoll(client) {
   if (now.getUTCHours() !== 10) return null;
   const key = dailyBlackPollKey(now);
   let poll = repo.getPollByKey(key);
-  if (poll) return poll;
+  if (poll) {
+    if (poll.question !== blackForFunQuestion || JSON.stringify(poll.options) !== JSON.stringify(blackForFunOptions)) {
+      poll = repo.updatePollContent({ id: poll.id, question: blackForFunQuestion, options: blackForFunOptions });
+      await refreshPollMessage(client, poll.id);
+    }
+    return poll;
+  }
 
   poll = repo.createPoll({
     creatorId: client.user?.id || botCreatorId,
@@ -156,19 +170,19 @@ async function ensureDailyBlackForFunPoll(client) {
 async function maybeHandleBlackForFunMilestones(client, pollId) {
   const poll = repo.getPoll(pollId);
   if (!poll?.poll_key?.startsWith('black_for_fun:') || poll.status !== 'open') return;
-  const votes = repo.listVotes(poll.id);
-  const totalVoters = votes.length;
+  const winner = winningOption(poll.id);
+  const winnerCount = winner?.count || 0;
 
-  if (totalVoters >= 10 && !poll.staff_alerted_at) {
+  if (winnerCount >= 10 && !poll.staff_alerted_at) {
     const channel = await client.channels.fetch(ids.channels.notagChat).catch(() => null);
     await channel?.send({
-      content: `${staffMentions()} enquete Black For-Fun passou de 10 membros interessados. Mais votado: ${winningOption(poll.id)?.option || 'sem votos'}.`,
+      content: `${staffMentions()} enquete Black For-Fun chegou a ${winnerCount} membro(s) no horario ${winner.option}.`,
       allowedMentions: { roles: staffRoleIds() }
     }).catch(() => {});
     repo.markStaffAlerted(poll.id);
   }
 
-  if (totalVoters >= 20 && !poll.auto_event_id) {
+  if (winnerCount >= 20 && !poll.auto_event_id) {
     await createBlackForFunEvent(client, poll.id);
   }
 }
@@ -235,11 +249,71 @@ function pollComponents(poll) {
         .setLabel('Ver nomes')
         .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
+        .setCustomId(`poll:history:${poll.id}`)
+        .setLabel('Historico')
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
         .setCustomId(`poll:close:${poll.id}`)
         .setLabel('Fechar enquete')
         .setStyle(ButtonStyle.Danger)
     )
   ];
+}
+
+function primeTimeHistoryEmbed(days = 14) {
+  const polls = repo.listPollsByKeyPrefix('black_for_fun:', days);
+  const totals = new Map(blackForFunOptions.map((option) => [option, { votes: 0, winnerDays: 0 }]));
+  let totalVoters = 0;
+
+  for (const poll of polls) {
+    const votes = repo.listVotes(poll.id);
+    totalVoters += votes.length;
+    const counts = tally({ ...poll, options: blackForFunOptions }, votes);
+    let dayWinner = null;
+    for (const option of blackForFunOptions) {
+      const count = counts.get(option) || 0;
+      const item = totals.get(option);
+      item.votes += count;
+      if (count > 0 && (!dayWinner || count > dayWinner.count)) dayWinner = { option, count };
+    }
+    if (dayWinner) totals.get(dayWinner.option).winnerDays += 1;
+  }
+
+  const lines = [...totals.entries()]
+    .filter(([, item]) => item.votes > 0)
+    .sort((a, b) => b[1].votes - a[1].votes || b[1].winnerDays - a[1].winnerDays)
+    .slice(0, 12)
+    .map(([option, item], index) => `${index + 1}. **${option}** - ${item.votes} voto(s), venceu ${item.winnerDays} dia(s)`);
+  const voice = repo.blackForFunVoiceSummary(days);
+
+  return new EmbedBuilder()
+    .setTitle('Historico PRIME TIME')
+    .setDescription([
+      `Ultimos ${days} dias de enquetes Black For-Fun.`,
+      '',
+      '**Horarios mais fortes**',
+      lines.length ? lines.join('\n') : 'Ainda nao ha votos historicos.',
+      '',
+      '**Voz Black For-Fun**',
+      `Eventos: ${voice?.events || 0}`,
+      `Membros em voz: ${voice?.members || 0}`,
+      `Horas em voz: ${Math.round(((voice?.seconds || 0) / 3600) * 10) / 10}`
+    ].join('\n'))
+    .setColor(0xf6ad55)
+    .setTimestamp(new Date());
+}
+
+function pollTitle(poll) {
+  if (poll.poll_key?.startsWith('black_for_fun:')) return poll.status === 'closed' ? 'PRIME TIME encerrado' : 'PRIME TIME';
+  return poll.status === 'closed' ? 'Enquete fechada' : 'Enquete';
+}
+
+function compactPollFields(poll, counts) {
+  return poll.options.map((option) => ({
+    name: option,
+    value: `${counts.get(option) || 0} voto(s)`,
+    inline: true
+  }));
 }
 
 function closeDecisionComponents(pollId) {
@@ -367,6 +441,7 @@ module.exports = {
   defaultOptions,
   defaultQuestion,
   pollEmbed,
+  primeTimeHistoryEmbed,
   pollNamesEmbed,
   vote
 };
