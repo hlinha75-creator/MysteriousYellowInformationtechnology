@@ -103,7 +103,7 @@ function pollEmbed(poll) {
 
   embed.addFields(
     { name: 'Votantes', value: String(totalVoters), inline: true },
-    { name: 'Mais votado', value: winner ? `${winner.option} (${winner.count})` : 'Sem votos', inline: true },
+    { name: 'Mais votado', value: winner ? `${pollOptionCode(winner.option)} (${winner.count})` : 'Sem votos', inline: true },
     { name: 'Criador', value: poll.creator_id === botCreatorId ? 'NOTAG' : `<@${poll.creator_id}>`, inline: true }
   );
 
@@ -127,7 +127,7 @@ function pollNamesEmbed(pollId) {
       .map((vote) => `<@${vote.user_id}>`);
     const count = counts.get(option) || 0;
     embed.addFields({
-      name: `${option} - ${count} voto(s)`,
+      name: `${pollOptionLabel(option)} - ${count} voto(s)`,
       value: compactMentions(voters, 950) || 'Ninguem ainda.',
       inline: false
     });
@@ -176,7 +176,7 @@ async function maybeHandleBlackForFunMilestones(client, pollId) {
   if (winnerCount >= 10 && !poll.staff_alerted_at) {
     const channel = await client.channels.fetch(ids.channels.notagChat).catch(() => null);
     await channel?.send({
-      content: `${staffMentions()} enquete Black For-Fun chegou a ${winnerCount} membro(s) no horario ${winner.option}.`,
+      content: `${staffMentions()} enquete Black For-Fun chegou a ${winnerCount} membro(s) no horario ${pollOptionLabel(winner.option)}.`,
       allowedMentions: { roles: staffRoleIds() }
     }).catch(() => {});
     repo.markStaffAlerted(poll.id);
@@ -191,7 +191,7 @@ async function createBlackForFunEvent(client, pollId) {
   const poll = repo.getPoll(pollId);
   const winner = winningOption(poll.id);
   if (!winner) return null;
-  const scheduledTime = winner.option.replace('h', ':00');
+  const scheduledTime = pollOptionLabel(winner.option);
   const existing = events.findEventByTitleAndSchedule?.({ title: 'Black For-Fun', scheduledTime });
   if (existing) {
     repo.setAutoEvent({ id: poll.id, eventId: existing.id });
@@ -224,7 +224,7 @@ async function createBlackForFunEvent(client, pollId) {
   repo.setAutoEvent({ id: poll.id, eventId: event.id });
 
   const channel = await client.channels.fetch(ids.channels.notagChat).catch(() => null);
-  await channel?.send(`Evento **Black For-Fun** criado automaticamente para ${winner.option} com ${voters.length} interessado(s).`).catch(() => {});
+  await channel?.send(`Evento **Black For-Fun** criado automaticamente para ${pollOptionLabel(winner.option)} com ${voters.length} interessado(s).`).catch(() => {});
   return event;
 }
 
@@ -241,7 +241,7 @@ function pollComponents(poll) {
         .setPlaceholder('Escolha um ou mais horarios')
         .setMinValues(1)
         .setMaxValues(Math.min(poll.options.length, 25))
-        .addOptions(poll.options.map((option) => ({ label: option, value: option })))
+        .addOptions(poll.options.map((option) => ({ label: pollOptionLabel(option), value: option })))
     ),
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -283,7 +283,7 @@ function primeTimeHistoryEmbed(days = 14) {
     .filter(([, item]) => item.votes > 0)
     .sort((a, b) => b[1].votes - a[1].votes || b[1].winnerDays - a[1].winnerDays)
     .slice(0, 12)
-    .map(([option, item], index) => `${index + 1}. **${option}** - ${item.votes} voto(s), venceu ${item.winnerDays} dia(s)`);
+    .map(([option, item], index) => `${index + 1}. **${pollOptionLabel(option)}** - ${item.votes} voto(s), venceu ${item.winnerDays} dia(s)`);
   const voice = repo.blackForFunVoiceSummary(days);
 
   return new EmbedBuilder()
@@ -310,7 +310,7 @@ function pollTitle(poll) {
 
 function compactPollFields(poll, counts) {
   return poll.options.map((option) => ({
-    name: option,
+    name: pollOptionCode(option),
     value: `${counts.get(option) || 0} voto(s)`,
     inline: true
   }));
@@ -348,7 +348,7 @@ function pollResultsSummary(poll, votes, counts) {
 
   for (const option of poll.options) {
     const count = counts.get(option) || 0;
-    const line = `**${option}** - ${count} voto(s)`;
+    const line = `**${pollOptionLabel(option)}** - ${count} voto(s)`;
     const nextLength = used + line.length + (lines.length > 0 ? 2 : 0);
     if (nextLength > 3900) {
       hiddenOptions += 1;
@@ -389,6 +389,16 @@ function winningOption(pollId) {
   return winner;
 }
 
+function pollOptionLabel(option) {
+  const text = String(option || '').trim();
+  const match = text.match(/^(\d{1,2})h$/i);
+  if (!match) return text;
+  return `${String(Number(match[1])).padStart(2, '0')}:00`;
+}
+
+function pollOptionCode(option) {
+  return `\`${pollOptionLabel(option)}\``;
+}
 function parseOptions(value) {
   const options = String(value || '')
     .split(/[,;\n]/)
