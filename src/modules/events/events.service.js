@@ -961,7 +961,7 @@ function reviewEmbed(eventId) {
     .addFields(
       { name: 'Loot liquido', value: formatSilver(review?.net_loot || 0), inline: true },
       { name: 'Evidencias', value: embedFieldValue(review?.evidence_notes || 'Anexe/cole DPS meter, fama total e CSV do loot logger no canal de revisao.'), inline: false },
-      { name: 'Participantes', value: embedLinesValue(lines, 'Nenhum participante com tempo contabilizado.'), inline: false }
+      ...embedLinesFields('Participantes', lines, 'Nenhum participante com tempo contabilizado.')
     )
     .setColor(0xd69e2e)
     .setTimestamp(new Date());
@@ -999,6 +999,35 @@ function embedLinesValue(lines, emptyText, maxLength = 1024) {
   }
 
   return visible.join('\n') || emptyText;
+}
+
+function embedLinesFields(name, lines, emptyText, maxLength = 1024) {
+  const cleanLines = lines.map((line) => String(line || '').trim()).filter(Boolean);
+  if (!cleanLines.length) return [{ name, value: emptyText, inline: false }];
+
+  const fields = [];
+  let current = [];
+  for (const line of cleanLines) {
+    const candidate = [...current, line].join('\n');
+    if (candidate.length > maxLength && current.length > 0) {
+      fields.push({ name: fieldPageName(name, fields.length), value: current.join('\n'), inline: false });
+      current = [line];
+    } else if (line.length > maxLength) {
+      fields.push({ name: fieldPageName(name, fields.length), value: embedFieldValue(line, maxLength), inline: false });
+      current = [];
+    } else {
+      current.push(line);
+    }
+  }
+
+  if (current.length > 0) {
+    fields.push({ name: fieldPageName(name, fields.length), value: current.join('\n'), inline: false });
+  }
+  return fields.slice(0, 20);
+}
+
+function fieldPageName(name, index) {
+  return index === 0 ? name : `${name} ${index + 1}`;
 }
 
 function reviewComponents(eventId, mode = 'review') {
@@ -1048,7 +1077,7 @@ function dpsMeterEmbed(eventId) {
       { name: 'Horario', value: event.scheduled_time || 'Nao informado', inline: true },
       { name: 'Loot liquido', value: formatSilver(review?.net_loot || 0), inline: true },
       { name: 'Evidencias', value: embedFieldValue(review?.evidence_notes || 'Aguardando prints/links/CSV no canal de revisao.'), inline: false },
-      { name: 'Participantes', value: embedLinesValue(lines, 'Nenhum participante.'), inline: false }
+      ...embedLinesFields('Participantes', lines, 'Nenhum participante.')
     )
     .setColor(0x805ad5)
     .setTimestamp(new Date());
