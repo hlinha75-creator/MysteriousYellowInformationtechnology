@@ -791,11 +791,6 @@ async function handleButton(interaction) {
     return interaction.reply({ content: 'Saldos exportados.', files: [csv.balancesAttachment()], flags: MessageFlags.Ephemeral });
   }
 
-  if (interaction.customId === 'csv:export_balances_html') {
-    if (!can(interaction.member, 'importCsv')) return interaction.reply({ content: 'Sem permissao.', flags: MessageFlags.Ephemeral });
-    return interaction.reply({ content: 'Lista HTML de saldos gerada.', files: [csv.balancesHtmlAttachment()], flags: MessageFlags.Ephemeral });
-  }
-
   if (interaction.customId === 'guild:export_members_html') {
     if (!can(interaction.member, 'approveRegistration') && !can(interaction.member, 'importCsv')) {
       return interaction.reply({ content: 'Sem permissao.', flags: MessageFlags.Ephemeral });

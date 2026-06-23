@@ -58,6 +58,9 @@ const commands = [
       .setName('data')
       .setDescription('Data para voz AAAA-MM-DD ou semana Albion 2026-W25.')),
   new SlashCommandBuilder()
+    .setName('list')
+    .setDescription('Gera lista HTML filtravel de saldos com Discord e Albion.'),
+  new SlashCommandBuilder()
     .setName('importar')
     .setDescription('Importa CSV de saldos. Use o painel/fluxo com confirmacao.')
     .addAttachmentOption((option) => option.setName('arquivo').setDescription('CSV de saldos').setRequired(true)),

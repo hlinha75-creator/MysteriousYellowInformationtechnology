@@ -270,13 +270,7 @@ function eventEmoji(event) {
 function eventTimeLabel(value) {
   const start = parseAlbionEventTime(value);
   if (!start) return value || '';
-  const diffMs = start.getTime() - Date.now();
-  const absMinutes = Math.max(0, Math.round(Math.abs(diffMs) / 60000));
-  if (diffMs <= 0) return 'agora';
-  if (absMinutes < 60) return `em ${absMinutes}min`;
-  const hours = Math.floor(absMinutes / 60);
-  const minutes = absMinutes % 60;
-  return minutes ? `em ${hours}h${String(minutes).padStart(2, '0')}` : `em ${hours}h`;
+  return discordTimestamp(start, 'R');
 }
 
 function roleOccupants(event, participants, role) {
@@ -1210,23 +1204,20 @@ function formatRaidSchedule(value) {
   if (!text) return 'horario nao informado';
   const startAt = parseAlbionEventTime(text);
   if (!startAt) return text;
-  const diffMs = startAt.getTime() - Date.now();
-  const absMinutes = Math.max(0, Math.round(Math.abs(diffMs) / 60000));
-  const hours = Math.floor(absMinutes / 60);
-  const minutes = absMinutes % 60;
-  const relative = hours > 0
-    ? `${hours} hora${hours === 1 ? '' : 's'}${minutes ? ` e ${minutes} min` : ''}`
-    : `${minutes} min`;
-  return `${formatAlbionScheduleText(text, startAt)} (${diffMs >= 0 ? 'em' : 'ha'} ${relative})`;
+  return `${formatAlbionScheduleText(text, startAt)} (${discordTimestamp(startAt, 'R')})`;
 }
 
 function formatAlbionScheduleText(text, startAt) {
   const dateMatch = String(text || '').match(/\b(\d{1,2})[/-](\d{1,2})(?:[/-]\d{2,4})?\b/);
   const time = `${String(startAt.getUTCHours()).padStart(2, '0')}:${String(startAt.getUTCMinutes()).padStart(2, '0')}`;
   if (dateMatch) {
-    return `${dateMatch[1].padStart(2, '0')}/${dateMatch[2].padStart(2, '0')} as ${time}`;
+    return `${dateMatch[1].padStart(2, '0')}/${dateMatch[2].padStart(2, '0')} as ${time} UTC`;
   }
-  return `Hoje as ${time}`;
+  return `Hoje as ${time} UTC`;
+}
+
+function discordTimestamp(date, style = 'R') {
+  return `<t:${Math.floor(date.getTime() / 1000)}:${style}>`;
 }
 
 function isRaidAvalonEvent(event) {

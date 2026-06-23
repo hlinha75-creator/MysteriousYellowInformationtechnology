@@ -143,6 +143,17 @@ async function handleCommand(interaction) {
     return interaction.editReply({ content: 'Exportacao gerada.', files: [attachment] });
   }
 
+  if (interaction.commandName === 'list') {
+    if (!can(interaction.member, 'importCsv')) {
+      return interaction.reply({ content: 'Voce nao tem permissao para gerar a lista.', flags: MessageFlags.Ephemeral });
+    }
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    return interaction.editReply({
+      content: 'Lista HTML de saldos gerada.',
+      files: [csv.balancesHtmlAttachment()]
+    });
+  }
+
   if (interaction.commandName === 'importar') {
     if (!can(interaction.member, 'importCsv')) {
       return interaction.reply({ content: 'Voce nao tem permissao para importar.', flags: MessageFlags.Ephemeral });
