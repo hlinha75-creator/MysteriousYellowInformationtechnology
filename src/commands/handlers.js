@@ -150,7 +150,7 @@ async function handleCommand(interaction) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     return interaction.editReply({
       content: 'Lista HTML de saldos gerada.',
-      files: [csv.balancesHtmlAttachment()]
+      files: [await csv.balancesHtmlAttachment(interaction.guild)]
     });
   }
 

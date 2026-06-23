@@ -17,7 +17,7 @@ function balancesAttachment() {
   return new AttachmentBuilder(Buffer.from(csv, 'utf8'), { name: 'saldos-guilda.csv' });
 }
 
-function balancesHtmlAttachment() {
+async function balancesHtmlAttachment(guild = null) {
   const rows = financeRepo.listAllBalances().map((row) => ({
     discord_id: row.discord_id || '',
     discord_name: row.discord_name || '',
@@ -25,7 +25,20 @@ function balancesHtmlAttachment() {
     balance: Number(row.balance || 0),
     last_updated: row.last_updated || ''
   }));
-  return new AttachmentBuilder(Buffer.from(renderBalancesHtml(rows), 'utf8'), { name: 'saldos-guilda.html' });
+  const enrichedRows = guild ? await enrichRowsWithDiscordNames(rows, guild) : rows;
+  return new AttachmentBuilder(Buffer.from(renderBalancesHtml(enrichedRows), 'utf8'), { name: 'saldos-guilda.html' });
+}
+
+async function enrichRowsWithDiscordNames(rows, guild) {
+  const members = await guild.members.fetch().catch(() => null);
+  return rows.map((row) => {
+    if (!row.discord_id || row.discord_name) return row;
+    const member = members?.get(row.discord_id);
+    return {
+      ...row,
+      discord_name: member?.displayName || member?.user?.tag || member?.user?.username || row.discord_name
+    };
+  });
 }
 
 function renderBalancesHtml(rows) {
