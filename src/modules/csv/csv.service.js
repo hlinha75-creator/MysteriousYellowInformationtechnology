@@ -1,4 +1,5 @@
 const { AttachmentBuilder } = require('discord.js');
+const ids = require('../../config/ids');
 const { backupDatabase } = require('../../database/backup');
 const { transaction } = require('../../database/connection');
 const { parseSilver } = require('../../utils/silver');
@@ -23,22 +24,77 @@ async function balancesHtmlAttachment(guild = null) {
     discord_name: row.discord_name || '',
     albion_name: row.albion_name || '',
     balance: Number(row.balance || 0),
-    last_updated: row.last_updated || ''
+    last_updated: row.last_updated || '',
+    guild_status: '',
+    voice_seconds: 0,
+    voice_time: ''
   }));
-  const enrichedRows = guild ? await enrichRowsWithDiscordNames(rows, guild) : rows;
+  const enrichedRows = guild ? await discordMemberBalanceRows(rows, guild) : rows;
   return new AttachmentBuilder(Buffer.from(renderBalancesHtml(enrichedRows), 'utf8'), { name: 'saldos-guilda.html' });
 }
 
-async function enrichRowsWithDiscordNames(rows, guild) {
+async function discordMemberBalanceRows(balanceRows, guild) {
   const members = await guild.members.fetch().catch(() => null);
-  return rows.map((row) => {
-    if (!row.discord_id || row.discord_name) return row;
-    const member = members?.get(row.discord_id);
-    return {
+  if (!members) return balanceRows;
+
+  const byDiscordId = new Map(balanceRows.filter((row) => row.discord_id).map((row) => [row.discord_id, row]));
+  const voiceByDiscordId = voiceTotalsByDiscordId();
+  const rows = [];
+
+  for (const member of members.values()) {
+    if (member.user?.bot) continue;
+    const existing = byDiscordId.get(member.id);
+    const voiceSeconds = voiceByDiscordId.get(member.id) || 0;
+    rows.push({
+      discord_id: member.id,
+      discord_name: member.displayName || member.user?.tag || member.user?.username || member.id,
+      albion_name: existing?.albion_name || '',
+      balance: Number(existing?.balance || 0),
+      last_updated: existing?.last_updated || '',
+      guild_status: memberGuildStatus(member),
+      voice_seconds: voiceSeconds,
+      voice_time: formatVoiceTime(voiceSeconds)
+    });
+  }
+
+  for (const row of balanceRows) {
+    if (!row.discord_id || members.has(row.discord_id)) continue;
+    const voiceSeconds = voiceByDiscordId.get(row.discord_id) || 0;
+    rows.push({
       ...row,
-      discord_name: member?.displayName || member?.user?.tag || member?.user?.username || row.discord_name
-    };
-  });
+      guild_status: 'Fora do Discord',
+      voice_seconds: voiceSeconds,
+      voice_time: formatVoiceTime(voiceSeconds)
+    });
+  }
+
+  return rows.sort((a, b) => balanceName(a).localeCompare(balanceName(b), 'pt-BR', { sensitivity: 'base' }));
+}
+
+function voiceTotalsByDiscordId() {
+  const totals = new Map();
+  for (const session of voiceRepo.listSessions(100000)) {
+    totals.set(session.discord_id, (totals.get(session.discord_id) || 0) + Number(session.seconds || 0));
+  }
+  return totals;
+}
+
+function memberGuildStatus(member) {
+  if (member.roles.cache.has(ids.roles.member)) return 'Membro';
+  if (member.roles.cache.has(ids.roles.guest)) return 'Convidado';
+  if (member.roles.cache.has(ids.roles.noTag)) return 'Sem tag';
+  return 'Sem cargo';
+}
+
+function formatVoiceTime(seconds) {
+  const total = Math.max(0, Number(seconds || 0));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  return `${hours}h${String(minutes).padStart(2, '0')}m`;
+}
+
+function balanceName(row) {
+  return row.albion_name || row.discord_name || row.discord_id || '';
 }
 
 function renderBalancesHtml(rows) {
@@ -114,7 +170,7 @@ function renderBalancesHtml(rows) {
     }
     .metrics {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(5, 1fr);
       gap: 1px;
       overflow: hidden;
       margin-bottom: 14px;
@@ -198,17 +254,25 @@ function renderBalancesHtml(rows) {
           <option value="negative">Saldo negativo</option>
         </select>
       </label>
+      <label>Tag
+        <select id="guildStatus">
+          <option value="">Todos</option>
+          <option value="Membro">Membro</option>
+          <option value="Convidado">Convidado</option>
+          <option value="Sem tag">Sem tag</option>
+          <option value="Sem cargo">Sem cargo</option>
+          <option value="Fora do Discord">Fora do Discord</option>
+        </select>
+      </label>
       <label>Saldo minimo
         <input id="minBalance" type="number" inputmode="numeric" placeholder="Ex: 0">
-      </label>
-      <label>Saldo maximo
-        <input id="maxBalance" type="number" inputmode="numeric" placeholder="Ex: 1000000">
       </label>
       <label>Ordenar
         <select id="sort">
           <option value="name">Nome A-Z</option>
           <option value="balance_desc">Maior saldo</option>
           <option value="balance_asc">Menor saldo</option>
+          <option value="voice_desc">Mais tempo em call</option>
           <option value="updated_desc">Atualizado recente</option>
         </select>
       </label>
@@ -221,8 +285,10 @@ function renderBalancesHtml(rows) {
           <tr>
             <th>Membro</th>
             <th>Discord</th>
+            <th>Tag</th>
             <th>ID</th>
             <th class="amount">Saldo</th>
+            <th>Call voz</th>
             <th>Atualizado</th>
           </tr>
         </thead>
@@ -234,14 +300,14 @@ function renderBalancesHtml(rows) {
     const balances = ${json};
     const search = document.querySelector('#search');
     const status = document.querySelector('#status');
+    const guildStatus = document.querySelector('#guildStatus');
     const minBalance = document.querySelector('#minBalance');
-    const maxBalance = document.querySelector('#maxBalance');
     const sort = document.querySelector('#sort');
     const rowsEl = document.querySelector('#rows');
     const metricsEl = document.querySelector('#metrics');
     const visibleCount = document.querySelector('#visibleCount');
 
-    for (const input of [search, status, minBalance, maxBalance, sort]) {
+    for (const input of [search, status, guildStatus, minBalance, sort]) {
       input.addEventListener('input', render);
       input.addEventListener('change', render);
     }
@@ -253,21 +319,22 @@ function renderBalancesHtml(rows) {
     function filteredRows() {
       const query = normalize(search.value);
       const min = minBalance.value === '' ? null : Number(minBalance.value);
-      const max = maxBalance.value === '' ? null : Number(maxBalance.value);
       const statusValue = status.value;
+      const guildStatusValue = guildStatus.value;
       return balances
-        .filter((row) => !query || normalize(row.albion_name + ' ' + row.discord_name + ' ' + row.discord_id).includes(query))
+        .filter((row) => !query || normalize(row.albion_name + ' ' + row.discord_name + ' ' + row.discord_id + ' ' + row.guild_status).includes(query))
         .filter((row) => statusValue !== 'positive' || row.balance > 0)
         .filter((row) => statusValue !== 'zero' || row.balance === 0)
         .filter((row) => statusValue !== 'negative' || row.balance < 0)
+        .filter((row) => !guildStatusValue || row.guild_status === guildStatusValue)
         .filter((row) => min == null || row.balance >= min)
-        .filter((row) => max == null || row.balance <= max)
         .sort(sorter(sort.value));
     }
 
     function sorter(mode) {
       if (mode === 'balance_desc') return (a, b) => b.balance - a.balance || nameOf(a).localeCompare(nameOf(b));
       if (mode === 'balance_asc') return (a, b) => a.balance - b.balance || nameOf(a).localeCompare(nameOf(b));
+      if (mode === 'voice_desc') return (a, b) => Number(b.voice_seconds || 0) - Number(a.voice_seconds || 0) || nameOf(a).localeCompare(nameOf(b));
       if (mode === 'updated_desc') return (a, b) => String(b.last_updated).localeCompare(String(a.last_updated));
       return (a, b) => nameOf(a).localeCompare(nameOf(b));
     }
@@ -282,14 +349,16 @@ function renderBalancesHtml(rows) {
       const positive = rows.filter((row) => row.balance > 0).length;
       const zero = rows.filter((row) => row.balance === 0).length;
       const negative = rows.filter((row) => row.balance < 0).length;
+      const voiceTotal = rows.reduce((sum, row) => sum + Number(row.voice_seconds || 0), 0);
       visibleCount.textContent = rows.length + ' linhas';
       metricsEl.innerHTML = [
+        metric('Membros Discord', rows.length),
         metric('Total filtrado', silver(total)),
         metric('Positivos', positive),
         metric('Zerados', zero),
-        metric('Negativos', negative)
+        metric('Call voz', voiceTime(voiceTotal))
       ].join('');
-      rowsEl.innerHTML = rows.length ? rows.map(rowHtml).join('') : '<tr><td colspan="5" class="empty">Nenhum saldo encontrado com esses filtros.</td></tr>';
+      rowsEl.innerHTML = rows.length ? rows.map(rowHtml).join('') : '<tr><td colspan="7" class="empty">Nenhum saldo encontrado com esses filtros.</td></tr>';
     }
 
     function metric(label, value) {
@@ -301,14 +370,23 @@ function renderBalancesHtml(rows) {
       return '<tr>' +
         '<td><div class="name">' + escapeHtml(row.albion_name || '-') + '</div><div class="sub">' + escapeHtml(row.discord_name || '-') + '</div></td>' +
         '<td>' + escapeHtml(row.discord_name || '-') + '</td>' +
+        '<td>' + escapeHtml(row.guild_status || '-') + '</td>' +
         '<td>' + escapeHtml(row.discord_id || '-') + '</td>' +
         '<td class="amount ' + klass + '">' + silver(row.balance) + '</td>' +
+        '<td>' + escapeHtml(row.voice_time || '0h00m') + '</td>' +
         '<td>' + escapeHtml(row.last_updated || '-') + '</td>' +
       '</tr>';
     }
 
     function silver(value) {
       return new Intl.NumberFormat('pt-BR').format(Number(value || 0));
+    }
+
+    function voiceTime(seconds) {
+      const total = Math.max(0, Number(seconds || 0));
+      const hours = Math.floor(total / 3600);
+      const minutes = Math.floor((total % 3600) / 60);
+      return hours + 'h' + String(minutes).padStart(2, '0') + 'm';
     }
 
     function escapeHtml(value) {
