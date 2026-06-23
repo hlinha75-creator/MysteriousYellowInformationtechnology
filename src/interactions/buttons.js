@@ -57,11 +57,11 @@ async function handleButton(interaction) {
       return interaction.reply({ content: 'Voce nao tem permissao para criar evento.', flags: MessageFlags.Ephemeral });
     }
     return showModal(interaction, 'event:create', 'Criar Evento', [
-      textInput('title', 'Titulo', false, 'Padrao: FastContent'),
-      textInput('description', 'Descricao', false, 'Padrao: Pergunte na Call'),
-      textInput('location', 'Local', false, 'Padrao: Pergunte na Call'),
-      textInput('scheduledTime', 'Horario Albion', false, 'Padrao: 10 minutos a frente'),
-      textInput('slots', 'Vagas Tank, Healer, Sup, DPS ex: 3,3,2,12', false, 'Padrao: 1,1,1,17')
+      textInput('title', 'Content', false, 'Ex: DG Grupo T8+'),
+      textInput('location', 'Local', false, 'Ex: Martlock Portal > HO Loch'),
+      textInput('scheduledTime', 'Data/Hora', false, 'Ex: 23/06 15:00 utc'),
+      textInput('description', 'Tier da Build', false, 'Ex: T8 equivalente + set Skip'),
+      textInput('slots', 'Tank, Healer, Suporte, DPS', false, 'Ex: 1,1,1,3')
     ]);
   }
 
@@ -137,16 +137,6 @@ async function handleButton(interaction) {
     if (action === 'view_names') {
       return interaction.reply({
         embeds: [polls.pollNamesEmbed(pollId)],
-        flags: MessageFlags.Ephemeral
-      });
-    }
-
-    if (action === 'history') {
-      if (!can(interaction.member, 'createPoll')) {
-        return interaction.reply({ content: 'Somente staff/caller/recrutador autorizado pode ver o historico.', flags: MessageFlags.Ephemeral });
-      }
-      return interaction.reply({
-        embeds: [polls.primeTimeHistoryEmbed(14)],
         flags: MessageFlags.Ephemeral
       });
     }

@@ -198,28 +198,85 @@ function eventEmbed(event, participants = []) {
 
   if (event.status === 'running') {
     return embed
-      .setDescription(`**${event.description || 'Evento em andamento'}**\nCriador: <@${event.creator_id}>\n${statusLabel(event.status)} | ${event.location || 'Local nao informado'} | ${event.scheduled_time || 'Horario nao informado'}`)
+      .setTitle(null)
+      .setDescription(commonEventAnnouncement(event, participants, { running: true, elapsed }))
       .addFields(
-        { name: 'Tempo em andamento', value: elapsed, inline: true },
-        { name: 'Vagas', value: eventRoles.map((role) => `${roleStatsLabel(role)} ${count(role)}/${event[roleConfigs[role].slots]}`).join(' | '), inline: false },
-        { name: 'Participantes', value: runningParticipantsSummary(participants), inline: false },
         { name: 'Voz', value: event.voice_channel_id ? `<#${event.voice_channel_id}>` : 'Sala em criacao', inline: true }
       );
   }
 
   return embed
-    .setDescription(`**${event.description || 'Sem descricao.'}**\nCriador: <@${event.creator_id}>`)
-    .addFields(
-      { name: 'Status', value: statusLabel(event.status), inline: true },
-      { name: 'Local', value: event.location || 'Nao informado', inline: true },
-      { name: 'Horario Albion', value: event.scheduled_time || 'Nao informado', inline: true },
-      ...eventRoles.map((role) => ({
-        name: `${roleStatsLabel(role)} ${count(role)}/${event[roleConfigs[role].slots]}`,
-        value: roleOccupants(event, participants, role),
-        inline: true
-      })),
-      ...(raidMeta ? [{ name: 'Auxiliares', value: raidHelpersSummary(participants), inline: false }] : [])
-    );
+    .setTitle(null)
+    .setDescription(commonEventAnnouncement(event, participants));
+}
+
+function commonEventAnnouncement(event, participants, options = {}) {
+  const title = formatEventTitle(event.title).toUpperCase();
+  const totalSlots = eventRoles.reduce((total, role) => total + Number(event[roleConfigs[role].slots] || 0), 0);
+  const active = participants.filter((participant) => !participant.is_spectator);
+  const spectators = participants.filter((participant) => participant.is_spectator);
+  const filled = active.length;
+  const timing = options.running
+    ? `em andamento - ${options.elapsed || '0m'}`
+    : eventTimeLabel(event.scheduled_time);
+  const lines = [
+    `## ${eventEmoji(event)} ${title}${timing ? ` (${timing})` : ''}`,
+    '',
+    `**Local:** ${event.location || 'Nao informado'}`,
+    `**Build:** ${event.description || 'Nao informado'}`,
+    '',
+    `### Composicao (${filled}/${totalSlots})`,
+    '',
+    ...compositionLines(event, active),
+    '',
+    `**Espectadores:** ${spectators.length ? spectators.map((participant) => `<@${participant.discord_id}>`).join(', ') : 'Vazio'}`
+  ];
+  return lines.join('\n').slice(0, 4096);
+}
+
+function compositionLines(event, participants) {
+  const remaining = new Map();
+  for (const role of eventRoles) {
+    remaining.set(role, participants.filter((participant) => participant.role === role));
+  }
+
+  return eventRoles.flatMap((role) => {
+    const slots = Number(event[roleConfigs[role].slots] || 0);
+    return Array.from({ length: slots }, (_, index) => {
+      const participant = remaining.get(role).shift();
+      return `${roleLineLabel(role, index, slots)} > ${participant ? `<@${participant.discord_id}>` : 'Vazio'}`;
+    });
+  });
+}
+
+function roleLineLabel(role, index, total) {
+  const labels = {
+    tank: '🛡️ **Tank**',
+    healer: '✋ **Healer**',
+    support: '🟧 **Suporte**',
+    dps: `⚔️ **DPS ${index + 1}**`
+  };
+  if (role === 'dps') return labels.dps;
+  return total > 1 ? `${labels[role]} ${index + 1}` : labels[role];
+}
+
+function eventEmoji(event) {
+  const text = `${event.title || ''} ${event.description || ''}`.toLowerCase();
+  if (text.includes('dg') || text.includes('dungeon')) return '🌀';
+  if (text.includes('raid')) return '⚔️';
+  return '🌀';
+}
+
+function eventTimeLabel(value) {
+  const start = parseAlbionEventTime(value);
+  if (!start) return value || '';
+  const diffMs = start.getTime() - Date.now();
+  const absMinutes = Math.max(0, Math.round(Math.abs(diffMs) / 60000));
+  if (diffMs <= 0) return 'agora';
+  if (absMinutes < 60) return `em ${absMinutes}min`;
+  const hours = Math.floor(absMinutes / 60);
+  const minutes = absMinutes % 60;
+  return minutes ? `em ${hours}h${String(minutes).padStart(2, '0')}` : `em ${hours}h`;
 }
 
 function roleOccupants(event, participants, role) {
@@ -533,36 +590,6 @@ async function autoJoinRunningEvent(interaction, eventId) {
   if (!role) throw new Error('Nao ha vagas livres neste evento. Use Assistir se quiser acompanhar.');
   await joinEvent(interaction, eventId, role);
   return role;
-}
-
-async function addParticipantDirect({ guild, eventId, discordId, role }) {
-  const event = repo.getEvent(eventId);
-  if (!event) throw new Error('Evento nao encontrado.');
-  repo.upsertParticipant({ eventId, discordId, role, isSpectator: 0 });
-  await addEventRoleToMember(guild, event, discordId).catch(() => {});
-}
-
-async function autoStartBlackForFunEvents(client) {
-  const guild = await client.guilds.fetch(ids.guildId).catch(() => null);
-  if (!guild) return;
-  const events = repo.listAutoStartCandidates();
-  for (const event of events) {
-    const startAt = parseAlbionEventTime(event.scheduled_time);
-    if (!startAt) continue;
-    const msUntilStart = startAt.getTime() - Date.now();
-    if (msUntilStart > 15 * 60 * 1000 || msUntilStart < -10 * 60 * 1000) continue;
-    await startEventWithGuild({
-      client,
-      guild,
-      eventId: event.id,
-      actorId: client.user?.id || 'system'
-    }).catch((error) => console.error(`Falha ao iniciar ${event.event_code}:`, error));
-    repo.updateEvent(event.id, { auto_started: 1 });
-  }
-}
-
-function findEventByTitleAndSchedule({ title, scheduledTime }) {
-  return repo.findEventByTitleAndSchedule({ title, scheduledTime });
 }
 
 function firstAvailableRole(event, participants) {
@@ -1567,6 +1594,7 @@ async function checkEventStartWarnings(client) {
   const events = repo.listPendingReminderEvents();
   const guild = await client.guilds.fetch(ids.guildId).catch(() => null);
   if (!guild) return;
+  await cleanupExpiredEventTempRoles(guild);
   for (const event of events) {
     const startAt = parseAlbionEventTime(event.scheduled_time);
     if (!startAt) continue;
@@ -1583,10 +1611,37 @@ async function checkEventStartWarnings(client) {
       repo.updateEvent(event.id, { reminder_start_sent: 1 });
     }
 
-    if (event.warning_role_id && event.temp_role_delete_after && Date.parse(event.temp_role_delete_after) <= Date.now()) {
-      await removeWarningRole(guild, event).catch(() => {});
-    }
   }
+}
+
+async function cleanupExpiredEventTempRoles(guild) {
+  const tracked = repo.listEventsWithTempRoles();
+  for (const event of tracked) {
+    if (!isTempRoleExpired(event.temp_role_delete_after)) continue;
+    await removeWarningRole(guild, event).catch((error) => {
+      console.error(`Falha ao remover cargo temporario ${event.warning_role_id} do ${event.event_code}:`, error);
+    });
+  }
+
+  const roles = await guild.roles.fetch().catch(() => guild.roles.cache);
+  const now = Date.now();
+  for (const role of roles.values()) {
+    if (!isOrphanEventTempRole(role, now)) continue;
+    await role.delete('Removendo cargo temporario antigo sem evento vinculado').catch((error) => {
+      console.error(`Falha ao remover cargo temporario antigo ${role.name}:`, error);
+    });
+  }
+}
+
+function isTempRoleExpired(deleteAfter) {
+  if (!deleteAfter) return false;
+  const time = Date.parse(deleteAfter);
+  return Number.isFinite(time) && time <= Date.now();
+}
+
+function isOrphanEventTempRole(role, now = Date.now()) {
+  if (!/^\d{4}as\d{1,2}h$/i.test(role?.name || '')) return false;
+  return now - Number(role.createdTimestamp || 0) >= 24 * 60 * 60 * 1000;
 }
 
 async function ensureEventTempRole(guild, event) {
@@ -1639,8 +1694,10 @@ async function deleteWarningMessage(client, event) {
 async function removeWarningRole(guild, event) {
   if (!event?.warning_role_id) return;
   const role = await guild.roles.fetch(event.warning_role_id).catch(() => null);
-  await role?.delete(`Removendo cargo temporario do evento ${event.event_code}`).catch(() => {});
-  repo.updateEvent(event.id, { warning_role_id: null });
+  if (role) {
+    await role.delete(`Removendo cargo temporario do evento ${event.event_code}`);
+  }
+  repo.updateEvent(event.id, { warning_role_id: null, temp_role_delete_after: null });
 }
 
 function parseAlbionEventTime(value) {
@@ -1681,8 +1738,6 @@ function eventTempRoleName(event) {
 
 module.exports = {
   approveEventPayment,
-  addParticipantDirect,
-  autoStartBlackForFunEvents,
   addParticipantReview,
   autoJoinRunningEvent,
   cancelEvent,
@@ -1695,7 +1750,6 @@ module.exports = {
   deleteEventMessage,
   editParticipantReview,
   finishEvent,
-  findEventByTitleAndSchedule,
   grantRaidAvalonRewards,
   joinEvent,
   joinRaidAvalonHelper,

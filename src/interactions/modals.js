@@ -111,11 +111,11 @@ async function handleModal(interaction) {
       return interaction.reply({ content: 'Voce nao tem permissao para criar evento.', flags: MessageFlags.Ephemeral });
     }
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const title = fieldOrDefault(interaction, 'title', 'FastContent');
-    const description = fieldOrDefault(interaction, 'description', 'Pergunte na Call');
+    const title = fieldOrDefault(interaction, 'title', 'DG Grupo T8+');
+    const description = fieldOrDefault(interaction, 'description', 'T8 equivalente');
     const location = fieldOrDefault(interaction, 'location', 'Pergunte na Call');
     const scheduledTime = fieldOrDefault(interaction, 'scheduledTime', defaultAlbionTime(10));
-    const slots = parseSlots(fieldOrDefault(interaction, 'slots', '1,1,1,17'));
+    const slots = parseSlots(fieldOrDefault(interaction, 'slots', '1,1,1,3'));
     if (slots.length !== 4 || slots.some((value) => Number.isNaN(value) || value < 0)) {
       throw new Error('Use 4 numeros para vagas. Ex: 3,3,2,12 ou Tank 3 Healer 3 Sup 2 DPS 12.');
     }

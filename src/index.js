@@ -13,7 +13,6 @@ const auctions = require('./modules/auctions/auctions.service');
 const guildVerification = require('./modules/albion/guildVerification.service');
 const faq = require('./modules/faq/faq.service');
 const balanceBackup = require('./modules/csv/balanceBackup.service');
-const polls = require('./modules/polls/polls.service');
 const operations = require('./modules/operations/operations.service');
 const { handleInteraction } = require('./interactions/router');
 
@@ -52,9 +51,6 @@ client.once('clientReady', () => {
   setInterval(() => {
     events.checkEventStartWarnings(client).catch((error) => console.error('Falha ao verificar avisos de eventos:', error));
   }, 30000);
-  setInterval(() => {
-    polls.checkBlackForFunAutoStart(client).catch((error) => console.error('Falha ao verificar Black For-Fun diario:', error));
-  }, 60000);
   setInterval(() => {
     auctions.refreshOpenAuctions(client).catch((error) => console.error('Falha ao atualizar leiloes:', error));
   }, 60000);

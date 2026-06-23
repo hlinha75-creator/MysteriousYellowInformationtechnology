@@ -11,6 +11,7 @@
     "audit:channels": "node --no-warnings scripts/auditChannels.js",
     "audit:nicks": "node --no-warnings scripts/auditNicks.js",
     "rename:channels": "node --no-warnings scripts/renameChannels.js",
+    "import:members": "node --no-warnings scripts/importMemberSnapshot.js",
     "backup:db": "node --no-warnings scripts/backupDatabase.js",
     "restore:db": "node --no-warnings scripts/restoreDatabase.js"
   },
