@@ -301,8 +301,7 @@ function raidRoleSlotsSummary(participants, role) {
     const match = remaining.get(key)?.shift();
     const label = `${weaponEmoji(weapon)} ${weapon}`.trim();
     if (!match) return `${label} 🟢 Livre`;
-    const career = repo.getRaidAvalonCareer({ discordId: match.participant.discord_id, weaponKey: match.raid.weapon_key });
-    const count = career?.points || 0;
+    const count = careerPointsForWeapon(match.participant.discord_id, match.raid.weapon_name || weapon);
     return `${label} <@${match.participant.discord_id}> | ${match.raid.item_power || '?'} IP (${count})`;
   });
 
@@ -1387,10 +1386,64 @@ function careerPointInfo({ eventId, participant, role, functionName, seconds, so
   };
 }
 
+function careerPointsForWeapon(discordId, functionName) {
+  return careerWeaponKeys(functionName)
+    .map((key) => repo.getRaidAvalonCareer({ discordId, weaponKey: key })?.points || 0)
+    .reduce((total, points) => total + Number(points || 0), 0);
+}
+
+function careerWeaponKeys(functionName) {
+  const rawKey = weaponKey(functionName);
+  const canonical = careerWeaponInfo(functionName).key;
+  const aliases = Object.entries(careerWeaponAliases)
+    .filter(([, value]) => value === canonical)
+    .map(([key]) => key);
+  return [...new Set([canonical, rawKey, ...aliases])].filter(Boolean);
+}
+
+const careerWeaponAliases = {
+  quebra: 'quebra_reinos',
+  realbreaker: 'quebra_reinos',
+  real_breaker: 'quebra_reinos',
+  queda_santa: 'hallow',
+  quesasanta: 'hallow',
+  corrompido: 'fallen',
+  raiz_ferrea: 'raiz',
+  iron: 'raiz',
+  ironroot: 'raiz',
+  iron_root: 'raiz',
+  shadow: 'sc',
+  shadow_caller: 'sc',
+  chama_sombra: 'sc',
+  damnation: 'danacao',
+  lightcaller: 'aguia',
+  light_caller: 'aguia',
+  lc: 'aguia',
+  chill: 'uivo_frio',
+  mist: 'furabruma',
+  fura_bruma: 'furabruma'
+};
+
+const careerWeaponNames = {
+  martelo: 'Martelo',
+  incubus: 'Incubus',
+  quebra_reinos: 'Quebra Reinos',
+  hallow: 'Hallow',
+  fallen: 'Fallen',
+  raiz: 'Raiz',
+  sc: 'SC',
+  danacao: 'Danacao',
+  enig: 'Enig',
+  aguia: 'Aguia',
+  uivo_frio: 'Uivo Frio',
+  furabruma: 'Furabruma',
+  repetidor: 'Repetidor'
+};
+
 function careerWeaponInfo(functionName) {
   const key = weaponKey(functionName);
-  if (/^repetidor_\d+$/.test(key)) return { key: 'repetidor', name: 'Repetidor' };
-  return { key, name: functionName };
+  const canonicalKey = /^repetidor_\d+$/.test(key) ? 'repetidor' : (careerWeaponAliases[key] || key);
+  return { key: canonicalKey, name: careerWeaponNames[canonicalKey] || functionName };
 }
 
 function previewCareerRebuild() {
