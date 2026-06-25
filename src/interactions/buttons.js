@@ -16,6 +16,7 @@ const auctions = require('../modules/auctions/auctions.service');
 const auctionsRepo = require('../modules/auctions/auctions.repository');
 const memberList = require('../modules/members/memberList.service');
 const memberPanel = require('../modules/members/memberPanel.service');
+const inactiveEvents = require('../modules/members/inactiveEvents.service');
 const operations = require('../modules/operations/operations.service');
 const { formatSilver } = require('../utils/silver');
 const registration = require('../modules/registration/registration.service');
@@ -688,6 +689,41 @@ async function handleButton(interaction) {
     });
   }
 
+  if (interaction.customId === 'inactive_events:preview') {
+    if (!can(interaction.member, 'approveRegistration')) {
+      return interaction.reply({ content: 'Voce nao tem permissao para verificar inativos de eventos.', flags: MessageFlags.Ephemeral });
+    }
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const preview = await inactiveEvents.createPreview({
+      guild: interaction.guild,
+      actorId: interaction.user.id
+    });
+    return interaction.editReply(inactiveEvents.previewPayload(preview));
+  }
+
+  if (scope === 'inactive_events') {
+    if (!can(interaction.member, 'approveRegistration')) {
+      return interaction.reply({ content: 'Voce nao tem permissao para aplicar inativos de eventos.', flags: MessageFlags.Ephemeral });
+    }
+
+    if (action === 'confirm') {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      const result = await inactiveEvents.applyPreview({
+        guild: interaction.guild,
+        previewId: id,
+        actorId: interaction.user.id
+      });
+      await interaction.message.edit({ components: [] }).catch(() => {});
+      await inactiveEvents.postArchiveLog(interaction.client, result);
+      return interaction.editReply(inactiveEvents.applyPayload(result));
+    }
+
+    if (action === 'cancel') {
+      inactiveEvents.cancelPreview(id, interaction.user.id);
+      await interaction.message.edit({ components: [] }).catch(() => {});
+      return interaction.reply({ content: 'Verificacao de inativos cancelada. Nenhum cargo foi alterado.', flags: MessageFlags.Ephemeral });
+    }
+  }
   if (scope === 'registration_bulk') {
     if (!can(interaction.member, 'approveRegistration')) {
       return interaction.reply({ content: 'Voce nao tem permissao para aplicar verificacao de registros.', flags: MessageFlags.Ephemeral });

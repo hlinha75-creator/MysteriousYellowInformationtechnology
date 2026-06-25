@@ -72,6 +72,19 @@ const commands = [
       .setDescription('CSV/TSV com os nicks oficiais da guild no Albion.')
       .setRequired(true)),
   new SlashCommandBuilder()
+    .setName('inativos_evento')
+    .setDescription('Gera previa de membros sem participacao minima em eventos de voz.')
+    .addIntegerOption((option) => option
+      .setName('dias_minimos')
+      .setDescription('Ignora quem entrou ha menos dias que isso. Padrao: 14.')
+      .setMinValue(0)
+      .setMaxValue(365))
+    .addIntegerOption((option) => option
+      .setName('tempo_minimo')
+      .setDescription('Minutos minimos em eventos para nao ser rebaixado. Padrao: 15.')
+      .setMinValue(1)
+      .setMaxValue(1440)),
+  new SlashCommandBuilder()
     .setName('albion')
     .setDescription('Importa e consulta dados semanais manuais do Albion.')
     .addSubcommand((subcommand) => subcommand

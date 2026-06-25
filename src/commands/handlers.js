@@ -25,6 +25,7 @@ const dailyReport = require('../modules/reports/dailyReport.service');
 const registration = require('../modules/registration/registration.service');
 const albionWeekly = require('../modules/albion/weekly.service');
 const memberList = require('../modules/members/memberList.service');
+const inactiveEvents = require('../modules/members/inactiveEvents.service');
 
 function input(id, label, style = TextInputStyle.Short, required = true) {
   return new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setRequired(required);
@@ -220,6 +221,19 @@ async function handleCommand(interaction) {
     });
   }
 
+  if (interaction.commandName === 'inativos_evento') {
+    if (!can(interaction.member, 'approveRegistration')) {
+      return interaction.reply({ content: 'Voce nao tem permissao para verificar inativos de eventos.', flags: MessageFlags.Ephemeral });
+    }
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const preview = await inactiveEvents.createPreview({
+      guild: interaction.guild,
+      actorId: interaction.user.id,
+      daysMin: interaction.options.getInteger('dias_minimos') || inactiveEvents.defaultDaysMin,
+      minutesMin: interaction.options.getInteger('tempo_minimo') || inactiveEvents.defaultMinutesMin
+    });
+    return interaction.editReply(inactiveEvents.previewPayload(preview));
+  }
   if (interaction.commandName === 'albion') {
     if (!can(interaction.member, 'importCsv')) {
       return interaction.reply({ content: 'Voce nao tem permissao para importar dados do Albion.', flags: MessageFlags.Ephemeral });
