@@ -704,6 +704,74 @@ const migrations = [
         db.exec('ALTER TABLE events ADD COLUMN message_channel_id TEXT');
       }
     }
+  },
+  {
+    version: 24,
+    name: 'campaign_900m',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS campaigns (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          code TEXT UNIQUE NOT NULL,
+          title TEXT NOT NULL,
+          goal_amount INTEGER NOT NULL,
+          status TEXT NOT NULL DEFAULT 'open',
+          role_name TEXT NOT NULL DEFAULT '900m',
+          progress_channel_id TEXT,
+          progress_message_id TEXT,
+          created_by TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          closed_at TEXT,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS campaign_event_payouts (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          campaign_id INTEGER NOT NULL,
+          event_id INTEGER NOT NULL,
+          user_id TEXT NOT NULL,
+          amount INTEGER NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          decision TEXT,
+          dm_message_id TEXT,
+          expires_at TEXT NOT NULL,
+          created_by TEXT NOT NULL,
+          processed_by TEXT,
+          decided_at TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(campaign_id, event_id, user_id),
+          FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE,
+          FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS campaign_contributions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          campaign_id INTEGER NOT NULL,
+          user_id TEXT NOT NULL,
+          amount INTEGER NOT NULL,
+          source_type TEXT NOT NULL,
+          source_id TEXT,
+          status TEXT NOT NULL DEFAULT 'approved',
+          created_by TEXT NOT NULL,
+          approved_by TEXT,
+          note TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_campaign_event_payouts_pending
+          ON campaign_event_payouts (status, expires_at);
+
+        CREATE INDEX IF NOT EXISTS idx_campaign_contributions_campaign
+          ON campaign_contributions (campaign_id, created_at);
+
+        INSERT OR IGNORE INTO campaigns
+          (code, title, goal_amount, status, role_name, progress_channel_id, created_by)
+        VALUES
+          ('900m', 'Meta 900m NOTAG', 900000000, 'open', '900m', '1481363760110243910', 'system');
+      `);
+    }
   }
 ];
 

@@ -14,6 +14,7 @@ const guildVerification = require('./modules/albion/guildVerification.service');
 const faq = require('./modules/faq/faq.service');
 const balanceBackup = require('./modules/csv/balanceBackup.service');
 const operations = require('./modules/operations/operations.service');
+const campaigns = require('./modules/campaigns/campaigns.service');
 const { handleInteraction } = require('./interactions/router');
 
 migrate();
@@ -46,6 +47,8 @@ client.once('clientReady', () => {
   balanceBackup.postDailyBackupIfNeeded(client).catch((error) => console.error('Falha ao postar backup diario de saldos:', error));
   operations.postWeeklyAlbionReminderIfNeeded(client).catch((error) => console.error('Falha ao postar lembrete semanal Albion:', error));
   operations.postMonthlyInactivityPreviewIfNeeded(client).catch((error) => console.error('Falha ao postar previa mensal de inatividade:', error));
+  campaigns.refreshActiveCampaignProgress(client).catch((error) => console.error('Falha ao atualizar progresso da campanha:', error));
+  campaigns.processExpiredEventPayouts(client).catch((error) => console.error('Falha ao processar escolhas vencidas da campanha:', error));
   setInterval(() => {
     events.refreshRunningEventMessages(client).catch((error) => console.error('Falha ao atualizar eventos em andamento:', error));
   }, 60000);
@@ -56,6 +59,12 @@ client.once('clientReady', () => {
     auctions.refreshOpenAuctions(client).catch((error) => console.error('Falha ao atualizar leiloes:', error));
   }, 60000);
   setInterval(() => {
+    campaigns.processExpiredEventPayouts(client).catch((error) => console.error('Falha ao processar escolhas vencidas da campanha:', error));
+  }, 10 * 60 * 1000);
+  setInterval(() => {
+    campaigns.refreshActiveCampaignProgress(client).catch((error) => console.error('Falha ao atualizar progresso da campanha:', error));
+  }, 10 * 60 * 1000);
+  setInterval(() => {
     events.cleanupExpiredReviewChannels(client).catch((error) => console.error('Falha ao limpar canais de revisao:', error));
   }, 60 * 60 * 1000);
   setInterval(() => {
@@ -64,6 +73,8 @@ client.once('clientReady', () => {
   setInterval(() => {
     operations.postWeeklyAlbionReminderIfNeeded(client).catch((error) => console.error('Falha ao postar lembrete semanal Albion:', error));
   operations.postMonthlyInactivityPreviewIfNeeded(client).catch((error) => console.error('Falha ao postar previa mensal de inatividade:', error));
+  campaigns.refreshActiveCampaignProgress(client).catch((error) => console.error('Falha ao atualizar progresso da campanha:', error));
+  campaigns.processExpiredEventPayouts(client).catch((error) => console.error('Falha ao processar escolhas vencidas da campanha:', error));
   }, 60 * 60 * 1000);
 });
 

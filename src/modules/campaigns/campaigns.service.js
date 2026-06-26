@@ -1,0 +1,345 @@
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+const ids = require('../../config/ids');
+const { transaction } = require('../../database/connection');
+const { backupDatabase } = require('../../database/backup');
+const audit = require('../audit/audit.repository');
+const finance = require('../finance/finance.service');
+const eventsRepo = require('../events/events.repository');
+const repo = require('./campaigns.repository');
+const { formatSilver } = require('../../utils/silver');
+
+const decisionWindowMs = 24 * 60 * 60 * 1000;
+const defaultCampaignRoleName = '900m';
+
+function getActiveCampaign() {
+  return repo.getActiveCampaign();
+}
+
+function createEventPayoutChoices({ event, participants, actorId }) {
+  const campaign = repo.getActiveCampaign();
+  if (!campaign) return null;
+
+  const expiresAt = new Date(Date.now() + decisionWindowMs).toISOString();
+  const decisions = participants
+    .filter((participant) => !participant.is_spectator && Number(participant.payout_amount || 0) > 0)
+    .map((participant) => repo.createEventPayoutDecision({
+      campaignId: campaign.id,
+      eventId: event.id,
+      userId: participant.discord_id,
+      amount: Number(participant.payout_amount || 0),
+      expiresAt,
+      createdBy: actorId
+    }));
+
+  audit.createAuditLog({
+    type: 'campaign_event_choices_created',
+    actorId,
+    targetId: String(event.id),
+    reason: `${event.event_code} -> campanha ${campaign.code}`,
+    metadata: { campaignId: campaign.id, decisions: decisions.length, expiresAt }
+  });
+
+  return { campaign, decisions, expiresAt };
+}
+
+async function sendEventPayoutDms({ client, eventId, choices }) {
+  if (!choices?.campaign || !choices.decisions?.length) return { sent: 0, failed: 0 };
+  const event = eventsRepo.getEvent(eventId);
+  let sent = 0;
+  let failed = 0;
+
+  for (const decision of choices.decisions) {
+    try {
+      const user = await client.users.fetch(decision.user_id);
+      const message = await user.send(decisionMessagePayload({ campaign: choices.campaign, event, decision }));
+      repo.setDecisionDmMessage({ id: decision.id, messageId: message.id });
+      sent += 1;
+    } catch (error) {
+      failed += 1;
+      audit.createAuditLog({
+        type: 'campaign_event_choice_dm_failed',
+        targetId: decision.user_id,
+        afterValue: decision.amount,
+        reason: error.message,
+        metadata: { campaignId: choices.campaign.id, eventId }
+      });
+    }
+  }
+
+  return { sent, failed };
+}
+
+function decisionMessagePayload({ campaign, event, decision }) {
+  const expires = Math.floor(Date.parse(decision.expires_at) / 1000);
+  return {
+    embeds: [
+      new EmbedBuilder()
+        .setTitle(`Meta @${campaign.role_name || defaultCampaignRoleName}`)
+        .setDescription([
+          `Voce receberia **${formatSilver(decision.amount)}** do evento **${event?.event_code || decision.event_id}**.`,
+          '',
+          `Quer deixar **100% da sua parte** para a meta **@${campaign.role_name || defaultCampaignRoleName}**?`,
+          `Se voce nao responder ate <t:${expires}:R>, o bot deposita automaticamente no seu saldo.`
+        ].join('\n'))
+        .setColor(0xf59e0b)
+        .setTimestamp(new Date())
+    ],
+    components: [decisionButtons(decision.id)]
+  };
+}
+
+function decisionButtons(decisionId) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`campaign:donate_event:${decisionId}`)
+      .setLabel('Doar para @900m')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(`campaign:keep_event:${decisionId}`)
+      .setLabel('Receber meu saldo')
+      .setStyle(ButtonStyle.Secondary)
+  );
+}
+
+const resolveDecisionTransaction = transaction(({ decisionId, userId, choice, actorId, expired = false }) => {
+  const decision = repo.getEventPayoutDecision(decisionId);
+  if (!decision) throw new Error('Escolha da campanha nao encontrada.');
+  if (decision.user_id !== userId) throw new Error('Essa escolha da campanha nao pertence a voce.');
+  if (decision.status !== 'pending') throw new Error('Essa escolha da campanha ja foi resolvida.');
+
+  const campaign = repo.getCampaign(decision.campaign_id);
+  const event = eventsRepo.getEvent(decision.event_id);
+  const amount = Number(decision.amount || 0);
+
+  if (choice === 'donate') {
+    const updated = repo.markEventPayoutDecision({
+      id: decision.id,
+      status: 'donated',
+      decision: 'donate',
+      processedBy: actorId
+    });
+    if (updated.changes === 0) throw new Error('Essa escolha da campanha ja foi resolvida.');
+    repo.insertContribution({
+      campaignId: campaign.id,
+      userId: decision.user_id,
+      amount,
+      sourceType: 'event_payout',
+      sourceId: String(decision.event_id),
+      createdBy: actorId,
+      approvedBy: decision.created_by,
+      note: `Doacao do loot split do evento ${event?.event_code || decision.event_id}`
+    });
+    audit.createAuditLog({
+      type: 'campaign_event_payout_donated',
+      actorId,
+      targetId: decision.user_id,
+      afterValue: amount,
+      reason: `${event?.event_code || decision.event_id} -> ${campaign.code}`,
+      metadata: { campaignId: campaign.id, decisionId: decision.id }
+    });
+    return { campaign, event, decision: repo.getEventPayoutDecision(decision.id), transaction: null, donated: true };
+  }
+
+  const updated = repo.markEventPayoutDecision({
+    id: decision.id,
+    status: 'paid_balance',
+    decision: expired ? 'expired_to_balance' : 'keep_balance',
+    processedBy: actorId
+  });
+  if (updated.changes === 0) throw new Error('Essa escolha da campanha ja foi resolvida.');
+
+  const balanceTransaction = finance.applyBalanceTransaction({
+    type: 'event_payout',
+    userId: decision.user_id,
+    amount,
+    reason: expired
+      ? `Pagamento do evento ${event?.event_code || decision.event_id} (campanha expirada em 24h)`
+      : `Pagamento do evento ${event?.event_code || decision.event_id}`,
+    referenceType: 'event',
+    referenceId: String(decision.event_id),
+    createdBy: actorId
+  });
+
+  audit.createAuditLog({
+    type: expired ? 'campaign_event_payout_expired_to_balance' : 'campaign_event_payout_kept_balance',
+    actorId,
+    targetId: decision.user_id,
+    afterValue: amount,
+    reason: `${event?.event_code || decision.event_id} -> saldo`,
+    metadata: { campaignId: campaign.id, decisionId: decision.id }
+  });
+
+  return { campaign, event, decision: repo.getEventPayoutDecision(decision.id), transaction: balanceTransaction, donated: false };
+});
+
+async function resolveEventPayoutChoice({ client, decisionId, userId, choice, actorId }) {
+  const result = resolveDecisionTransaction({ decisionId, userId, choice, actorId });
+  if (result.donated) {
+    await grantCampaignRole(client, result.campaign, userId).catch((error) => {
+      audit.createAuditLog({ type: 'campaign_role_failed', targetId: userId, reason: error.message });
+    });
+    await notifyDonationDm({ client, result }).catch(() => {});
+  }
+  await refreshActiveCampaignProgress(client).catch(() => {});
+  return result;
+}
+
+async function processExpiredEventPayouts(client) {
+  const expired = repo.listExpiredPendingDecisions(new Date().toISOString(), 100);
+  const transactions = [];
+  let processed = 0;
+
+  for (const decision of expired) {
+    try {
+      const result = resolveDecisionTransaction({
+        decisionId: decision.id,
+        userId: decision.user_id,
+        choice: 'keep',
+        actorId: 'system',
+        expired: true
+      });
+      if (result.transaction) transactions.push(result.transaction);
+      processed += 1;
+    } catch (error) {
+      audit.createAuditLog({
+        type: 'campaign_expired_choice_failed',
+        targetId: decision.user_id,
+        reason: error.message,
+        metadata: { decisionId: decision.id }
+      });
+    }
+  }
+
+  if (transactions.length > 0) {
+    await finance.notifyBalanceTransactions({ client, transactions });
+  }
+  if (processed > 0) {
+    await refreshActiveCampaignProgress(client).catch(() => {});
+  }
+  return { processed, transactions: transactions.length };
+}
+
+async function notifyDonationDm({ client, result }) {
+  const user = await client.users.fetch(result.decision.user_id);
+  const totals = repo.getCampaignTotals(result.campaign.id);
+  await user.send([
+    `Voce doou ${formatSilver(result.decision.amount)} da sua parte do evento ${result.event?.event_code || result.decision.event_id} para @${result.campaign.role_name || defaultCampaignRoleName}.`,
+    `Meta atual: ${formatSilver(totals.raised)} / ${formatSilver(result.campaign.goal_amount)}.`,
+    'Obrigado por ajudar a guilda. Essa contribuicao ficou registrada no historico da campanha.'
+  ].join('\n'));
+}
+
+async function grantCampaignRole(client, campaign, userId) {
+  const guild = await client.guilds.fetch(ids.guildId);
+  const member = await guild.members.fetch(userId).catch(() => null);
+  if (!member) return null;
+  const role = await ensureCampaignRole(guild, campaign);
+  if (!role) return null;
+  if (!member.roles.cache.has(role.id)) {
+    await member.roles.add(role, `Contribuiu com a campanha ${campaign.code}`);
+  }
+  return role;
+}
+
+async function ensureCampaignRole(guild, campaign) {
+  const roleName = String(campaign.role_name || defaultCampaignRoleName).replace(/^@+/, '') || defaultCampaignRoleName;
+  const roles = await guild.roles.fetch().catch(() => guild.roles.cache);
+  let role = roles.find((item) => item.name.toLowerCase() === roleName.toLowerCase());
+  if (!role) {
+    role = await guild.roles.create({
+      name: roleName,
+      mentionable: true,
+      reason: `Cargo memorial da campanha ${campaign.code}`
+    });
+  }
+  return role;
+}
+
+async function refreshActiveCampaignProgress(client) {
+  const campaign = repo.getActiveCampaign();
+  if (!campaign) return null;
+  const channelId = campaign.progress_channel_id || ids.channels.notagChat;
+  const channel = await client.channels.fetch(channelId).catch(() => null);
+  if (!channel?.isTextBased()) return null;
+
+  const payload = progressMessagePayload(campaign);
+  let message = campaign.progress_message_id
+    ? await channel.messages.fetch(campaign.progress_message_id).catch(() => null)
+    : null;
+
+  if (message) {
+    await message.edit(payload);
+  } else {
+    message = await channel.send(payload);
+  }
+  repo.updateCampaignProgressMessage({ campaignId: campaign.id, channelId: channel.id, messageId: message.id });
+  return message;
+}
+
+function progressMessagePayload(campaign) {
+  const totals = repo.getCampaignTotals(campaign.id);
+  const goal = Number(campaign.goal_amount || 0);
+  const percent = goal > 0 ? Math.min(100, (totals.raised / goal) * 100) : 0;
+  const remaining = Math.max(0, goal - totals.raised);
+  const lines = repo.listContributions(campaign.id, 6).map((row) => {
+    const name = row.albion_name || row.discord_name || `<@${row.user_id}>`;
+    return `${name} - ${formatSilver(row.amount)} (${sourceLabel(row.source_type)})`;
+  });
+
+  return {
+    embeds: [
+      new EmbedBuilder()
+        .setTitle(`Meta @${campaign.role_name || defaultCampaignRoleName}: ${formatSilver(goal)}`)
+        .setDescription([
+          progressBar(percent),
+          `**${formatSilver(totals.raised)}** arrecadados (${percent.toFixed(1)}%).`,
+          remaining > 0 ? `Faltam **${formatSilver(remaining)}**.` : '**Meta batida.**',
+          '',
+          `Contribuidores: **${totals.contributors}** | Eventos: **${totals.events}** | Escolhas pendentes: **${totals.pending}**`,
+          '',
+          '**Ultimas entradas**',
+          lines.length ? lines.join('\n') : 'Nenhuma contribuicao registrada ainda.'
+        ].join('\n'))
+        .setColor(0xf59e0b)
+        .setTimestamp(new Date())
+    ],
+    allowedMentions: { parse: [] }
+  };
+}
+
+function progressBar(percent) {
+  const total = 20;
+  const filled = Math.max(0, Math.min(total, Math.round((percent / 100) * total)));
+  return `[${'#'.repeat(filled)}${'-'.repeat(total - filled)}]`;
+}
+
+function sourceLabel(sourceType) {
+  const labels = {
+    event_payout: 'loot split',
+    manual_deposit: 'doacao manual',
+    balance_donation: 'saldo'
+  };
+  return labels[sourceType] || sourceType;
+}
+
+function closedDecisionEmbed(result) {
+  const donated = result.donated;
+  return new EmbedBuilder()
+    .setTitle(donated ? 'Doacao registrada' : 'Saldo escolhido')
+    .setDescription(donated
+      ? `Sua parte de **${formatSilver(result.decision.amount)}** foi destinada para @${result.campaign.role_name || defaultCampaignRoleName}.`
+      : `Sua parte de **${formatSilver(result.decision.amount)}** foi enviada para seu saldo.`)
+    .setColor(donated ? 0x22c55e : 0x60a5fa)
+    .setTimestamp(new Date());
+}
+
+module.exports = {
+  closedDecisionEmbed,
+  createEventPayoutChoices,
+  decisionMessagePayload,
+  getActiveCampaign,
+  processExpiredEventPayouts,
+  refreshActiveCampaignProgress,
+  resolveEventPayoutChoice,
+  sendEventPayoutDms
+};

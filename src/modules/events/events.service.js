@@ -10,6 +10,7 @@ const ids = require('../../config/ids');
 const { transaction } = require('../../database/connection');
 const audit = require('../audit/audit.repository');
 const finance = require('../finance/finance.service');
+const campaigns = require('../campaigns/campaigns.service');
 const repo = require('./events.repository');
 const { calculateNetLoot, calculatePayouts } = require('./lootCalculator');
 const { formatSilver } = require('../../utils/silver');
@@ -252,22 +253,20 @@ function compositionLines(event, participants) {
 
 function roleLineLabel(role, index, total) {
   const labels = {
-    tank: '🛡️ **Tank**',
-    healer: '✋ **Healer**',
-    support: '🟧 **Suporte**',
-    dps: `⚔️ **DPS ${index + 1}**`
+    tank: '\u{1F6E1}\uFE0F **Tank**',
+    healer: '\u270B **Healer**',
+    support: '\u{1F7E7} **Suporte**',
+    dps: `\u2694\uFE0F **DPS ${index + 1}**`
   };
   if (role === 'dps') return labels.dps;
   return total > 1 ? `${labels[role]} ${index + 1}` : labels[role];
 }
-
 function eventEmoji(event) {
   const text = `${event.title || ''} ${event.description || ''}`.toLowerCase();
-  if (text.includes('dg') || text.includes('dungeon')) return '🌀';
-  if (text.includes('raid')) return '⚔️';
-  return '🌀';
+  if (text.includes('dg') || text.includes('dungeon')) return '\u{1F300}';
+  if (text.includes('raid')) return '\u2694\uFE0F';
+  return '\u{1F300}';
 }
-
 function eventTimeLabel(value) {
   const start = parseAlbionEventTime(value);
   if (!start) return value || '';
@@ -301,7 +300,7 @@ function raidRoleSlotsSummary(participants, role) {
     const key = weaponKey(weapon);
     const match = remaining.get(key)?.shift();
     const label = `${weaponEmoji(weapon)} ${weapon}`.trim();
-    if (!match) return `${label} 🟢 Livre`;
+    if (!match) return `${label} \u{1F7E2} Livre`;
     const count = careerPointsForWeapon(match.participant.discord_id, match.raid.weapon_name || weapon);
     return `${label} <@${match.participant.discord_id}> | ${match.raid.item_power || '?'} IP (${count})`;
   });
@@ -389,14 +388,14 @@ function eventComponents(event) {
   const buttons = event.status === 'running'
     ? isRaid
     ? [
-      new ButtonBuilder().setCustomId(`event:pause:${event.id}:raid`).setLabel('Pausar participação').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`event:pause:${event.id}:raid`).setLabel('Pausar participacao').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId(`event:finish:${event.id}:raid`).setLabel('Finalizar').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId(`event:cancel:${event.id}:raid`).setLabel('Cancelar').setStyle(ButtonStyle.Danger)
     ]
     : [
       new ButtonBuilder().setCustomId(`event:auto_join:${event.id}:main`).setLabel('Quero participar').setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId(`event:spectate:${event.id}:main`).setLabel('Assistir').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`event:pause:${event.id}:main`).setLabel('Pausar participação').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`event:pause:${event.id}:main`).setLabel('Pausar participacao').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId(`event:finish:${event.id}:main`).setLabel('Finalizar').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId(`event:cancel:${event.id}:main`).setLabel('Cancelar').setStyle(ButtonStyle.Danger)
     ]
@@ -964,6 +963,21 @@ const approveEventPayment = transaction(({ eventId, actorId }) => {
   if (!event || event.status !== 'pending_payment') throw new Error('Evento nao esta pendente de pagamento.');
   backupDatabase('before_event_payment');
   const participants = repo.listParticipants(eventId).filter((participant) => !participant.is_spectator && participant.payout_amount > 0);
+  const campaignChoices = campaigns.createEventPayoutChoices({ event, participants, actorId });
+
+  if (campaignChoices?.decisions?.length) {
+    repo.updateEvent(eventId, { status: 'approved' });
+    repo.markReviewApproved({ eventId, approvedBy: actorId });
+    audit.createAuditLog({
+      type: 'event_payment_approved_with_campaign_choice',
+      actorId,
+      targetId: String(eventId),
+      reason: event.event_code,
+      metadata: { campaignId: campaignChoices.campaign.id, decisions: campaignChoices.decisions.length }
+    });
+    return { transactions: [], campaignChoices };
+  }
+
   const transactions = [];
   for (const participant of participants) {
     const item = {
@@ -981,7 +995,7 @@ const approveEventPayment = transaction(({ eventId, actorId }) => {
   repo.updateEvent(eventId, { status: 'approved' });
   repo.markReviewApproved({ eventId, approvedBy: actorId });
   audit.createAuditLog({ type: 'event_payment_approved', actorId, targetId: String(eventId), reason: event.event_code });
-  return transactions;
+  return { transactions, campaignChoices: null };
 });
 
 async function deleteEventMessage(client, eventId) {
@@ -1160,7 +1174,7 @@ function roleLabel(role) {
     healer: `${roleEmoji('healer')} Healer`,
     support: `${roleEmoji('support')} Suporte`,
     dps: `${roleEmoji('dps')} DPS`,
-    spectator: '👁️ Espectador',
+    spectator: '\u{1F441}\uFE0F Espectador',
     scout: 'Scout',
     looter: 'Looter',
     uper: 'Uper'
@@ -1601,7 +1615,7 @@ function raidAvalonCareerPanelPayload() {
         .setTitle('Carreira geral por arma')
         .setDescription([
           'Conta qualquer content aprovado no financeiro.',
-          'Regra: 30 minutos = 1 ponto na classe e 1 ponto na arma/função.',
+          'Regra: 30 minutos = 1 ponto na classe e 1 ponto na arma/funcao.',
           '',
           '**Armas mais usadas**',
           weaponLines.length ? weaponLines.join('\n') : 'Nenhum ponto registrado ainda.',
@@ -1628,16 +1642,15 @@ function eventFunctionName(eventId, participant) {
 
 function statusLabel(status) {
   const labels = {
-    created: '🟢 Aberto',
-    running: '🟢 Em andamento',
-    review: '🟡 Em revisao',
-    pending_payment: '🟡 Pendente financeiro',
-    approved: '✅ Finalizado',
-    cancelled: '🔴 Cancelado'
+    created: '\u{1F7E2} Aberto',
+    running: '\u{1F7E2} Em andamento',
+    review: '\u{1F7E1} Em revisao',
+    pending_payment: '\u{1F7E1} Pendente financeiro',
+    approved: '\u2705 Finalizado',
+    cancelled: '\u{1F534} Cancelado'
   };
   return labels[status] || status;
 }
-
 function eventVoiceChannelName(event) {
   const title = formatEventTitle(event.title).replace(/\s+/g, ' ').trim();
   if (!title) return event.event_code;

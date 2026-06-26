@@ -19,6 +19,7 @@ const memberPanel = require('../modules/members/memberPanel.service');
 const inactiveEvents = require('../modules/members/inactiveEvents.service');
 const inactiveGuests = require('../modules/members/inactiveGuests.service');
 const operations = require('../modules/operations/operations.service');
+const campaigns = require('../modules/campaigns/campaigns.service');
 const { formatSilver } = require('../utils/silver');
 const registration = require('../modules/registration/registration.service');
 const { safeSend } = require('../utils/discord');
@@ -81,6 +82,28 @@ function canForceStartFinish(member) {
 
 async function handleButton(interaction) {
   const [scope, action, id, extra] = interaction.customId.split(':');
+  if (scope === 'campaign' && ['donate_event', 'keep_event'].includes(action)) {
+    await interaction.deferReply(interaction.guild ? { flags: MessageFlags.Ephemeral } : {});
+    const result = await campaigns.resolveEventPayoutChoice({
+      client: interaction.client,
+      decisionId: Number(id),
+      userId: interaction.user.id,
+      choice: action === 'donate_event' ? 'donate' : 'keep',
+      actorId: interaction.user.id
+    });
+    if (result.transaction) {
+      await finance.notifyBalanceTransactions({ client: interaction.client, transactions: [result.transaction] });
+    }
+    await interaction.message.edit({
+      embeds: [campaigns.closedDecisionEmbed(result)],
+      components: []
+    }).catch(() => {});
+    return interaction.editReply({
+      content: result.donated
+        ? `Doacao registrada: ${formatSilver(result.decision.amount)} para @${result.campaign.role_name || '900m'}.`
+        : `Tudo certo. ${formatSilver(result.decision.amount)} foi enviado para seu saldo.`
+    });
+  }
 
   if (interaction.customId === 'panel:create_event') {
     if (!can(interaction.member, 'createEvent')) {
@@ -418,11 +441,26 @@ async function handleButton(interaction) {
         return interaction.reply({ content: 'Este evento nao esta pendente de pagamento. O botao foi removido.', flags: MessageFlags.Ephemeral });
       }
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      const transactions = events.approveEventPayment({ eventId, actorId: interaction.user.id });
+      const paymentResult = events.approveEventPayment({ eventId, actorId: interaction.user.id });
+      const transactions = Array.isArray(paymentResult) ? paymentResult : (paymentResult.transactions || []);
       const raidRewards = await events.grantRaidAvalonRewards({ guild: interaction.guild, eventId, actorId: interaction.user.id });
-      await finance.notifyBalanceTransactions({ client: interaction.client, transactions });
+      if (transactions.length > 0) {
+        await finance.notifyBalanceTransactions({ client: interaction.client, transactions });
+      }
+
+      let campaignText = '';
+      if (paymentResult.campaignChoices?.decisions?.length) {
+        const dmResult = await campaigns.sendEventPayoutDms({
+          client: interaction.client,
+          eventId,
+          choices: paymentResult.campaignChoices
+        });
+        await campaigns.refreshActiveCampaignProgress(interaction.client);
+        campaignText = ` Campanha @${paymentResult.campaignChoices.campaign.role_name || '900m'}: ${dmResult.sent} DM(s) enviada(s), ${dmResult.failed} falha(s). Quem nao responder em 24h recebe no saldo normal.`;
+      }
+
       await interaction.message.edit({
-        content: `Evento #${eventId} finalizado por <@${interaction.user.id}>.`,
+        content: `Evento #${eventId} finalizado por <@${interaction.user.id}>.${campaignText}`,
         embeds: [events.reviewEmbed(eventId)],
         components: []
       }).catch(() => {});
@@ -431,7 +469,10 @@ async function handleButton(interaction) {
       const raidText = raidRewards.granted || raidRewards.points
         ? ` Carreira: ${raidRewards.points} ponto(s) registrado(s), ${raidRewards.granted} tag(s) nova(s).`
         : '';
-      return interaction.editReply({ content: `Pagamento aprovado e saldos depositados.${raidText}` });
+      const paymentText = paymentResult.campaignChoices?.decisions?.length
+        ? `Pagamento aprovado. O bot perguntou por DM se cada membro quer doar sua parte para @${paymentResult.campaignChoices.campaign.role_name || '900m'}.${campaignText}`
+        : 'Pagamento aprovado e saldos depositados.';
+      return interaction.editReply({ content: `${paymentText}${raidText}` });
     }
     if (action === 'return_review') {
       if (!can(interaction.member, 'approvePayment')) {
@@ -1067,10 +1108,10 @@ function raidWeaponSlotSelect(eventId, discordId) {
 
 function roleLabel(role) {
   const labels = {
-    tank: '🛡️ Tank',
-    healer: '💚 Healer',
-    support: '🚩 Suporte',
-    dps: '⚔️ DPS'
+    tank: '\u{1F6E1}\uFE0F Tank',
+    healer: '\u{1F49A} Healer',
+    support: '\u{1F6A9} Suporte',
+    dps: '\u2694\uFE0F DPS'
   };
   return labels[role] || role;
 }
