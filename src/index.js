@@ -72,9 +72,7 @@ client.once('clientReady', () => {
   }, 60 * 60 * 1000);
   setInterval(() => {
     operations.postWeeklyAlbionReminderIfNeeded(client).catch((error) => console.error('Falha ao postar lembrete semanal Albion:', error));
-  operations.postMonthlyInactivityPreviewIfNeeded(client).catch((error) => console.error('Falha ao postar previa mensal de inatividade:', error));
-  campaigns.refreshActiveCampaignProgress(client).catch((error) => console.error('Falha ao atualizar progresso da campanha:', error));
-  campaigns.processExpiredEventPayouts(client).catch((error) => console.error('Falha ao processar escolhas vencidas da campanha:', error));
+    operations.postMonthlyInactivityPreviewIfNeeded(client).catch((error) => console.error('Falha ao postar previa mensal de inatividade:', error));
   }, 60 * 60 * 1000);
 });
 
