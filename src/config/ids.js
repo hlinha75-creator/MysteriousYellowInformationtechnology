@@ -14,6 +14,7 @@ module.exports = {
   channels: {
     createEvent: '1481397653316178022',
     participate: '1481397657065754797',
+    pingContent: '1515475884193222767',
     deposit: '1481251393967886518',
     finance: '1481318081145077812',
     consultBalance: '1481284047526166731',
@@ -28,7 +29,8 @@ module.exports = {
     memberPanel: '1515255057971548261',
     memberRequests: '1516030220073963520',
     waitingVoice: '1492707400485179664',
-    notagChat: '1481363760110243910'
+    notagChat: '1481363760110243910',
+    inactivityNotice: '1518215036030685214'
   },
   importantChannels: [
     '1497902778771701800',

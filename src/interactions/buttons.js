@@ -17,6 +17,7 @@ const auctionsRepo = require('../modules/auctions/auctions.repository');
 const memberList = require('../modules/members/memberList.service');
 const memberPanel = require('../modules/members/memberPanel.service');
 const inactiveEvents = require('../modules/members/inactiveEvents.service');
+const inactiveGuests = require('../modules/members/inactiveGuests.service');
 const operations = require('../modules/operations/operations.service');
 const { formatSilver } = require('../utils/silver');
 const registration = require('../modules/registration/registration.service');
@@ -38,6 +39,34 @@ function showModal(interaction, customId, title, inputs) {
     .setTitle(title)
     .addComponents(inputs.map((component) => new ActionRowBuilder().addComponents(component)));
   return interaction.showModal(modal);
+}
+
+function mentionOrDash(userId) {
+  return userId ? `<@${userId}>` : 'sem registro';
+}
+
+function truncateInline(value, max = 70) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  return text.length > max ? `${text.slice(0, max - 3)}...` : text;
+}
+
+function withdrawRequestContent(request, options = {}) {
+  const status = options.status || request.status || 'requested';
+  const amount = formatSilver(Math.abs(Number(request.amount || 0)));
+  const approvedBy = options.approvedBy || request.reviewed_by;
+  const paidBy = options.paidBy || request.paid_by;
+  const refusedBy = options.refusedBy || request.reviewed_by;
+  const statusText = {
+    requested: 'Aguardando aprovacao',
+    approved: `Aprovado: ${mentionOrDash(approvedBy)} | Aguardando pagamento`,
+    paid: `Aprovado: ${mentionOrDash(approvedBy)} | Pago: ${mentionOrDash(paidBy)}`,
+    refused: `Recusado: ${mentionOrDash(refusedBy)}`
+  }[status] || `Status: ${status}`;
+  const note = truncateInline(request.note);
+  const line = [`Saque #${request.id}`, mentionOrDash(request.user_id), amount, statusText, note ? `Obs: ${note}` : null]
+    .filter(Boolean)
+    .join(' | ');
+  return options.warning ? `${line}\n${options.warning}` : line;
 }
 
 function canManageEvent(member, event) {
@@ -531,7 +560,7 @@ async function handleButton(interaction) {
     }
     const currentBalance = financeRepo.getBalance(interaction.user.id);
     const negativeWarning = draft.amount > currentBalance
-      ? `\n\nATENCAO: saldo atual ${formatSilver(currentBalance)}. Se pagar este saque, o membro ficara com ${formatSilver(currentBalance - draft.amount)}.`
+      ? `ATENCAO: saldo atual ${formatSilver(currentBalance)}. Se pagar este saque, o membro ficara com ${formatSilver(currentBalance - draft.amount)}.`
       : '';
     const request = finance.requestWithdraw({ userId: interaction.user.id, amount: draft.amount, note: draft.note });
     audit.createAuditLog({
@@ -542,7 +571,13 @@ async function handleButton(interaction) {
       reason: draft.note
     });
     await safeSend(interaction.client, ids.channels.finance, {
-      content: `Saque solicitado: #${request.lastInsertRowid} por <@${interaction.user.id}> no valor de ${formatSilver(draft.amount)}.${negativeWarning}`,
+      content: withdrawRequestContent({
+        id: request.lastInsertRowid,
+        user_id: interaction.user.id,
+        amount: draft.amount,
+        note: draft.note,
+        status: 'requested'
+      }, { warning: negativeWarning }),
       components: [
         new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId(`finance:approve_withdraw:${request.lastInsertRowid}`).setLabel('Aprovar saque').setStyle(ButtonStyle.Success),
@@ -575,8 +610,9 @@ async function handleButton(interaction) {
       return interaction.reply({ content: `Esse saque nao esta mais solicitando aprovacao. Status atual: ${request.status}.`, flags: MessageFlags.Ephemeral });
     }
     finance.approveWithdraw({ requestId: Number(id), actorId: interaction.user.id });
+    const approvedRequest = financeRepo.getWithdrawRequest(Number(id)) || { ...request, status: 'approved', reviewed_by: interaction.user.id };
     await interaction.message.edit({
-      content: `${interaction.message.content}\n\nAprovado por <@${interaction.user.id}>.`,
+      content: withdrawRequestContent(approvedRequest, { approvedBy: interaction.user.id }),
       components: [
         new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId(`finance:pay_withdraw:${id}`).setLabel('Pagar saque').setStyle(ButtonStyle.Primary),
@@ -604,7 +640,8 @@ async function handleButton(interaction) {
       return interaction.reply({ content: `Esse saque nao pode mais ser recusado. Status atual: ${request.status}.`, flags: MessageFlags.Ephemeral });
     }
     finance.refuseWithdraw({ requestId: Number(id), actorId: interaction.user.id });
-    await interaction.message.edit({ content: `${interaction.message.content}\n\nRecusado por <@${interaction.user.id}>.`, components: [] }).catch(() => {});
+    const refusedRequest = financeRepo.getWithdrawRequest(Number(id)) || { ...request, status: 'refused', reviewed_by: interaction.user.id };
+    await interaction.message.edit({ content: withdrawRequestContent(refusedRequest, { status: 'refused', refusedBy: interaction.user.id }), components: [] }).catch(() => {});
     return interaction.reply({ content: 'Saque recusado. Nenhum saldo foi alterado.', flags: MessageFlags.Ephemeral });
   }
 
@@ -612,7 +649,14 @@ async function handleButton(interaction) {
     if (!can(interaction.member, 'approvePayment')) return interaction.reply({ content: 'Sem permissao.', flags: MessageFlags.Ephemeral });
     const transaction = finance.payWithdraw({ requestId: Number(id), actorId: interaction.user.id });
     await finance.notifyBalanceTransactions({ client: interaction.client, transactions: [transaction] });
-    await interaction.message.edit({ content: `${interaction.message.content}\n\nPago por <@${interaction.user.id}>.`, components: [] }).catch(() => {});
+    const paidRequest = financeRepo.getWithdrawRequest(Number(id)) || {
+      id: Number(id),
+      user_id: transaction.userId,
+      amount: Math.abs(transaction.amount),
+      status: 'paid',
+      paid_by: interaction.user.id
+    };
+    await interaction.message.edit({ content: withdrawRequestContent(paidRequest, { status: 'paid', paidBy: interaction.user.id }), components: [] }).catch(() => {});
     return interaction.reply({ content: 'Saque pago e saldo descontado.', flags: MessageFlags.Ephemeral });
   }
 
@@ -722,6 +766,42 @@ async function handleButton(interaction) {
       inactiveEvents.cancelPreview(id, interaction.user.id);
       await interaction.message.edit({ components: [] }).catch(() => {});
       return interaction.reply({ content: 'Verificacao de inativos cancelada. Nenhum cargo foi alterado.', flags: MessageFlags.Ephemeral });
+    }
+  }
+
+  if (interaction.customId === 'inactive_guests:preview') {
+    if (!can(interaction.member, 'approveRegistration')) {
+      return interaction.reply({ content: 'Voce nao tem permissao para verificar convidados inativos.', flags: MessageFlags.Ephemeral });
+    }
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const preview = await inactiveGuests.createPreview({
+      guild: interaction.guild,
+      actorId: interaction.user.id
+    });
+    return interaction.editReply(inactiveGuests.previewPayload(preview));
+  }
+
+  if (scope === 'inactive_guests') {
+    if (!can(interaction.member, 'approveRegistration')) {
+      return interaction.reply({ content: 'Voce nao tem permissao para aplicar convidados inativos.', flags: MessageFlags.Ephemeral });
+    }
+
+    if (action === 'confirm') {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      const result = await inactiveGuests.applyPreview({
+        guild: interaction.guild,
+        previewId: id,
+        actorId: interaction.user.id
+      });
+      await interaction.message.edit({ components: [] }).catch(() => {});
+      await inactiveGuests.postArchiveLog(interaction.client, result);
+      return interaction.editReply(inactiveGuests.applyPayload(result));
+    }
+
+    if (action === 'cancel') {
+      inactiveGuests.cancelPreview(id, interaction.user.id);
+      await interaction.message.edit({ components: [] }).catch(() => {});
+      return interaction.reply({ content: 'Verificacao de convidados inativos cancelada. Nenhum cargo foi alterado.', flags: MessageFlags.Ephemeral });
     }
   }
   if (scope === 'registration_bulk') {

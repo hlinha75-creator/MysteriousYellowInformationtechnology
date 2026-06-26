@@ -694,6 +694,16 @@ const migrations = [
           ON albion_guild_logs (week_key, action_type);
       `);
     }
+  },
+  {
+    version: 23,
+    name: 'event_message_channel',
+    up(db) {
+      const columns = db.prepare('PRAGMA table_info(events)').all().map((column) => column.name);
+      if (!columns.includes('message_channel_id')) {
+        db.exec('ALTER TABLE events ADD COLUMN message_channel_id TEXT');
+      }
+    }
   }
 ];
 

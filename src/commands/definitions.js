@@ -72,16 +72,24 @@ const commands = [
       .setDescription('CSV/TSV com os nicks oficiais da guild no Albion.')
       .setRequired(true)),
   new SlashCommandBuilder()
-    .setName('inativos_evento')
-    .setDescription('Gera previa de membros sem participacao minima em eventos de voz.')
+    .setName('inativos')
+    .setDescription('Gera previa de inatividade para eventos ou convidados.')
+    .addStringOption((option) => option
+      .setName('tipo')
+      .setDescription('Qual verificacao rodar')
+      .setRequired(true)
+      .addChoices(
+        { name: 'Eventos: Membro para Convidado', value: 'eventos' },
+        { name: 'Convidados: Convidado para Sem Tag', value: 'convidados' }
+      ))
     .addIntegerOption((option) => option
       .setName('dias_minimos')
-      .setDescription('Ignora quem entrou ha menos dias que isso. Padrao: 14.')
-      .setMinValue(0)
+      .setDescription('Janela de dias. Padrao: 30.')
+      .setMinValue(1)
       .setMaxValue(365))
     .addIntegerOption((option) => option
       .setName('tempo_minimo')
-      .setDescription('Minutos minimos em eventos para nao ser rebaixado. Padrao: 15.')
+      .setDescription('Eventos: minutos minimos na janela para nao rebaixar. Padrao: 15.')
       .setMinValue(1)
       .setMaxValue(1440)),
   new SlashCommandBuilder()

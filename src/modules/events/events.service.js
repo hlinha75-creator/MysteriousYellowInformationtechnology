@@ -22,6 +22,7 @@ const roleConfigs = {
   dps: { label: 'DPS', slots: 'dps_slots', style: ButtonStyle.Danger }
 };
 const eventRoles = Object.keys(roleConfigs);
+const eventReminderDeleteAfterMs = 5 * 60 * 1000;
 const emojiRefs = {
   role: {
     tank: { name: 'Tank', id: '1517095771659436153' },
@@ -399,6 +400,11 @@ function eventComponents(event) {
       new ButtonBuilder().setCustomId(`event:finish:${event.id}:main`).setLabel('Finalizar').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId(`event:cancel:${event.id}:main`).setLabel('Cancelar').setStyle(ButtonStyle.Danger)
     ]
+    : isRaid
+    ? [
+      new ButtonBuilder().setCustomId(`event:start:${event.id}:raid`).setLabel('Iniciar').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`event:cancel:${event.id}:raid`).setLabel('Cancelar').setStyle(ButtonStyle.Danger)
+    ]
     : [
       new ButtonBuilder().setCustomId(`event:spectate:${event.id}:main`).setLabel('Assistir').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId(`event:start:${event.id}:main`).setLabel('Iniciar').setStyle(ButtonStyle.Success),
@@ -426,7 +432,8 @@ async function createRaidAvalonFullFromModal(interaction, fields) {
     tankSlots: raidAvalonSlots.tank,
     healerSlots: raidAvalonSlots.healer,
     supportSlots: raidAvalonSlots.support,
-    dpsSlots: raidAvalonSlots.dps
+    dpsSlots: raidAvalonSlots.dps,
+    postChannelId: ids.channels.participate
   });
   repo.createRaidAvalonEventMeta({
     eventId: event.id,
@@ -450,12 +457,13 @@ async function createEventFromFields(interaction, fields) {
     dpsSlots: fields.dpsSlots
   });
 
-  const channel = await interaction.client.channels.fetch(ids.channels.participate);
+  const channelId = eventPostChannelId(fields);
+  const channel = await interaction.client.channels.fetch(channelId);
   const message = await channel.send({
     embeds: [eventEmbed(event, [])],
     components: eventComponents(event)
   });
-  repo.updateEvent(event.id, { message_id: message.id });
+  repo.updateEvent(event.id, { message_id: message.id, message_channel_id: channel.id });
   if (interaction.guild) {
     await ensureEventTempRole(interaction.guild, event).catch(() => null);
   }
@@ -475,13 +483,31 @@ async function refreshEventMessage(client, eventId) {
   const event = repo.getEvent(eventId);
   if (!event?.message_id) return;
   const participants = repo.listParticipants(eventId);
-  const channel = await client.channels.fetch(ids.channels.participate).catch(() => null);
+  const channel = await fetchEventMessageChannel(client, event);
   const message = await channel?.messages.fetch(event.message_id).catch(() => null);
   if (message) {
     await message.edit({ embeds: [eventEmbed(event, participants)], components: eventComponents(event) });
   }
 }
 
+function eventPostChannelId(fields = {}) {
+  if (fields.postChannelId) return fields.postChannelId;
+  return isRaidEventFields(fields) ? ids.channels.participate : ids.channels.pingContent || ids.channels.participate;
+}
+
+function isRaidEventFields(fields = {}) {
+  const text = `${fields.title || ''} ${fields.description || ''}`.toLowerCase();
+  return /\braid\b|avalon|ava/.test(text);
+}
+
+async function fetchEventMessageChannel(client, event) {
+  const channelIds = [event.message_channel_id, ids.channels.participate, ids.channels.pingContent].filter(Boolean);
+  for (const channelId of [...new Set(channelIds)]) {
+    const channel = await client.channels.fetch(channelId).catch(() => null);
+    if (channel) return channel;
+  }
+  return null;
+}
 async function refreshRunningEventMessages(client) {
   const events = repo.listActiveEvents();
   for (const event of events) {
@@ -961,7 +987,7 @@ const approveEventPayment = transaction(({ eventId, actorId }) => {
 async function deleteEventMessage(client, eventId) {
   const event = repo.getEvent(eventId);
   if (!event?.message_id) return;
-  const channel = await client.channels.fetch(ids.channels.participate).catch(() => null);
+  const channel = await fetchEventMessageChannel(client, event);
   const message = await channel?.messages.fetch(event.message_id).catch(() => null);
   await message?.delete().catch(() => {});
 }
@@ -1722,18 +1748,43 @@ async function sendEventReminder(client, event, text) {
     await addEventRoleToMember(guild, { ...event, warning_role_id: role.id }, participant.discord_id).catch(() => {});
   }
 
+  await deleteWarningMessage(client, event).catch(() => {});
   const channel = await client.channels.fetch(ids.channels.notagChat);
   const message = await channel.send(`${role} ${text} para **${formatEventTitle(event.title)}**.`);
   repo.updateEvent(event.id, { warning_message_id: message.id, warning_sent: 1 });
+  scheduleReminderDeletion(client, event.id, message.id);
   audit.createAuditLog({ type: 'event_start_warning_sent', targetId: String(event.id), afterValue: role.id, reason: `${event.event_code}: ${text}` });
 }
 
 async function deleteWarningMessage(client, event) {
   if (!event?.warning_message_id) return;
-  const channel = await client.channels.fetch(ids.channels.participate).catch(() => null);
-  const message = await channel?.messages.fetch(event.warning_message_id).catch(() => null);
-  await message?.delete().catch(() => {});
+  const channelIds = [ids.channels.notagChat, ids.channels.participate].filter(Boolean);
+  for (const channelId of channelIds) {
+    const channel = await client.channels.fetch(channelId).catch(() => null);
+    const message = await channel?.messages.fetch(event.warning_message_id).catch(() => null);
+    if (message) {
+      await message.delete().catch(() => {});
+      break;
+    }
+  }
   repo.updateEvent(event.id, { warning_message_id: null });
+}
+
+function scheduleReminderDeletion(client, eventId, messageId) {
+  const timer = setTimeout(async () => {
+    const event = repo.getEvent(eventId);
+    if (!event || event.warning_message_id !== messageId) return;
+    const channel = await client.channels.fetch(ids.channels.notagChat).catch(() => null);
+    const message = await channel?.messages.fetch(messageId).catch(() => null);
+    await message?.delete().catch(() => {});
+
+    const current = repo.getEvent(eventId);
+    if (current?.warning_message_id === messageId) {
+      repo.updateEvent(eventId, { warning_message_id: null });
+    }
+  }, eventReminderDeleteAfterMs);
+
+  if (typeof timer.unref === 'function') timer.unref();
 }
 
 async function removeWarningRole(guild, event) {

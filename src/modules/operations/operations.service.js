@@ -6,6 +6,8 @@ const {
 } = require('discord.js');
 const ids = require('../../config/ids');
 const { getDatabase } = require('../../database/connection');
+const inactiveEvents = require('../members/inactiveEvents.service');
+const inactiveGuests = require('../members/inactiveGuests.service');
 
 function pendingQueuePayload() {
   const summary = pendingSummary();
@@ -56,6 +58,9 @@ function pendingQueueComponents() {
       new ButtonBuilder().setCustomId('albion_weekly:summary:current').setLabel('Resumo Albion').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId('albion_weekly:export:pve').setLabel('Exportar PvE').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('albion_weekly:export:logs').setLabel('Exportar Logs').setStyle(ButtonStyle.Secondary)
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('inactive_guests:preview').setLabel('Inativos convidados').setStyle(ButtonStyle.Secondary)
     )
   ];
 }
@@ -128,6 +133,84 @@ async function postWeeklyAlbionReminderIfNeeded(client) {
   return message;
 }
 
+
+async function postMonthlyInactivityPreviewIfNeeded(client) {
+  const now = saoPauloNowParts();
+  const hour = Number(now.hour);
+  if (hour < 10) return null;
+
+  const db = getDatabase();
+  const last = db.prepare(`
+    SELECT sent_at
+    FROM operation_reminders
+    WHERE type = 'inactivity_monthly'
+    ORDER BY sent_at DESC
+    LIMIT 1
+  `).get();
+  if (last?.sent_at && Date.now() - Date.parse(last.sent_at) < 30 * 24 * 60 * 60 * 1000) return null;
+
+  const guild = await client.guilds.fetch(ids.guildId).catch(() => null);
+  const channel = await client.channels.fetch(ids.channels.adminPanel).catch(() => null);
+  if (!guild || !channel?.isTextBased()) return null;
+
+  const expiresInMs = 7 * 24 * 60 * 60 * 1000;
+  const actorId = client.user?.id || 'system';
+  const eventsPreview = await inactiveEvents.createPreview({
+    guild,
+    actorId,
+    daysMin: 30,
+    minutesMin: inactiveEvents.defaultMinutesMin,
+    expiresInMs,
+    shared: true
+  });
+  const guestsPreview = await inactiveGuests.createPreview({
+    guild,
+    actorId,
+    daysMin: 30,
+    expiresInMs,
+    shared: true
+  });
+
+  const summary = await channel.send({
+    content: `<@&${ids.roles.adm}> <@&${ids.roles.staff}> previa mensal de inatividade pronta para revisao.`,
+    embeds: [
+      new EmbedBuilder()
+        .setTitle('Previa mensal de inatividade')
+        .setDescription([
+          'O bot gerou a previa mensal, mas nenhum cargo foi alterado ainda.',
+          'Revise os CSVs abaixo e confirme somente se estiver tudo certo.',
+          '',
+          `Membro -> Convidado: ${eventsPreview.candidates.length} candidato(s).`,
+          `Convidado -> Sem Tag: ${guestsPreview.candidates.length} candidato(s).`,
+          '',
+          'As previas expiram em 7 dias.'
+        ].join('\n'))
+        .setColor(0xd69e2e)
+        .setTimestamp(new Date())
+    ],
+    allowedMentions: { roles: [ids.roles.adm, ids.roles.staff] }
+  });
+
+  await channel.send({
+    content: 'Previa 1/2 - Membro -> Convidado',
+    ...inactiveEvents.previewPayload(eventsPreview),
+    allowedMentions: { parse: [] }
+  });
+  await channel.send({
+    content: 'Previa 2/2 - Convidado -> Sem Tag',
+    ...inactiveGuests.previewPayload(guestsPreview),
+    allowedMentions: { parse: [] }
+  });
+
+  const key = `inactivity-monthly:${new Date().toISOString().slice(0, 10)}`;
+  db.prepare(`
+    INSERT INTO operation_reminders (reminder_key, type, message_id, channel_id)
+    VALUES (?, ?, ?, ?)
+  `).run(key, 'inactivity_monthly', summary.id, channel.id);
+
+  return summary;
+}
+
 function weeklyChecklistText() {
   return [
     '1. Enviar CSV/TSV atual da guild Albion para verificar registros pendentes.',
@@ -178,6 +261,7 @@ function weekKey() {
 
 module.exports = {
   pendingQueuePayload,
+  postMonthlyInactivityPreviewIfNeeded,
   postWeeklyAlbionReminderIfNeeded,
   refreshPendingQueueMessage,
   weeklyChecklistText

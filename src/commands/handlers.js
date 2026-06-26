@@ -26,6 +26,7 @@ const registration = require('../modules/registration/registration.service');
 const albionWeekly = require('../modules/albion/weekly.service');
 const memberList = require('../modules/members/memberList.service');
 const inactiveEvents = require('../modules/members/inactiveEvents.service');
+const inactiveGuests = require('../modules/members/inactiveGuests.service');
 
 function input(id, label, style = TextInputStyle.Short, required = true) {
   return new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setRequired(required);
@@ -221,6 +222,30 @@ async function handleCommand(interaction) {
     });
   }
 
+
+  if (interaction.commandName === 'inativos') {
+    if (!can(interaction.member, 'approveRegistration')) {
+      return interaction.reply({ content: 'Voce nao tem permissao para verificar inativos.', flags: MessageFlags.Ephemeral });
+    }
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const type = interaction.options.getString('tipo');
+    if (type === 'eventos') {
+      const preview = await inactiveEvents.createPreview({
+        guild: interaction.guild,
+        actorId: interaction.user.id,
+        daysMin: interaction.options.getInteger('dias_minimos') || inactiveEvents.defaultDaysMin,
+        minutesMin: interaction.options.getInteger('tempo_minimo') || inactiveEvents.defaultMinutesMin
+      });
+      return interaction.editReply(inactiveEvents.previewPayload(preview));
+    }
+
+    const preview = await inactiveGuests.createPreview({
+      guild: interaction.guild,
+      actorId: interaction.user.id,
+      daysMin: interaction.options.getInteger('dias_minimos') || inactiveGuests.defaultDaysMin
+    });
+    return interaction.editReply(inactiveGuests.previewPayload(preview));
+  }
   if (interaction.commandName === 'inativos_evento') {
     if (!can(interaction.member, 'approveRegistration')) {
       return interaction.reply({ content: 'Voce nao tem permissao para verificar inativos de eventos.', flags: MessageFlags.Ephemeral });
@@ -233,6 +258,19 @@ async function handleCommand(interaction) {
       minutesMin: interaction.options.getInteger('tempo_minimo') || inactiveEvents.defaultMinutesMin
     });
     return interaction.editReply(inactiveEvents.previewPayload(preview));
+  }
+
+  if (interaction.commandName === 'inativos_convidados') {
+    if (!can(interaction.member, 'approveRegistration')) {
+      return interaction.reply({ content: 'Voce nao tem permissao para verificar convidados inativos.', flags: MessageFlags.Ephemeral });
+    }
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const preview = await inactiveGuests.createPreview({
+      guild: interaction.guild,
+      actorId: interaction.user.id,
+      daysMin: interaction.options.getInteger('dias_minimos') || inactiveGuests.defaultDaysMin
+    });
+    return interaction.editReply(inactiveGuests.previewPayload(preview));
   }
   if (interaction.commandName === 'albion') {
     if (!can(interaction.member, 'importCsv')) {

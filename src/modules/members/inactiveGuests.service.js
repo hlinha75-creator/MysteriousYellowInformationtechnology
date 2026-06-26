@@ -12,13 +12,11 @@ const { toCsv } = require('../../utils/csv');
 
 const previews = new Map();
 const defaultDaysMin = 30;
-const defaultMinutesMin = 15;
 const protectedRoles = ['adm', 'staff', 'treasurer', 'caller', 'recruiter'];
 
-async function createPreview({ guild, actorId, daysMin = defaultDaysMin, minutesMin = defaultMinutesMin, expiresInMs = 15 * 60 * 1000, shared = false }) {
-  const safeDays = Math.max(0, Number(daysMin || defaultDaysMin));
-  const safeMinutes = Math.max(1, Number(minutesMin || defaultMinutesMin));
-  const rows = await analyzeGuild(guild, { daysMin: safeDays, minutesMin: safeMinutes });
+async function createPreview({ guild, actorId, daysMin = defaultDaysMin, expiresInMs = 15 * 60 * 1000, shared = false }) {
+  const safeDays = Math.max(1, Number(daysMin || defaultDaysMin));
+  const rows = await analyzeGuild(guild, { daysMin: safeDays });
   const candidates = rows.filter((row) => row.status === 'candidate');
   const preview = {
     id: previewId(),
@@ -27,7 +25,7 @@ async function createPreview({ guild, actorId, daysMin = defaultDaysMin, minutes
     createdAt: new Date().toISOString(),
     expiresAt: new Date(Date.now() + expiresInMs).toISOString(),
     shared,
-    params: { daysMin: safeDays, minutesMin: safeMinutes },
+    params: { daysMin: safeDays },
     rows,
     candidates,
     summary: summarize(rows)
@@ -46,33 +44,32 @@ async function applyPreview({ guild, previewId, actorId }) {
       results.push({ ...row, result: 'membro_nao_encontrado' });
       continue;
     }
-    if (isProtected(member) || !member.roles.cache.has(ids.roles.member)) {
+    if (isProtected(member) || !member.roles.cache.has(ids.roles.guest) || member.roles.cache.has(ids.roles.member)) {
       results.push({ ...row, result: 'ignorado_permissao_ou_cargo_mudou' });
       continue;
     }
 
     try {
-      if (ids.roles.guest && !member.roles.cache.has(ids.roles.guest)) {
-        await member.roles.add(ids.roles.guest, downgradeReason(preview));
+      if (ids.roles.noTag && !member.roles.cache.has(ids.roles.noTag)) {
+        await member.roles.add(ids.roles.noTag, downgradeReason(preview));
       }
-      await member.roles.remove(ids.roles.member, downgradeReason(preview));
+      await member.roles.remove(ids.roles.guest, downgradeReason(preview));
       audit.createAuditLog({
-        type: 'member_inactive_event_downgrade',
+        type: 'guest_inactive_voice_downgrade',
         actorId,
         targetId: row.discord_id,
-        beforeValue: 'member',
-        afterValue: 'guest',
+        beforeValue: 'guest',
+        afterValue: 'no_tag',
         reason: downgradeReason(preview),
         metadata: {
           daysMin: preview.params.daysMin,
-          minutesMin: preview.params.minutesMin,
-          eventMinutes: row.event_minutes,
-          eventCount: row.event_count,
-          lastEventAt: row.last_event_at
+          lastVoiceAt: row.last_voice_at,
+          voiceSessions: row.voice_sessions,
+          voiceMinutes: row.voice_minutes
         }
       });
-      await notifyMemberRoleChange(member, { fromRole: 'Membro', toRole: 'Convidado' }).catch(() => {});
-      results.push({ ...row, result: 'rebaixado_para_convidado' });
+      await notifyMemberRoleChange(member, { fromRole: 'Convidado', toRole: 'Sem Tag' }).catch(() => {});
+      results.push({ ...row, result: 'convidado_para_sem_tag' });
     } catch (error) {
       results.push({ ...row, result: `erro: ${String(error.message || error).slice(0, 120)}` });
     }
@@ -81,36 +78,36 @@ async function applyPreview({ guild, previewId, actorId }) {
   return {
     ...preview,
     results,
-    applied: results.filter((row) => row.result === 'rebaixado_para_convidado').length,
+    applied: results.filter((row) => row.result === 'convidado_para_sem_tag').length,
     failed: results.filter((row) => row.result.startsWith('erro:')).length
   };
 }
 
 function cancelPreview(previewId, actorId) {
-  const preview = takePreview(previewId, actorId);
-  return preview;
+  return takePreview(previewId, actorId);
 }
 
 function previewPayload(preview) {
-  const rows = preview.candidates.slice(0, 12).map((row, index) => (
-    `${index + 1}. <@${row.discord_id}> - ${row.albion_name || row.discord_name} - ${row.event_minutes}min`
-  ));
+  const rows = preview.candidates.slice(0, 12).map((row, index) => {
+    const last = row.last_voice_at ? daysSinceText(row.last_voice_at) : 'nunca entrou em call';
+    return `${index + 1}. <@${row.discord_id}> - ${row.albion_name || row.discord_name} - ${last}`;
+  });
   const hidden = preview.candidates.length - rows.length;
   if (hidden > 0) rows.push(`... e mais ${hidden}`);
 
   const embed = new EmbedBuilder()
-    .setTitle('Previa - inativos de eventos')
+    .setTitle('Previa - convidados sem call')
     .setDescription([
-      'Membros que nao tiveram participacao minima recente em eventos/calls de grupo do bot.',
+      'Convidados que nao entraram em nenhuma call de voz recentemente.',
       '',
-      `Criterio: entrou ha pelo menos ${preview.params.daysMin} dia(s) e tem menos de ${preview.params.minutesMin} minuto(s) em eventos/calls nos ultimos ${preview.params.daysMin} dia(s).`,
-      'Acao ao confirmar: remover Membro e adicionar Convidado.'
+      `Criterio: cargo Convidado, entrou no Discord ha pelo menos ${preview.params.daysMin} dia(s), e sem call registrada nos ultimos ${preview.params.daysMin} dia(s).`,
+      'Acao ao confirmar: remover Convidado e adicionar Sem Tag.'
     ].join('\n'))
     .addFields(
       { name: 'Analisados', value: String(preview.summary.analyzed), inline: true },
       { name: 'Candidatos', value: String(preview.summary.candidates), inline: true },
       { name: 'Ativos', value: String(preview.summary.active), inline: true },
-      { name: 'Ignorados', value: `Staff: ${preview.summary.protected}\nNovos: ${preview.summary.newMembers}\nSem data: ${preview.summary.unknownJoinDate}`, inline: true },
+      { name: 'Ignorados', value: `Staff: ${preview.summary.protected}\nNovos: ${preview.summary.newGuests}\nCom Membro: ${preview.summary.hasMember}`, inline: true },
       { name: 'Lista', value: rows.join('\n') || 'Nenhum candidato encontrado.', inline: false }
     )
     .setColor(preview.candidates.length ? 0xd69e2e : 0x38a169)
@@ -120,8 +117,8 @@ function previewPayload(preview) {
   const components = preview.candidates.length
     ? [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`inactive_events:confirm:${preview.id}`).setLabel('Confirmar rebaixamento').setStyle(ButtonStyle.Danger),
-        new ButtonBuilder().setCustomId(`inactive_events:cancel:${preview.id}`).setLabel('Cancelar').setStyle(ButtonStyle.Secondary)
+        new ButtonBuilder().setCustomId(`inactive_guests:confirm:${preview.id}`).setLabel('Confirmar Sem Tag').setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId(`inactive_guests:cancel:${preview.id}`).setLabel('Cancelar').setStyle(ButtonStyle.Secondary)
       )
     ]
     : [];
@@ -135,9 +132,9 @@ function previewPayload(preview) {
 
 function applyPayload(result) {
   const embed = new EmbedBuilder()
-    .setTitle('Inativos de eventos aplicados')
+    .setTitle('Convidados inativos aplicados')
     .setDescription([
-      `Rebaixados para Convidado: ${result.applied}`,
+      `Movidos para Sem Tag: ${result.applied}`,
       `Erros: ${result.failed}`,
       `Candidatos na previa: ${result.candidates.length}`
     ].join('\n'))
@@ -153,16 +150,16 @@ async function postArchiveLog(client, result) {
   const channel = await client.channels.fetch(ids.channels.archive).catch(() => null);
   if (channel?.isTextBased()) {
     await channel.send({
-      content: `Verificacao de inativos aplicada por <@${result.actorId}>. Rebaixados: ${result.applied}.`,
+      content: `Verificacao de convidados inativos aplicada por <@${result.actorId}>. Movidos para Sem Tag: ${result.applied}.`,
       ...applyPayload(result),
       allowedMentions: { users: [result.actorId] }
     }).catch(() => {});
   }
-  await postPublicNotice(client, result, { fromRole: 'Membro', toRole: 'Convidado' }).catch(() => {});
+  await postPublicNotice(client, result, { fromRole: 'Convidado', toRole: 'Sem Tag' }).catch(() => {});
 }
 
 async function postPublicNotice(client, result, { fromRole, toRole }) {
-  const changed = result.results.filter((row) => row.result === 'rebaixado_para_convidado');
+  const changed = result.results.filter((row) => row.result === 'convidado_para_sem_tag');
   if (!changed.length) return;
   const channel = await client.channels.fetch(ids.channels.inactivityNotice).catch(() => null);
   if (!channel?.isTextBased()) return;
@@ -171,7 +168,7 @@ async function postPublicNotice(client, result, { fromRole, toRole }) {
     content: [
       'Atualizacao de cargos por convivencia em call de voz.',
       '',
-      `Os membros abaixo tiveram o cargo ajustado de ${fromRole} para ${toRole} por inatividade recente em calls/eventos de grupo.`,
+      `Os membros abaixo tiveram o cargo ajustado de ${fromRole} para ${toRole} por inatividade recente em calls de voz.`,
       `Isso nao e punicao. Para voltar, acesse <#${ids.channels.register}>, faca o registro novamente e participe de algum evento ou entre em call para conversar com a guild.`,
       '',
       formatMentionList(userIds)
@@ -193,28 +190,30 @@ function formatMentionList(userIds) {
   return text.length <= 1700 ? text : `${text.slice(0, 1690)} ...`;
 }
 
-async function analyzeGuild(guild, { daysMin, minutesMin }) {
+async function analyzeGuild(guild, { daysMin }) {
   const members = await fetchGuildMembersWithRetry(guild);
   const users = userMap();
-  const activity = activityMap(daysMin);
+  const voice = voiceMap();
+  const guestSince = guestSinceMap();
   const cutoff = Date.now() - daysMin * 24 * 60 * 60 * 1000;
-  const minSeconds = minutesMin * 60;
   const rows = [];
 
   for (const member of members.filter((item) => !item.user.bot).values()) {
-    if (!member.roles.cache.has(ids.roles.member)) continue;
+    if (!member.roles.cache.has(ids.roles.guest)) continue;
     const joinedAt = member.joinedAt?.toISOString() || '';
-    const stats = activity.get(member.id) || {};
-    const eventSeconds = Math.max(Number(stats.participantSeconds || 0), Number(stats.voiceSeconds || 0));
+    const stats = voice.get(member.id) || {};
+    const lastVoiceAt = stats.lastVoiceAt || '';
+    const guestSinceAt = guestSince.get(member.id) || joinedAt;
     const base = {
       discord_id: member.id,
       discord_name: member.displayName || member.user.username,
       discord_tag: member.user.tag || member.user.username,
       albion_name: users.get(member.id)?.albion_name || '',
       joined_at: joinedAt,
-      event_count: Math.max(Number(stats.participantEvents || 0), Number(stats.voiceEvents || 0)),
-      event_minutes: Math.floor(eventSeconds / 60),
-      last_event_at: stats.lastEventAt || stats.lastVoiceAt || '',
+      voice_sessions: Number(stats.sessions || 0),
+      voice_minutes: Math.floor(Number(stats.seconds || 0) / 60),
+      last_voice_at: lastVoiceAt,
+      guest_since: guestSinceAt,
       action: 'nenhuma'
     };
 
@@ -222,84 +221,66 @@ async function analyzeGuild(guild, { daysMin, minutesMin }) {
       rows.push({ ...base, status: 'protected', reason: 'cargo protegido/staff' });
       continue;
     }
+    if (member.roles.cache.has(ids.roles.member)) {
+      rows.push({ ...base, status: 'has_member', reason: 'tambem tem cargo Membro' });
+      continue;
+    }
     if (!member.joinedTimestamp) {
       rows.push({ ...base, status: 'unknown_join_date', reason: 'sem data de entrada no Discord' });
       continue;
     }
-    if (member.joinedTimestamp > cutoff) {
-      rows.push({ ...base, status: 'new_member', reason: `entrou ha menos de ${daysMin} dia(s)` });
+    const guestSinceTime = Date.parse(guestSinceAt);
+    if (Number.isFinite(guestSinceTime) && guestSinceTime > cutoff) {
+      rows.push({ ...base, status: 'new_guest', reason: `virou Convidado ha menos de ${daysMin} dia(s)` });
       continue;
     }
-    if (eventSeconds >= minSeconds) {
-      rows.push({ ...base, status: 'active', reason: 'tem participacao minima recente em eventos/calls' });
+    if (lastVoiceAt && Date.parse(lastVoiceAt) > cutoff) {
+      rows.push({ ...base, status: 'active', reason: 'tem call recente' });
       continue;
     }
 
     rows.push({
       ...base,
       status: 'candidate',
-      action: 'remover_membro_adicionar_convidado',
-      reason: `menos de ${minutesMin} minuto(s) em eventos/calls nos ultimos ${daysMin} dia(s)`
+      action: 'remover_convidado_adicionar_sem_tag',
+      reason: lastVoiceAt ? `ultima call ha mais de ${daysMin} dia(s)` : 'sem call registrada'
     });
   }
 
   return rows.sort((a, b) => statusWeight(a.status) - statusWeight(b.status) || a.discord_name.localeCompare(b.discord_name, 'pt-BR'));
 }
 
-function activityMap(daysMin) {
-  const db = getDatabase();
-  const map = new Map();
-  const cutoffIso = new Date(Date.now() - daysMin * 24 * 60 * 60 * 1000).toISOString();
-
-  const participantRows = db.prepare(`
+function voiceMap() {
+  const rows = getDatabase().prepare(`
     SELECT
-      ep.discord_id,
-      COUNT(DISTINCT ep.event_id) AS participant_events,
-      SUM(COALESCE(ep.manual_seconds, ep.calculated_seconds, 0)) AS participant_seconds,
-      MAX(COALESCE(e.ended_at, e.started_at, e.created_at)) AS last_event_at
-    FROM event_participants ep
-    JOIN events e ON e.id = ep.event_id
-    WHERE ep.is_spectator = 0
-      AND COALESCE(e.ended_at, e.started_at, e.created_at) >= @cutoffIso
-    GROUP BY ep.discord_id
-  `).all({ cutoffIso });
+      discord_id,
+      COUNT(*) AS sessions,
+      SUM(CASE
+        WHEN left_at IS NULL THEN CAST((julianday('now') - julianday(joined_at)) * 86400 AS INTEGER)
+        ELSE seconds
+      END) AS seconds,
+      MAX(COALESCE(left_at, joined_at)) AS last_voice_at
+    FROM voice_sessions
+    GROUP BY discord_id
+  `).all();
 
-  for (const row of participantRows) {
-    map.set(row.discord_id, {
-      participantEvents: row.participant_events,
-      participantSeconds: row.participant_seconds,
-      lastEventAt: row.last_event_at
-    });
-  }
-
-  const voiceRows = db.prepare(`
-    SELECT
-      evs.discord_id,
-      COUNT(DISTINCT evs.event_id) AS voice_events,
-      SUM(evs.seconds) AS voice_seconds,
-      MAX(COALESCE(evs.left_at, evs.joined_at)) AS last_voice_at
-    FROM event_voice_sessions evs
-    JOIN event_participants ep
-      ON ep.event_id = evs.event_id
-     AND ep.discord_id = evs.discord_id
-     AND ep.is_spectator = 0
-    WHERE COALESCE(evs.left_at, evs.joined_at) >= @cutoffIso
-    GROUP BY evs.discord_id
-  `).all({ cutoffIso });
-
-  for (const row of voiceRows) {
-    const item = map.get(row.discord_id) || {};
-    map.set(row.discord_id, {
-      ...item,
-      voiceEvents: row.voice_events,
-      voiceSeconds: row.voice_seconds,
-      lastVoiceAt: row.last_voice_at
-    });
-  }
-
-  return map;
+  return new Map(rows.map((row) => [row.discord_id, {
+    sessions: row.sessions,
+    seconds: row.seconds,
+    lastVoiceAt: row.last_voice_at
+  }]));
 }
 
+function guestSinceMap() {
+  const rows = getDatabase().prepare(`
+    SELECT target_id AS discord_id, MAX(created_at) AS guest_since
+    FROM audit_logs
+    WHERE target_id IS NOT NULL
+      AND type IN ('member_inactive_event_downgrade', 'registration_kept_guest', 'registration_created')
+    GROUP BY target_id
+  `).all();
+  return new Map(rows.map((row) => [row.discord_id, row.guest_since]));
+}
 function userMap() {
   const rows = getDatabase().prepare('SELECT discord_id, albion_name FROM users').all();
   return new Map(rows.map((row) => [row.discord_id, row]));
@@ -311,17 +292,18 @@ function summarize(rows) {
     candidates: rows.filter((row) => row.status === 'candidate').length,
     active: rows.filter((row) => row.status === 'active').length,
     protected: rows.filter((row) => row.status === 'protected').length,
-    newMembers: rows.filter((row) => row.status === 'new_member').length,
+    newGuests: rows.filter((row) => row.status === 'new_guest').length,
+    hasMember: rows.filter((row) => row.status === 'has_member').length,
     unknownJoinDate: rows.filter((row) => row.status === 'unknown_join_date').length
   };
 }
 
 function previewAttachment(preview) {
-  return rowsAttachment(preview.rows, `previa-inativos-eventos-${dateKey()}.csv`);
+  return rowsAttachment(preview.rows, `previa-inativos-convidados-${dateKey()}.csv`);
 }
 
 function applyAttachment(result) {
-  return rowsAttachment(result.results, `resultado-inativos-eventos-${dateKey()}.csv`, true);
+  return rowsAttachment(result.results, `resultado-inativos-convidados-${dateKey()}.csv`, true);
 }
 
 function rowsAttachment(rows, name, includeResult = false) {
@@ -331,16 +313,16 @@ function rowsAttachment(rows, name, includeResult = false) {
     'discord_tag',
     'albion_name',
     'joined_at',
-    'event_count',
-    'event_minutes',
-    'last_event_at',
+    'voice_sessions',
+    'voice_minutes',
+    'last_voice_at',
+    'guest_since',
     'status',
     'action',
     'reason'
   ];
   if (includeResult) columns.push('result');
-  const csv = toCsv(rows, columns);
-  return new AttachmentBuilder(Buffer.from(csv, 'utf8'), { name });
+  return new AttachmentBuilder(Buffer.from(toCsv(rows, columns), 'utf8'), { name });
 }
 
 function isProtected(member) {
@@ -363,7 +345,7 @@ function takePreview(id, actorId) {
 }
 
 function downgradeReason(preview) {
-  return `Inativo em eventos/calls: menos de ${preview.params.minutesMin}min nos ultimos ${preview.params.daysMin} dias`;
+  return `Convidado inativo em voz: sem call recente em ${preview.params.daysMin}+ dias`;
 }
 
 function expiryLabel(preview) {
@@ -407,13 +389,21 @@ function dateKey() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function daysSinceText(value) {
+  const time = Date.parse(value);
+  if (!Number.isFinite(time)) return 'sem data';
+  const days = Math.floor((Date.now() - time) / (24 * 60 * 60 * 1000));
+  return `ultima call ha ${days} dia(s)`;
+}
+
 function statusWeight(status) {
   return {
     candidate: 0,
     active: 1,
-    new_member: 2,
-    protected: 3,
-    unknown_join_date: 4
+    new_guest: 2,
+    has_member: 3,
+    protected: 4,
+    unknown_join_date: 5
   }[status] ?? 9;
 }
 
@@ -423,7 +413,6 @@ module.exports = {
   cancelPreview,
   createPreview,
   defaultDaysMin,
-  defaultMinutesMin,
   postArchiveLog,
   previewPayload
 };

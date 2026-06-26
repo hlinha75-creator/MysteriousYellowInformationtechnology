@@ -45,6 +45,7 @@ client.once('clientReady', () => {
   events.cleanupExpiredReviewChannels(client).catch((error) => console.error('Falha ao limpar canais de revisao:', error));
   balanceBackup.postDailyBackupIfNeeded(client).catch((error) => console.error('Falha ao postar backup diario de saldos:', error));
   operations.postWeeklyAlbionReminderIfNeeded(client).catch((error) => console.error('Falha ao postar lembrete semanal Albion:', error));
+  operations.postMonthlyInactivityPreviewIfNeeded(client).catch((error) => console.error('Falha ao postar previa mensal de inatividade:', error));
   setInterval(() => {
     events.refreshRunningEventMessages(client).catch((error) => console.error('Falha ao atualizar eventos em andamento:', error));
   }, 60000);
@@ -62,6 +63,7 @@ client.once('clientReady', () => {
   }, 60 * 60 * 1000);
   setInterval(() => {
     operations.postWeeklyAlbionReminderIfNeeded(client).catch((error) => console.error('Falha ao postar lembrete semanal Albion:', error));
+  operations.postMonthlyInactivityPreviewIfNeeded(client).catch((error) => console.error('Falha ao postar previa mensal de inatividade:', error));
   }, 60 * 60 * 1000);
 });
 
