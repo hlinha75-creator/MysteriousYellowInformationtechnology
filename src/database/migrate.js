@@ -769,7 +769,7 @@ const migrations = [
         INSERT OR IGNORE INTO campaigns
           (code, title, goal_amount, status, role_name, progress_channel_id, created_by)
         VALUES
-          ('900m', 'Meta 900m NOTAG', 900000000, 'open', '900m', '1481363760110243910', 'system');
+          ('900m', 'Meta 900m NOTAG', 900000000, 'open', '900m', '1484312044772655154', 'system');
       `);
     }
   }

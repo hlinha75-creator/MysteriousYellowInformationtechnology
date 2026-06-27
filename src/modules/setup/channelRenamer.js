@@ -5,7 +5,7 @@ const names = {
   },
   channels: {
     createEvent: '➕criar-evento',
-    participate: '⚔️eventos',
+    participate: 'ping-main',
     deposit: '💰depositos',
     finance: '🧾financeiro-staff',
     consultBalance: '💵consultar-saldo',

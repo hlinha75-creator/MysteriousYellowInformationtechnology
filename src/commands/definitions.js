@@ -17,7 +17,7 @@ const commands = [
     .setDescription('Abre registro de nome em jogo.'),
   new SlashCommandBuilder()
     .setName('enquete')
-    .setDescription('Cria uma enquete no canal de eventos.'),
+    .setDescription('Cria uma enquete no canal ping-main.'),
   new SlashCommandBuilder()
     .setName('leilao')
     .setDescription('Cria um leilao de item para membros da guild.')

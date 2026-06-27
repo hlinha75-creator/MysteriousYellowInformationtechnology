@@ -20,6 +20,36 @@ function intField(fields, name) {
 }
 
 async function handleModal(interaction) {
+  if (interaction.customId === 'campaign:donate_balance_modal') {
+    const amount = parseSilver(interaction.fields.getTextInputValue('amount'));
+    const balance = financeRepo.getBalance(interaction.user.id);
+    if (amount <= 0) throw new Error('Informe um valor maior que zero.');
+    if (balance <= 0) throw new Error('Voce nao tem saldo positivo para doar.');
+    if (amount > balance) {
+      throw new Error(`Voce tentou doar ${formatSilver(amount)}, mas seu saldo atual e ${formatSilver(balance)}.`);
+    }
+    return interaction.reply({
+      content: [
+        '**Confirmar doacao para @900m**',
+        `Seu saldo atual: ${formatSilver(balance)}.`,
+        `Valor da doacao: ${formatSilver(amount)}.`,
+        `Saldo depois: ${formatSilver(balance - amount)}.`
+      ].join('\n'),
+      components: [
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`campaign:confirm_balance_donation:${amount}:${interaction.user.id}`)
+            .setLabel(`Confirmar ${formatSilver(amount)}`)
+            .setStyle(ButtonStyle.Success),
+          new ButtonBuilder()
+            .setCustomId(`campaign:cancel_balance_donation:${interaction.user.id}`)
+            .setLabel('Cancelar')
+            .setStyle(ButtonStyle.Secondary)
+        )
+      ],
+      flags: MessageFlags.Ephemeral
+    });
+  }
   if (interaction.customId === 'member_panel:ask_staff_modal') {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const text = interaction.fields.getTextInputValue('text').trim();
@@ -103,7 +133,7 @@ async function handleModal(interaction) {
     }
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const poll = await polls.createPollFromModal(interaction);
-    return interaction.editReply({ content: `Enquete #${poll.id} criada no canal de eventos.` });
+    return interaction.editReply({ content: `Enquete #${poll.id} criada no canal ping-main.` });
   }
 
   if (interaction.customId === 'event:create') {

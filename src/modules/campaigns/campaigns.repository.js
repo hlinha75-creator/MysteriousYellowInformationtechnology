@@ -134,6 +134,26 @@ function insertContribution({ campaignId, userId, amount, sourceType, sourceId, 
     });
 }
 
+
+function listContributorTotals(campaignId, limit = 50) {
+  return getDatabase()
+    .prepare(`
+      SELECT
+        cc.user_id,
+        u.discord_name,
+        u.albion_name,
+        SUM(cc.amount) AS total_amount,
+        COUNT(*) AS entries
+      FROM campaign_contributions cc
+      LEFT JOIN users u ON u.discord_id = cc.user_id
+      WHERE cc.campaign_id = ?
+        AND cc.status = 'approved'
+      GROUP BY cc.user_id, u.discord_name, u.albion_name
+      ORDER BY total_amount DESC, entries DESC
+      LIMIT ?
+    `)
+    .all(campaignId, limit);
+}
 function updateCampaignProgressMessage({ campaignId, channelId, messageId }) {
   return getDatabase()
     .prepare(`
@@ -165,6 +185,7 @@ module.exports = {
   getEventPayoutDecision,
   insertContribution,
   listContributions,
+  listContributorTotals,
   listEventPayoutDecisions,
   listExpiredPendingDecisions,
   markEventPayoutDecision,

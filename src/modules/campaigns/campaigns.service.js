@@ -4,6 +4,7 @@ const { transaction } = require('../../database/connection');
 const { backupDatabase } = require('../../database/backup');
 const audit = require('../audit/audit.repository');
 const finance = require('../finance/finance.service');
+const financeRepo = require('../finance/finance.repository');
 const eventsRepo = require('../events/events.repository');
 const repo = require('./campaigns.repository');
 const { formatSilver } = require('../../utils/silver');
@@ -184,6 +185,62 @@ async function resolveEventPayoutChoice({ client, decisionId, userId, choice, ac
   return result;
 }
 
+
+const donateFromBalanceTransaction = transaction(({ userId, amount, actorId }) => {
+  const campaign = repo.getActiveCampaign();
+  if (!campaign) throw new Error('Nao ha meta aberta no momento.');
+  const value = Math.floor(Number(amount || 0));
+  if (!Number.isFinite(value) || value <= 0) throw new Error('Informe um valor maior que zero.');
+
+  backupDatabase('before_campaign_balance_donation');
+  const currentBalance = financeRepo.getBalance(userId);
+  if (currentBalance <= 0) throw new Error('Voce nao tem saldo positivo para doar.');
+  if (value > currentBalance) {
+    throw new Error(`Voce tentou doar ${formatSilver(value)}, mas seu saldo atual e ${formatSilver(currentBalance)}.`);
+  }
+
+  const balanceTransaction = finance.applyBalanceTransaction({
+    type: 'campaign_donation',
+    userId,
+    amount: -value,
+    reason: `Doacao para meta @${campaign.role_name || defaultCampaignRoleName}`,
+    referenceType: 'campaign',
+    referenceId: String(campaign.id),
+    createdBy: actorId
+  });
+
+  const contribution = repo.insertContribution({
+    campaignId: campaign.id,
+    userId,
+    amount: value,
+    sourceType: 'balance_donation',
+    sourceId: null,
+    createdBy: actorId,
+    approvedBy: actorId,
+    note: `Doacao de saldo para @${campaign.role_name || defaultCampaignRoleName}`
+  });
+
+  audit.createAuditLog({
+    type: 'campaign_balance_donation',
+    actorId,
+    targetId: userId,
+    beforeValue: currentBalance,
+    afterValue: currentBalance - value,
+    reason: `Doacao para ${campaign.code}`,
+    metadata: { campaignId: campaign.id, amount: value }
+  });
+
+  return { campaign, transaction: balanceTransaction, contribution };
+});
+
+async function donateFromBalance({ client, userId, amount, actorId }) {
+  const result = donateFromBalanceTransaction({ userId, amount, actorId });
+  await grantCampaignRole(client, result.campaign, userId).catch((error) => {
+    audit.createAuditLog({ type: 'campaign_role_failed', targetId: userId, reason: error.message });
+  });
+  await refreshActiveCampaignProgress(client).catch(() => {});
+  return result;
+}
 async function processExpiredEventPayouts(client) {
   const expired = repo.listExpiredPendingDecisions(new Date().toISOString(), 100);
   const transactions = [];
@@ -258,12 +315,14 @@ async function ensureCampaignRole(guild, campaign) {
 async function refreshActiveCampaignProgress(client) {
   const campaign = repo.getActiveCampaign();
   if (!campaign) return null;
-  const channelId = campaign.progress_channel_id || ids.channels.notagChat;
+  const channelId = campaignProgressChannelId(campaign);
+  await deletePreviousProgressMessageIfMoved(client, campaign, channelId).catch(() => {});
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (!channel?.isTextBased()) return null;
 
   const payload = progressMessagePayload(campaign);
-  let message = campaign.progress_message_id
+  const canReuseMessage = campaign.progress_channel_id === channelId;
+  let message = canReuseMessage && campaign.progress_message_id
     ? await channel.messages.fetch(campaign.progress_message_id).catch(() => null)
     : null;
 
@@ -276,6 +335,32 @@ async function refreshActiveCampaignProgress(client) {
   return message;
 }
 
+function campaignProgressChannelId(campaign) {
+  if (campaign?.code === '900m') return ids.channels.campaignAnnouncements;
+  return campaign.progress_channel_id || ids.channels.notagChat;
+}
+
+async function deletePreviousProgressMessageIfMoved(client, campaign, targetChannelId) {
+  if (!campaign?.progress_message_id) return;
+  if (!campaign.progress_channel_id || campaign.progress_channel_id === targetChannelId) return;
+  const previousChannel = await client.channels.fetch(campaign.progress_channel_id).catch(() => null);
+  const previousMessage = await previousChannel?.messages.fetch(campaign.progress_message_id).catch(() => null);
+  await previousMessage?.delete().catch(() => {});
+}
+
+
+function campaignPanelButtons() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('campaign:donate_balance')
+      .setLabel('Doar saldo')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId('campaign:view_contributors')
+      .setLabel('Ver lista')
+      .setStyle(ButtonStyle.Secondary)
+  );
+}
 function progressMessagePayload(campaign) {
   const totals = repo.getCampaignTotals(campaign.id);
   const goal = Number(campaign.goal_amount || 0);
@@ -303,10 +388,32 @@ function progressMessagePayload(campaign) {
         .setColor(0xf59e0b)
         .setTimestamp(new Date())
     ],
+    components: [campaignPanelButtons()],
     allowedMentions: { parse: [] }
   };
 }
 
+
+function contributorsEmbed(limit = 50) {
+  const campaign = repo.getActiveCampaign();
+  if (!campaign) {
+    return new EmbedBuilder()
+      .setTitle('Meta @900m')
+      .setDescription('Nao ha meta aberta no momento.')
+      .setColor(0x6b7280)
+      .setTimestamp(new Date());
+  }
+  const rows = repo.listContributorTotals(campaign.id, limit);
+  const lines = rows.map((row, index) => {
+    const name = row.albion_name || row.discord_name || `<@${row.user_id}>`;
+    return `${index + 1}. ${name} - ${formatSilver(row.total_amount)} (${row.entries} entrada${Number(row.entries) === 1 ? '' : 's'})`;
+  });
+  return new EmbedBuilder()
+    .setTitle(`Contribuidores @${campaign.role_name || defaultCampaignRoleName}`)
+    .setDescription(lines.length ? lines.join('\n').slice(0, 3900) : 'Nenhuma contribuicao registrada ainda.')
+    .setColor(0xf59e0b)
+    .setTimestamp(new Date());
+}
 function progressBar(percent) {
   const total = 20;
   const filled = Math.max(0, Math.min(total, Math.round((percent / 100) * total)));
@@ -335,7 +442,9 @@ function closedDecisionEmbed(result) {
 
 module.exports = {
   closedDecisionEmbed,
+  contributorsEmbed,
   createEventPayoutChoices,
+  donateFromBalance,
   decisionMessagePayload,
   getActiveCampaign,
   processExpiredEventPayouts,

@@ -1,4 +1,4 @@
-﻿# MEMORY.md - NOTAG Bot
+# MEMORY.md - NOTAG Bot
 
 Este arquivo guarda as decisoes permanentes do projeto. Antes de alterar o bot, leia este arquivo junto com o codigo atual.
 
@@ -65,7 +65,7 @@ O dono e o owner do servidor Discord.
 ## Canais
 
 - Criar evento: `1481397653316178022`
-- Participar/eventos: `1481397657065754797`
+- ping-main: `1481397657065754797`
 - Deposito rapido: `1481251393967886518`
 - Financeiro: `1481318081145077812`
 - DPS meter: `1482081003143958568`
@@ -210,7 +210,7 @@ Formato de vagas:
 
 Eventos suportam multiplos eventos simultaneos.
 
-Evento criado aparece no canal Participar/eventos.
+Evento criado aparece no canal ping-main.
 
 Evento aberto deve mostrar:
 - titulo;
@@ -272,13 +272,13 @@ Ao finalizar:
 - mover todos para Aguardando evento;
 - apagar sala temporaria;
 - apagar mensagem/cargo temporario de aviso;
-- apagar o embed do evento no canal Participar/eventos;
+- apagar o embed do evento no canal ping-main;
 - abrir revisao de loot no financeiro.
 
 Ao cancelar:
 - apagar sala temporaria;
 - apagar mensagem/cargo temporario de aviso;
-- apagar o embed do evento no canal Participar/eventos;
+- apagar o embed do evento no canal ping-main;
 - registrar motivo.
 
 Staff/ADM/owner podem cancelar evento de outro criador com confirmacao, igual iniciar/finalizar.
@@ -294,7 +294,7 @@ Fluxo:
 - criador abre modal;
 - se deixar vazio, pergunta padrao: `Voce quer Raid Avalon hoje? Que horas?`;
 - se deixar vazio, opcoes padrao: `17h, 18h, 19h, 20h, 21h, 22h, 23h`;
-- bot posta no canal Participar/eventos;
+- bot posta no canal ping-main;
 - bot menciona os cargos configurados de membro e superiores;
 - membros votam usando String Select Menu com multiplas escolhas;
 - cada membro pode votar em varios horarios;
@@ -346,7 +346,7 @@ Quando faltar 1 minuto para o evento:
 - criar cargo temporario;
 - dar cargo aos inscritos;
 - nao incluir espectadores no aviso;
-- mencionar no canal Participar/eventos;
+- mencionar no canal ping-main;
 - avisar que o evento nao inicia automaticamente;
 - guardar `warning_message_id` para apagar depois.
 

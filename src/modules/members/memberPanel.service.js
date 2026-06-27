@@ -302,7 +302,7 @@ function keywordAnswer(text) {
   if (value.includes('saldo')) return 'Use o painel de saldo ou clique em Meu historico para ver saldo atual e acumulado.';
   if (value.includes('build')) return `As builds PvE estao aqui: ${buildsUrl}`;
   if (value.includes('registro') || value.includes('nick')) return 'Use o canal de registro para informar seu nick do Albion.';
-  if (value.includes('evento')) return 'Os eventos ficam no canal de eventos. Clique em participar, assistir ou aguarde o caller iniciar.';
+  if (value.includes('evento')) return 'Os eventos ficam no canal ping-main. Clique em participar, assistir ou aguarde o caller iniciar.';
   if (value.includes('ponto')) return `Use os botoes Pontos influencia ou Pontos temporada. Grafico: ${graphUrl}`;
   return null;
 }

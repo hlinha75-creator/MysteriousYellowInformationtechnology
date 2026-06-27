@@ -104,6 +104,46 @@ async function handleButton(interaction) {
         : `Tudo certo. ${formatSilver(result.decision.amount)} foi enviado para seu saldo.`
     });
   }
+  if (scope === 'campaign' && action === 'donate_balance') {
+    const balance = financeRepo.getBalance(interaction.user.id);
+    if (balance <= 0) {
+      return interaction.reply({ content: 'Voce nao tem saldo positivo para doar.', flags: MessageFlags.Ephemeral });
+    }
+    return showModal(interaction, 'campaign:donate_balance_modal', 'Doar saldo para @900m', [
+      textInput('amount', 'Valor para doar', true, `Seu saldo: ${formatSilver(balance)}. Ex: 5m`)
+    ]);
+  }
+
+  if (scope === 'campaign' && action === 'view_contributors') {
+    return interaction.reply({ embeds: [campaigns.contributorsEmbed()], flags: MessageFlags.Ephemeral });
+  }
+
+  if (scope === 'campaign' && action === 'confirm_balance_donation') {
+    if (extra !== interaction.user.id) {
+      return interaction.reply({ content: 'Essa confirmacao nao foi criada para voce.', flags: MessageFlags.Ephemeral });
+    }
+    const amount = Number(id);
+    await interaction.deferUpdate();
+    const result = await campaigns.donateFromBalance({
+      client: interaction.client,
+      userId: interaction.user.id,
+      amount,
+      actorId: interaction.user.id
+    });
+    await finance.notifyBalanceTransactions({ client: interaction.client, transactions: [result.transaction] });
+    return interaction.editReply({
+      content: `Doacao registrada: ${formatSilver(amount)} para @${result.campaign.role_name || '900m'}. Seu saldo atual: ${formatSilver(result.transaction.afterBalance)}.`,
+      components: []
+    });
+  }
+
+  if (scope === 'campaign' && action === 'cancel_balance_donation') {
+    if (id !== interaction.user.id) {
+      return interaction.reply({ content: 'Essa confirmacao nao foi criada para voce.', flags: MessageFlags.Ephemeral });
+    }
+    await interaction.deferUpdate();
+    return interaction.editReply({ content: 'Doacao cancelada. Nenhum saldo foi alterado.', components: [] });
+  }
 
   if (interaction.customId === 'panel:create_event') {
     if (!can(interaction.member, 'createEvent')) {

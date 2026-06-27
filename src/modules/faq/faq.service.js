@@ -26,7 +26,7 @@ const faqAnswers = [
     audience: 'public',
     keys: ['evento', 'criar evento', 'participar'],
     title: 'Eventos',
-    body: 'Eventos sao criados no painel de criar evento. Depois aparecem no canal de eventos para o pessoal participar, assistir, pausar e finalizar.'
+    body: 'Eventos sao criados no painel de criar evento. Depois aparecem no canal ping-main para o pessoal participar, assistir, pausar e finalizar.'
   },
   {
     audience: 'public',
@@ -56,7 +56,7 @@ const tutorials = {
       '**Tutorial de Eventos**',
       '1. Va no canal de criar evento e clique em Criar Evento.',
       '2. Se estiver com pressa, pode enviar vazio: o bot usa FastContent, horario +10 minutos e vagas 1,1,1,17.',
-      '3. Confira o evento no canal de eventos e veja se as vagas ficaram certas.',
+      '3. Confira o evento no canal ping-main e veja se as vagas ficaram certas.',
       '4. Quando for comecar, clique em Iniciar. O bot cria a sala de voz e move quem ja estiver em voz.',
       '5. Durante o evento, membros podem clicar em Quero participar, Assistir ou Pausar participacao.',
       '6. Ao finalizar, preencha loot total, reparo, sacos de prata e taxa.',

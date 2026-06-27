@@ -30,6 +30,7 @@ module.exports = {
     memberRequests: '1516030220073963520',
     waitingVoice: '1492707400485179664',
     notagChat: '1481363760110243910',
+    campaignAnnouncements: '1484312044772655154',
     inactivityNotice: '1518215036030685214'
   },
   importantChannels: [

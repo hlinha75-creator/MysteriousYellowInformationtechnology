@@ -1,4 +1,6 @@
 const repo = require('../events/events.repository');
+const events = require('../events/events.service');
+const audit = require('../audit/audit.repository');
 const voiceRepo = require('./voice.repository');
 
 async function handleVoiceStateUpdate(oldState, newState) {
@@ -41,8 +43,20 @@ async function handleVoiceStateUpdate(oldState, newState) {
     if (newEvent) {
       const participant = repo.getParticipant({ eventId: newEvent.id, discordId: userId });
       if (!participant) {
-        await newState.member.voice.disconnect('Nao inscrito no evento').catch(() => {});
-        await newState.member.send('Voce precisa participar do evento ou clicar em Espectador antes de entrar na sala.').catch(() => {});
+        repo.upsertParticipant({
+          eventId: newEvent.id,
+          discordId: userId,
+          role: 'spectator',
+          isSpectator: 1
+        });
+        audit.createAuditLog({
+          type: 'event_auto_spectator_voice_join',
+          actorId: userId,
+          targetId: String(newEvent.id),
+          reason: 'Entrou direto na sala de voz do evento e virou espectador'
+        });
+        await events.refreshEventMessage(newState.client, newEvent.id).catch(() => {});
+        await newState.member.send('Voce entrou direto na sala do evento e foi marcado como espectador. Seu tempo nao sera contado no loot split.').catch(() => {});
         return;
       }
       if (!participant.is_spectator) {
