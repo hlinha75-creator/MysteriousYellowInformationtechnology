@@ -124,7 +124,7 @@ function previewPendingGuildRegistrations(csvText, actorId) {
 async function applyPendingGuildRegistrationPreview({ guild, previewId, actorId }) {
   const preview = guildVerificationPreviews.get(previewId);
   guildVerificationPreviews.delete(previewId);
-  if (!preview) throw new Error('Previa expirada ou ja usada. Rode /aprovar_pendentes novamente.');
+  if (!preview) throw new Error('Previa expirada ou ja usada. Rode /sincronizar_albion novamente.');
   if (preview.actorId !== actorId) throw new Error('Somente quem criou a previa pode confirmar.');
 
   const results = [];

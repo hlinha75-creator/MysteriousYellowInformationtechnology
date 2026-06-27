@@ -22,7 +22,6 @@ const polls = require('../modules/polls/polls.service');
 const auctions = require('../modules/auctions/auctions.service');
 const objectives = require('../modules/objectives/objectives.service');
 const dailyReport = require('../modules/reports/dailyReport.service');
-const registration = require('../modules/registration/registration.service');
 const albionWeekly = require('../modules/albion/weekly.service');
 const memberList = require('../modules/members/memberList.service');
 const inactiveEvents = require('../modules/members/inactiveEvents.service');
@@ -195,9 +194,9 @@ async function handleCommand(interaction) {
     });
   }
 
-  if (interaction.commandName === 'aprovar_pendentes') {
+  if (interaction.commandName === 'sincronizar_albion') {
     if (!can(interaction.member, 'approveRegistration')) {
-      return interaction.reply({ content: 'Voce nao tem permissao para verificar pedidos pendentes.', flags: MessageFlags.Ephemeral });
+      return interaction.reply({ content: 'Voce nao tem permissao para sincronizar Albion.', flags: MessageFlags.Ephemeral });
     }
 
     const attachment = interaction.options.getAttachment('arquivo');
@@ -209,20 +208,19 @@ async function handleCommand(interaction) {
     const response = await fetch(attachment.url);
     if (!response.ok) throw new Error('Nao consegui baixar o arquivo anexado.');
     const text = await response.text();
-    const { id, preview } = registration.previewPendingGuildRegistrations(text, interaction.user.id);
+    const { id, preview } = await albionVerification.previewAlbionSync(interaction.guild, text, interaction.user.id);
     return interaction.editReply({
-      content: registration.pendingGuildPreviewText(preview),
-      files: [registration.pendingGuildPreviewAttachment(preview)],
+      content: albionVerification.syncPreviewText(preview),
+      files: [albionVerification.syncPreviewAttachment(preview)],
+      allowedMentions: { parse: [] },
       components: [
         new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId(`registration_bulk:confirm:${id}`).setLabel('Confirmar cargos').setStyle(ButtonStyle.Success),
-          new ButtonBuilder().setCustomId(`registration_bulk:cancel:${id}`).setLabel('Cancelar').setStyle(ButtonStyle.Secondary)
+          new ButtonBuilder().setCustomId(`albion_sync:confirm:${id}`).setLabel('Confirmar sincronizacao').setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId(`albion_sync:cancel:${id}`).setLabel('Cancelar').setStyle(ButtonStyle.Secondary)
         )
       ]
     });
   }
-
-
   if (interaction.commandName === 'inativos') {
     if (!can(interaction.member, 'approveRegistration')) {
       return interaction.reply({ content: 'Voce nao tem permissao para verificar inativos.', flags: MessageFlags.Ephemeral });
@@ -322,62 +320,6 @@ async function handleCommand(interaction) {
       dateText: interaction.options.getString('data')
     });
     return interaction.editReply({ content: result.content, files: result.files });
-  }
-
-  if (interaction.commandName === 'auditar_guilda') {
-    if (!can(interaction.member, 'approveRegistration')) {
-      return interaction.reply({ content: 'Voce nao tem permissao para verificar a guild inteira.', flags: MessageFlags.Ephemeral });
-    }
-
-    const attachment = interaction.options.getAttachment('arquivo');
-    if (!attachment?.url) {
-      return interaction.reply({ content: 'Anexe o arquivo exportado do jogo.', flags: MessageFlags.Ephemeral });
-    }
-
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const response = await fetch(attachment.url);
-    if (!response.ok) throw new Error('Nao consegui baixar o arquivo anexado.');
-    const text = await response.text();
-    const result = await albionVerification.analyzeGuildFromText(interaction.guild, text, interaction.user.id);
-    return interaction.editReply({
-      content: [
-        albionVerification.summarizeAnalysis(result),
-        '',
-        'Principais pendencias:',
-        albionVerification.importantLines(result)
-      ].join('\n').slice(0, 1900),
-      files: albionVerification.analysisAttachments(result)
-    });
-  }
-
-  if (interaction.commandName === 'aplicar_verificacao_guild') {
-    if (!can(interaction.member, 'approveRegistration')) {
-      return interaction.reply({ content: 'Voce nao tem permissao para aplicar verificacao de guild.', flags: MessageFlags.Ephemeral });
-    }
-
-    const verificationId = interaction.options.getInteger('codigo');
-    const action = interaction.options.getString('acao');
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-    if (action === 'renomear_parecidos') {
-      const results = await albionVerification.applySimilarRenames(interaction.guild, verificationId, interaction.user.id);
-      const renamed = results.filter((row) => row.resultado === 'renomeado').length;
-      return interaction.editReply({
-        content: `Verificacao #${verificationId}: ${renamed}/${results.length} membros renomeados.`,
-        files: [albionVerification.actionAttachment(results, `verificacao_${verificationId}_renomes.csv`)]
-      });
-    }
-
-    if (action === 'perguntar_nao_encontrados') {
-      const results = await albionVerification.askMissingMembers(interaction.guild, verificationId);
-      const sent = results.filter((row) => row.resultado === 'dm_enviada').length;
-      return interaction.editReply({
-        content: `Verificacao #${verificationId}: DM enviada para ${sent}/${results.length} membros nao encontrados.`,
-        files: [albionVerification.actionAttachment(results, `verificacao_${verificationId}_dms.csv`)]
-      });
-    }
-
-    return interaction.editReply({ content: 'Acao desconhecida.' });
   }
 
   if (interaction.commandName === 'renomear_canais') {

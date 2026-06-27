@@ -156,7 +156,7 @@ Quando vira Membro:
 - remover Convidado.
 
 Verificacao em massa de pedidos pendentes:
-- comando `/aprovar_pendentes arquivo:<csv/tsv>`;
+- comando `/sincronizar_albion arquivo:<csv/tsv>`;
 - botao de ajuda no Painel ADM: `Verificar pedidos pendentes`;
 - permitido para Staff, ADM, Recrutador e owner;
 - arquivo pode ser CSV ou TSV;

@@ -366,24 +366,16 @@ function progressMessagePayload(campaign) {
   const goal = Number(campaign.goal_amount || 0);
   const percent = goal > 0 ? Math.min(100, (totals.raised / goal) * 100) : 0;
   const remaining = Math.max(0, goal - totals.raised);
-  const lines = repo.listContributions(campaign.id, 6).map((row) => {
-    const name = row.albion_name || row.discord_name || `<@${row.user_id}>`;
-    return `${name} - ${formatSilver(row.amount)} (${sourceLabel(row.source_type)})`;
-  });
 
   return {
     embeds: [
       new EmbedBuilder()
-        .setTitle(`Meta @${campaign.role_name || defaultCampaignRoleName}: ${formatSilver(goal)}`)
+        .setTitle(`Meta @${campaign.role_name || defaultCampaignRoleName}`)
         .setDescription([
           progressBar(percent),
-          `**${formatSilver(totals.raised)}** arrecadados (${percent.toFixed(1)}%).`,
-          remaining > 0 ? `Faltam **${formatSilver(remaining)}**.` : '**Meta batida.**',
-          '',
-          `Contribuidores: **${totals.contributors}** | Eventos: **${totals.events}** | Escolhas pendentes: **${totals.pending}**`,
-          '',
-          '**Ultimas entradas**',
-          lines.length ? lines.join('\n') : 'Nenhuma contribuicao registrada ainda.'
+          `Arrecadado: **${formatSilver(totals.raised)} / ${formatSilver(goal)}** (${percent.toFixed(1)}%).`,
+          remaining > 0 ? `Faltam: **${formatSilver(remaining)}**.` : '**Meta batida.**',
+          `Contribuidores: **${totals.contributors}**.`
         ].join('\n'))
         .setColor(0xf59e0b)
         .setTimestamp(new Date())
@@ -394,6 +386,13 @@ function progressMessagePayload(campaign) {
 }
 
 
+function contributorName(row) {
+  const mention = row.user_id ? `<@${row.user_id}>` : null;
+  const albion = row.albion_name ? `Albion: ${row.albion_name}` : null;
+  const discord = !mention && row.discord_name ? row.discord_name : null;
+  return [mention || discord || row.user_id || 'Sem nome', albion].filter(Boolean).join(' | ');
+}
+
 function contributorsEmbed(limit = 50) {
   const campaign = repo.getActiveCampaign();
   if (!campaign) {
@@ -403,14 +402,26 @@ function contributorsEmbed(limit = 50) {
       .setColor(0x6b7280)
       .setTimestamp(new Date());
   }
+  const totals = repo.getCampaignTotals(campaign.id);
   const rows = repo.listContributorTotals(campaign.id, limit);
-  const lines = rows.map((row, index) => {
-    const name = row.albion_name || row.discord_name || `<@${row.user_id}>`;
-    return `${index + 1}. ${name} - ${formatSilver(row.total_amount)} (${row.entries} entrada${Number(row.entries) === 1 ? '' : 's'})`;
-  });
+  const latest = repo.listContributions(campaign.id, 12);
+  const contributorLines = rows.map((row, index) => (
+    `${index + 1}. ${contributorName(row)} - ${formatSilver(row.total_amount)} (${row.entries} entrada${Number(row.entries) === 1 ? '' : 's'})`
+  ));
+  const latestLines = latest.map((row) => `${contributorName(row)} - ${formatSilver(row.amount)} (${sourceLabel(row.source_type)})`);
+
   return new EmbedBuilder()
-    .setTitle(`Contribuidores @${campaign.role_name || defaultCampaignRoleName}`)
-    .setDescription(lines.length ? lines.join('\n').slice(0, 3900) : 'Nenhuma contribuicao registrada ainda.')
+    .setTitle(`Lista da meta @${campaign.role_name || defaultCampaignRoleName}`)
+    .setDescription([
+      `Total arrecadado: **${formatSilver(totals.raised)}**`,
+      `Contribuidores: **${totals.contributors}**`,
+      `Eventos com doacao: **${totals.events}**`,
+      `Escolhas pendentes: **${totals.pending}**`
+    ].join('\n'))
+    .addFields(
+      { name: 'Contribuidores', value: contributorLines.length ? contributorLines.join('\n').slice(0, 1000) : 'Nenhuma contribuicao registrada ainda.' },
+      { name: 'Ultimas entradas', value: latestLines.length ? latestLines.join('\n').slice(0, 1000) : 'Nenhuma entrada recente.' }
+    )
     .setColor(0xf59e0b)
     .setTimestamp(new Date());
 }

@@ -115,7 +115,7 @@ async function handleButton(interaction) {
   }
 
   if (scope === 'campaign' && action === 'view_contributors') {
-    return interaction.reply({ embeds: [campaigns.contributorsEmbed()], flags: MessageFlags.Ephemeral });
+    return interaction.reply({ embeds: [campaigns.contributorsEmbed()], flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } });
   }
 
   if (scope === 'campaign' && action === 'confirm_balance_donation') {
@@ -806,9 +806,9 @@ async function handleButton(interaction) {
     }
       return interaction.reply({
         content: [
-        'Use o comando `/aprovar_pendentes arquivo:<csv/tsv>` e anexe a lista oficial de membros da guild no Albion.',
-        'O bot vai mostrar uma previa antes de dar cargos.',
-        'Encontrados viram Membro; nao encontrados continuam Convidado/pendente.'
+        'Use o comando `/sincronizar_albion arquivo:<csv/tsv>` e anexe a lista oficial de membros da guild no Albion.',
+        'O bot vai mostrar uma previa antes de salvar vinculos e aprovar pendentes.',
+        'Encontrados sao vinculados ao Albion name; registros pendentes encontrados viram Membro.'
       ].join('\n'),
       flags: MessageFlags.Ephemeral
     });
@@ -885,34 +885,31 @@ async function handleButton(interaction) {
       return interaction.reply({ content: 'Verificacao de convidados inativos cancelada. Nenhum cargo foi alterado.', flags: MessageFlags.Ephemeral });
     }
   }
-  if (scope === 'registration_bulk') {
+  if (scope === 'albion_sync') {
     if (!can(interaction.member, 'approveRegistration')) {
-      return interaction.reply({ content: 'Voce nao tem permissao para aplicar verificacao de registros.', flags: MessageFlags.Ephemeral });
+      return interaction.reply({ content: 'Voce nao tem permissao para sincronizar Albion.', flags: MessageFlags.Ephemeral });
     }
 
     if (action === 'confirm') {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      const results = await registration.applyPendingGuildRegistrationPreview({
+      const result = await albionVerification.applyAlbionSyncPreview({
         guild: interaction.guild,
         previewId: id,
         actorId: interaction.user.id
       });
-      const approved = results.filter((row) => row.result === 'aprovado como membro').length;
-      const kept = results.filter((row) => row.result === 'mantido convidado').length;
       await interaction.message.edit({ components: [] }).catch(() => {});
       return interaction.editReply({
-        content: `Verificacao aplicada. Aprovados como Membro: ${approved}. Mantidos como Convidado/pendente: ${kept}.`,
-        files: [registration.pendingGuildApplyAttachment(results)]
+        content: albionVerification.syncApplyText(result),
+        files: [albionVerification.syncApplyAttachment(result)]
       });
     }
 
     if (action === 'cancel') {
-      registration.takePendingGuildRegistrationPreview(id, interaction.user.id);
+      albionVerification.cancelAlbionSyncPreview(id, interaction.user.id);
       await interaction.message.edit({ components: [] }).catch(() => {});
-      return interaction.reply({ content: 'Verificacao cancelada. Nenhum cargo foi alterado.', flags: MessageFlags.Ephemeral });
+      return interaction.reply({ content: 'Sincronizacao cancelada. Nenhum vinculo foi alterado.', flags: MessageFlags.Ephemeral });
     }
   }
-
   if (scope === 'albion_weekly') {
     if (!can(interaction.member, 'importCsv')) {
       return interaction.reply({ content: 'Voce nao tem permissao para importar dados do Albion.', flags: MessageFlags.Ephemeral });

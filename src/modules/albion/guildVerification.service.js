@@ -1,5 +1,8 @@
 const { AttachmentBuilder, ChannelType } = require('discord.js');
 const ids = require('../../config/ids');
+const { transaction } = require('../../database/connection');
+const { backupDatabase } = require('../../database/backup');
+const audit = require('../audit/audit.repository');
 
 const STATUS = {
   exact: 'EXATO',
@@ -12,6 +15,7 @@ const PROTECTED_ROLE_NAMES = ['staff', 'adm', 'caller', 'recruiter'];
 const PROTECTED_PREFIXES = ['!', '.'];
 const MIN_SIMILARITY = 0.72;
 const AMBIGUOUS_DELTA = 0.06;
+const syncPreviews = new Map();
 
 function db() {
   return require('../../database/connection').getDatabase();
@@ -298,8 +302,7 @@ function summarizeAnalysis(result) {
     `Nao encontrados: ${result.missing.length}`,
     `Problemas diversos: ${result.issues.length}`,
     '',
-    `Para aplicar depois: /aplicar_verificacao_guild codigo:${result.id} acao:renomear_parecidos`,
-    `Para perguntar aos nao encontrados: /aplicar_verificacao_guild codigo:${result.id} acao:perguntar_nao_encontrados`
+    'Para sincronizar e salvar vinculos, use /sincronizar_albion com a lista atual da guild.'
   ].join('\n');
 }
 
@@ -472,7 +475,7 @@ function actionAttachment(rows, name) {
 async function membersHtmlAttachment(guild) {
   const verification = getLatestVerification(guild.id);
   if (!verification) {
-    throw new Error('Nenhuma verificacao encontrada. Rode /auditar_guilda arquivo:<anexo> primeiro.');
+    throw new Error('Nenhuma verificacao encontrada. Rode /sincronizar_albion arquivo:<anexo> primeiro.');
   }
 
   const members = await fetchGuildMembersWithRetry(guild);
@@ -731,6 +734,338 @@ function escapeHtml(value) {
   }[char]));
 }
 
+function findAlbionOwner(albionName, discordId) {
+  return db()
+    .prepare('SELECT discord_id FROM users WHERE lower(albion_name) = lower(?) AND discord_id <> ? LIMIT 1')
+    .get(albionName, discordId);
+}
+
+function syncPreviewId() {
+  return `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function buildPendingRegistrationRows(sourceNames) {
+  const guildNameSet = new Set(sourceNames.map((name) => normalizedName(name)));
+  const pending = db()
+    .prepare(`
+      SELECT r.*, u.discord_name
+      FROM registrations r
+      LEFT JOIN users u ON u.discord_id = r.discord_id
+      WHERE r.status = 'pending'
+      ORDER BY r.created_at ASC, r.id ASC
+    `)
+    .all();
+
+  const approve = [];
+  const keep = [];
+  for (const registration of pending) {
+    const found = guildNameSet.has(normalizedName(registration.albion_name));
+    const row = {
+      registration_id: registration.id,
+      discord_id: registration.discord_id,
+      discord_name: registration.discord_name || '',
+      albion_name: registration.albion_name,
+      status: found ? 'APROVAR_MEMBRO' : 'MANTER_CONVIDADO',
+      motivo: found ? 'Nick encontrado na lista Albion' : 'Nick nao encontrado na lista Albion'
+    };
+    if (found) approve.push(row);
+    else keep.push(row);
+  }
+  return { approve, keep };
+}
+
+function buildSyncPreviewRows(members, sourceNames, duplicateNames) {
+  const matches = [];
+  const missing = [];
+  const issues = duplicateNames.map((name) => ({
+    discord_id: '',
+    discord_tag: '',
+    discord_name: '',
+    old_albion_name: '',
+    albion_name: name,
+    status: STATUS.issue,
+    score: '',
+    action: 'ignorar',
+    motivo: 'Nome duplicado no arquivo Albion.'
+  }));
+
+  for (const member of members.filter((item) => !item.user.bot).values()) {
+    const result = analyzeMember(member, sourceNames).row;
+    if ([STATUS.exact, STATUS.similar].includes(result.status) && result.albion_name) {
+      matches.push(result);
+    } else if (result.status === STATUS.missing) {
+      missing.push({
+        ...result,
+        old_albion_name: db().prepare('SELECT albion_name FROM users WHERE discord_id = ?').get(result.discord_id)?.albion_name || '',
+        action: 'ignorar'
+      });
+    } else {
+      issues.push({ ...result, old_albion_name: '', action: 'ignorar' });
+    }
+  }
+
+  const byAlbion = new Map();
+  for (const row of matches) {
+    const key = normalizedName(row.albion_name);
+    if (!byAlbion.has(key)) byAlbion.set(key, []);
+    byAlbion.get(key).push(row);
+  }
+
+  const sync = [];
+  for (const group of byAlbion.values()) {
+    if (group.length > 1) {
+      for (const row of group) {
+        issues.push({
+          ...row,
+          old_albion_name: db().prepare('SELECT albion_name FROM users WHERE discord_id = ?').get(row.discord_id)?.albion_name || '',
+          status: STATUS.issue,
+          action: 'ignorar',
+          motivo: `Mesmo nick Albion encontrado para ${group.length} membros Discord.`
+        });
+      }
+      continue;
+    }
+
+    const row = group[0];
+    const current = db().prepare('SELECT * FROM users WHERE discord_id = ?').get(row.discord_id);
+    const owner = findAlbionOwner(row.albion_name, row.discord_id);
+    if (owner) {
+      issues.push({
+        ...row,
+        old_albion_name: current?.albion_name || '',
+        status: STATUS.issue,
+        action: 'ignorar',
+        motivo: `Nick Albion ja esta vinculado ao Discord ${owner.discord_id}.`
+      });
+      continue;
+    }
+
+    const oldAlbion = current?.albion_name || '';
+    const action = normalizedName(oldAlbion) === normalizedName(row.albion_name)
+      ? 'manter'
+      : oldAlbion
+        ? 'atualizar'
+        : 'novo';
+    sync.push({
+      ...row,
+      old_albion_name: oldAlbion,
+      action,
+      motivo: action === 'manter' ? 'Vinculo ja estava correto.' : row.motivo
+    });
+  }
+
+  return { sync, missing, issues };
+}
+
+async function previewAlbionSync(guild, text, actorId) {
+  const { names, duplicates } = parseGuildExport(text);
+  const members = await fetchGuildMembersWithRetry(guild);
+  const rows = buildSyncPreviewRows(members, names, duplicates);
+  const pending = buildPendingRegistrationRows(names);
+  const verificationId = saveVerification({
+    guildId: guild.id,
+    actorId,
+    sourceNames: names,
+    matches: rows.sync,
+    missing: rows.missing,
+    issues: rows.issues
+  });
+  const preview = {
+    id: syncPreviewId(),
+    verificationId,
+    guildId: guild.id,
+    actorId,
+    sourceNamesCount: names.length,
+    syncRows: rows.sync,
+    missingRows: rows.missing,
+    issueRows: rows.issues,
+    pendingApprove: pending.approve,
+    pendingKeep: pending.keep,
+    createdAt: Date.now()
+  };
+  syncPreviews.set(preview.id, preview);
+  return { id: preview.id, preview };
+}
+
+const upsertSyncedUser = transaction((row) => {
+  const before = db().prepare('SELECT * FROM users WHERE discord_id = ?').get(row.discord_id);
+  db()
+    .prepare(`
+      INSERT INTO users (discord_id, discord_name, albion_name, registration_status, updated_at)
+      VALUES (@discordId, @discordName, @albionName, 'synced', CURRENT_TIMESTAMP)
+      ON CONFLICT(discord_id) DO UPDATE SET
+        discord_name = excluded.discord_name,
+        albion_name = excluded.albion_name,
+        registration_status = CASE
+          WHEN users.registration_status IN ('member', 'guest', 'pending') THEN users.registration_status
+          ELSE excluded.registration_status
+        END,
+        updated_at = CURRENT_TIMESTAMP
+    `)
+    .run({
+      discordId: row.discord_id,
+      discordName: row.discord_name || row.discord_tag || row.discord_id,
+      albionName: row.albion_name
+    });
+  const after = db().prepare('SELECT * FROM users WHERE discord_id = ?').get(row.discord_id);
+  return { before, after };
+});
+
+async function approvePendingRegistrationFromSync({ guild, row, actorId }) {
+  const member = await guild.members.fetch(row.discord_id).catch(() => null);
+  const owner = findAlbionOwner(row.albion_name, row.discord_id);
+  if (owner) return { ...row, applied: 'nao', result: `Nick ja vinculado ao Discord ${owner.discord_id}` };
+
+  db()
+    .prepare(`
+      INSERT INTO users (discord_id, discord_name, albion_name, registration_status, updated_at)
+      VALUES (@discordId, @discordName, @albionName, 'member', CURRENT_TIMESTAMP)
+      ON CONFLICT(discord_id) DO UPDATE SET
+        discord_name = COALESCE(@discordName, users.discord_name),
+        albion_name = excluded.albion_name,
+        registration_status = 'member',
+        updated_at = CURRENT_TIMESTAMP
+    `)
+    .run({
+      discordId: row.discord_id,
+      discordName: member?.displayName || row.discord_name || row.discord_id,
+      albionName: row.albion_name
+    });
+  db()
+    .prepare(`
+      UPDATE registrations
+      SET status = 'approved_member', reviewed_by = ?, review_note = ?, reviewed_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND status = 'pending'
+    `)
+    .run(actorId, 'Aprovado por sincronizacao Albion', row.registration_id);
+
+  if (member) {
+    await member.roles.remove(ids.roles.noTag).catch(() => {});
+    await member.roles.remove(ids.roles.guest).catch(() => {});
+    await member.roles.add(ids.roles.member).catch(() => {});
+  }
+  return { ...row, applied: 'sim', result: member ? 'aprovado como membro' : 'banco atualizado, membro nao encontrado no Discord' };
+}
+
+async function applyAlbionSyncPreview({ guild, previewId, actorId }) {
+  const preview = syncPreviews.get(previewId);
+  syncPreviews.delete(previewId);
+  if (!preview) throw new Error('Previa expirada ou ja usada. Rode /sincronizar_albion novamente.');
+  if (preview.actorId !== actorId) throw new Error('Somente quem criou a previa pode confirmar.');
+
+  backupDatabase('before_albion_sync');
+  const syncResults = [];
+  for (const row of preview.syncRows) {
+    try {
+      const result = upsertSyncedUser(row);
+      syncResults.push({
+        ...row,
+        applied: 'sim',
+        before_albion_name: result.before?.albion_name || '',
+        after_albion_name: result.after?.albion_name || '',
+        result: row.action === 'manter' ? 'mantido' : 'sincronizado'
+      });
+    } catch (error) {
+      syncResults.push({ ...row, applied: 'nao', result: error.message });
+    }
+  }
+
+  const pendingResults = [];
+  for (const row of preview.pendingApprove) {
+    try {
+      pendingResults.push(await approvePendingRegistrationFromSync({ guild, row, actorId }));
+    } catch (error) {
+      pendingResults.push({ ...row, applied: 'nao', result: error.message });
+    }
+  }
+
+  audit.createAuditLog({
+    type: 'albion_sync_applied',
+    actorId,
+    reason: 'Sincronizacao Discord x Albion por arquivo',
+    metadata: {
+      verificationId: preview.verificationId,
+      sourceNamesCount: preview.sourceNamesCount,
+      synced: syncResults.filter((row) => row.applied === 'sim').length,
+      failed: syncResults.filter((row) => row.applied !== 'sim').length,
+      pendingApproved: pendingResults.filter((row) => row.applied === 'sim').length,
+      missing: preview.missingRows.length,
+      issues: preview.issueRows.length
+    }
+  });
+
+  return { preview, syncResults, pendingResults };
+}
+
+function cancelAlbionSyncPreview(previewId, actorId) {
+  const preview = syncPreviews.get(previewId);
+  if (preview?.actorId === actorId) syncPreviews.delete(previewId);
+  return preview;
+}
+
+function syncPreviewText(preview) {
+  const sample = preview.syncRows.slice(0, 10).map((row) => {
+    const before = row.old_albion_name ? `${row.old_albion_name} -> ` : '';
+    return `+ <@${row.discord_id}> | ${before}${row.albion_name} | ${row.action}`;
+  }).join('\n') || 'Nenhum vinculo automatico encontrado.';
+
+  return [
+    `Previa da sincronizacao Albion #${preview.verificationId}`,
+    `Nomes no arquivo: ${preview.sourceNamesCount}`,
+    `Vinculos que serao salvos: ${preview.syncRows.length}`,
+    `Registros pendentes que viram Membro: ${preview.pendingApprove.length}`,
+    `Nao encontrados no arquivo: ${preview.missingRows.length}`,
+    `Problemas/ambiguos: ${preview.issueRows.length}`,
+    '',
+    'Amostra:',
+    sample,
+    '',
+    'Confirme somente se os nomes parecem corretos. O CSV anexo tem a lista completa.'
+  ].join('\n').slice(0, 1900);
+}
+
+function syncApplyText(result) {
+  const synced = result.syncResults.filter((row) => row.applied === 'sim').length;
+  const failed = result.syncResults.filter((row) => row.applied !== 'sim').length;
+  const approved = result.pendingResults.filter((row) => row.applied === 'sim').length;
+  return [
+    'Sincronizacao Albion aplicada.',
+    `Vinculos salvos: ${synced}`,
+    `Falhas ao salvar: ${failed}`,
+    `Registros pendentes aprovados como Membro: ${approved}`,
+    `Nao encontrados ignorados: ${result.preview.missingRows.length}`,
+    `Problemas/ambiguos ignorados: ${result.preview.issueRows.length}`
+  ].join('\n');
+}
+
+function syncPreviewAttachment(preview) {
+  const rows = [
+    ...preview.syncRows,
+    ...preview.missingRows,
+    ...preview.issueRows,
+    ...preview.pendingApprove.map((row) => ({ ...row, action: 'aprovar_pendente', score: '', old_albion_name: '' })),
+    ...preview.pendingKeep.map((row) => ({ ...row, action: 'manter_pendente', score: '', old_albion_name: '' }))
+  ];
+  return syncRowsAttachment(rows, `previa-sincronizar-albion-${preview.verificationId}.csv`);
+}
+
+function syncApplyAttachment(result) {
+  const rows = [
+    ...result.syncResults,
+    ...result.pendingResults,
+    ...result.preview.missingRows.map((row) => ({ ...row, applied: 'nao', result: 'nao encontrado no arquivo' })),
+    ...result.preview.issueRows.map((row) => ({ ...row, applied: 'nao', result: row.motivo }))
+  ];
+  return syncRowsAttachment(rows, `resultado-sincronizar-albion-${result.preview.verificationId}.csv`);
+}
+
+function syncRowsAttachment(rows, name) {
+  const columns = ['discord_id', 'discord_tag', 'discord_name', 'old_albion_name', 'albion_name', 'status', 'score', 'action', 'applied', 'result', 'motivo'];
+  const csv = [columns, ...rows.map((row) => columns.map((column) => row[column] || ''))]
+    .map((row) => row.map(csvCell).join(','))
+    .join('\n');
+  return new AttachmentBuilder(Buffer.from(csv, 'utf8'), { name });
+}
 async function fetchGuildMembersWithRetry(guild) {
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
@@ -763,11 +1098,18 @@ module.exports = {
   actionAttachment,
   analysisAttachments,
   analyzeGuildFromText,
+  applyAlbionSyncPreview,
   applySimilarRenames,
   askMissingMembers,
+  cancelAlbionSyncPreview,
   handleDirectNickReply,
   importantLines,
   membersHtmlAttachment,
+  previewAlbionSync,
   parseGuildExport,
-  summarizeAnalysis
+  summarizeAnalysis,
+  syncApplyAttachment,
+  syncApplyText,
+  syncPreviewAttachment,
+  syncPreviewText
 };

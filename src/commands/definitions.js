@@ -65,11 +65,11 @@ const commands = [
     .setDescription('Importa CSV de saldos. Use o painel/fluxo com confirmacao.')
     .addAttachmentOption((option) => option.setName('arquivo').setDescription('CSV de saldos').setRequired(true)),
   new SlashCommandBuilder()
-    .setName('aprovar_pendentes')
-    .setDescription('Aprova pedidos pendentes de registro usando CSV/TSV da guild Albion.')
+    .setName('sincronizar_albion')
+    .setDescription('Sincroniza Discord x Albion, atualiza nicks no banco e resolve registros pendentes.')
     .addAttachmentOption((option) => option
       .setName('arquivo')
-      .setDescription('CSV/TSV com os nicks oficiais da guild no Albion.')
+      .setDescription('CSV/TSV exportado do Albion com a coluna Character Name.')
       .setRequired(true)),
   new SlashCommandBuilder()
     .setName('inativos')
@@ -137,28 +137,6 @@ const commands = [
     .addStringOption((option) => option
       .setName('data')
       .setDescription('Data do relatorio no formato AAAA-MM-DD.')),
-  new SlashCommandBuilder()
-    .setName('auditar_guilda')
-    .setDescription('Audita membros do Discord contra a guild do Albion.')
-    .addAttachmentOption((option) => option
-      .setName('arquivo')
-      .setDescription('Arquivo exportado do jogo com a coluna Character Name.')
-      .setRequired(true)),
-  new SlashCommandBuilder()
-    .setName('aplicar_verificacao_guild')
-    .setDescription('Aplica uma verificacao de guild ja analisada.')
-    .addIntegerOption((option) => option
-      .setName('codigo')
-      .setDescription('Codigo da verificacao gerado no relatorio.')
-      .setRequired(true))
-    .addStringOption((option) => option
-      .setName('acao')
-      .setDescription('Acao para aplicar.')
-      .setRequired(true)
-      .addChoices(
-        { name: 'Renomear parecidos', value: 'renomear_parecidos' },
-        { name: 'Perguntar nao encontrados', value: 'perguntar_nao_encontrados' }
-      )),
   new SlashCommandBuilder()
     .setName('renomear_canais')
     .setDescription('Mostra ou aplica a padronizacao de nomes dos canais do bot.')
