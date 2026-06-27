@@ -49,7 +49,7 @@ function pendingQueueComponents() {
       new ButtonBuilder().setCustomId('admin:refresh_pending_queue').setLabel('Atualizar fila').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId('admin:refresh_career_panel').setLabel('Atualizar carreira').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('admin:preview_career_rebuild').setLabel('Previa recalc carreira').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('admin:verify_pending_registrations').setLabel('Verificar registros').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('admin:verify_pending_registrations').setLabel('Sincronizar Albion').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('inactive_events:preview').setLabel('Inativos eventos').setStyle(ButtonStyle.Secondary)
     ),
     new ActionRowBuilder().addComponents(
