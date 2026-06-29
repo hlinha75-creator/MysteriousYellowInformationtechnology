@@ -1,4 +1,4 @@
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+const { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const ids = require('../../config/ids');
 const { transaction } = require('../../database/connection');
 const { backupDatabase } = require('../../database/backup');
@@ -357,7 +357,7 @@ function campaignPanelButtons() {
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
       .setCustomId('campaign:view_contributors')
-      .setLabel('Ver lista')
+      .setLabel('Lista HTML')
       .setStyle(ButtonStyle.Secondary)
   );
 }
@@ -425,6 +425,152 @@ function contributorsEmbed(limit = 50) {
     .setColor(0xf59e0b)
     .setTimestamp(new Date());
 }
+
+function contributorsHtmlPayload() {
+  const campaign = repo.getActiveCampaign();
+  if (!campaign) {
+    return {
+      content: 'Nao ha meta aberta no momento.',
+      allowedMentions: { parse: [] }
+    };
+  }
+
+  const totals = repo.getCampaignTotals(campaign.id);
+  const rows = repo.listContributorTotals(campaign.id, 100000);
+  const entries = repo.listContributions(campaign.id, 100000);
+  const html = contributorsHtml({ campaign, totals, rows, entries });
+  const fileName = `meta-${safeFilePart(campaign.code || 'campanha')}-doadores-${dateFilePart()}.html`;
+
+  return {
+    content: `Arquivo HTML completo da meta @${campaign.role_name || defaultCampaignRoleName}.`,
+    files: [
+      new AttachmentBuilder(Buffer.from(html, 'utf8'), { name: fileName })
+    ],
+    allowedMentions: { parse: [] }
+  };
+}
+
+function contributorsHtml({ campaign, totals, rows, entries }) {
+  const goal = Number(campaign.goal_amount || 0);
+  const percent = goal > 0 ? Math.min(100, (totals.raised / goal) * 100) : 0;
+  const remaining = Math.max(0, goal - totals.raised);
+  const generatedAt = new Date();
+
+  const contributorRows = rows.map((row, index) => `
+          <tr>
+            <td>${index + 1}</td>
+            <td>${escapeHtml(row.discord_name || '')}</td>
+            <td>${escapeHtml(row.albion_name || '')}</td>
+            <td><code>${escapeHtml(row.user_id || '')}</code></td>
+            <td class="num">${escapeHtml(formatSilver(row.total_amount))}</td>
+            <td class="num">${Number(row.entries || 0)}</td>
+          </tr>`).join('');
+
+  const entryRows = entries.map((row) => `
+          <tr>
+            <td>${escapeHtml(formatDateTime(row.created_at))}</td>
+            <td>${escapeHtml(row.discord_name || '')}</td>
+            <td>${escapeHtml(row.albion_name || '')}</td>
+            <td><code>${escapeHtml(row.user_id || '')}</code></td>
+            <td class="num">${escapeHtml(formatSilver(row.amount))}</td>
+            <td>${escapeHtml(sourceLabel(row.source_type))}</td>
+            <td>${escapeHtml(row.source_id || '')}</td>
+            <td>${escapeHtml(row.note || '')}</td>
+          </tr>`).join('');
+
+  return `<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Meta @${escapeHtml(campaign.role_name || defaultCampaignRoleName)}</title>
+  <style>
+    :root { color-scheme: dark; --bg: #111827; --panel: #1f2937; --line: #374151; --text: #e5e7eb; --muted: #9ca3af; --gold: #f59e0b; --green: #22c55e; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, sans-serif; background: var(--bg); color: var(--text); }
+    main { max-width: 1180px; margin: 0 auto; padding: 24px; }
+    h1, h2 { margin: 0 0 12px; }
+    h1 { font-size: 28px; }
+    h2 { font-size: 18px; margin-top: 28px; }
+    .muted { color: var(--muted); }
+    .cards { display: grid; grid-template-columns: repeat(4, minmax(160px, 1fr)); gap: 12px; margin: 18px 0; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
+    .card strong { display: block; font-size: 20px; margin-top: 4px; }
+    .bar { height: 16px; background: #030712; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; margin: 14px 0 8px; }
+    .fill { height: 100%; width: ${percent.toFixed(2)}%; background: linear-gradient(90deg, var(--gold), var(--green)); }
+    table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+    th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: #f3f4f6; background: #111827; position: sticky; top: 0; }
+    tr:hover td { background: rgba(255,255,255,.04); }
+    code { color: #bfdbfe; }
+    .num { text-align: right; white-space: nowrap; }
+    @media (max-width: 760px) { main { padding: 14px; } .cards { grid-template-columns: 1fr 1fr; } table { font-size: 12px; } th, td { padding: 6px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Meta @${escapeHtml(campaign.role_name || defaultCampaignRoleName)}</h1>
+    <div class="muted">Gerado em ${escapeHtml(formatDateTime(generatedAt.toISOString()))}</div>
+    <div class="bar"><div class="fill"></div></div>
+    <div class="muted">${percent.toFixed(1)}% concluido</div>
+
+    <section class="cards">
+      <div class="card">Arrecadado<strong>${escapeHtml(formatSilver(totals.raised))}</strong></div>
+      <div class="card">Meta<strong>${escapeHtml(formatSilver(goal))}</strong></div>
+      <div class="card">Faltam<strong>${escapeHtml(formatSilver(remaining))}</strong></div>
+      <div class="card">Contribuidores<strong>${Number(totals.contributors || 0)}</strong></div>
+      <div class="card">Eventos com doacao<strong>${Number(totals.events || 0)}</strong></div>
+      <div class="card">Escolhas pendentes<strong>${Number(totals.pending || 0)}</strong></div>
+      <div class="card">Entradas registradas<strong>${entries.length}</strong></div>
+      <div class="card">Status<strong>${escapeHtml(campaign.status || '')}</strong></div>
+    </section>
+
+    <h2>Contribuidores</h2>
+    <table>
+      <thead>
+        <tr><th>#</th><th>Discord</th><th>Albion</th><th>Discord ID</th><th>Total</th><th>Entradas</th></tr>
+      </thead>
+      <tbody>
+${contributorRows || '        <tr><td colspan="6">Nenhuma contribuicao registrada.</td></tr>'}
+      </tbody>
+    </table>
+
+    <h2>Entradas</h2>
+    <table>
+      <thead>
+        <tr><th>Data</th><th>Discord</th><th>Albion</th><th>Discord ID</th><th>Valor</th><th>Origem</th><th>Ref.</th><th>Nota</th></tr>
+      </thead>
+      <tbody>
+${entryRows || '        <tr><td colspan="8">Nenhuma entrada registrada.</td></tr>'}
+      </tbody>
+    </table>
+  </main>
+</body>
+</html>`;
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function safeFilePart(value) {
+  return String(value || 'arquivo').replace(/[^a-z0-9_-]/gi, '_').slice(0, 40);
+}
+
+function dateFilePart() {
+  return new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+}
+
+function formatDateTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value || '';
+  return date.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+}
 function progressBar(percent) {
   const total = 20;
   const filled = Math.max(0, Math.min(total, Math.round((percent / 100) * total)));
@@ -455,6 +601,7 @@ function closedDecisionEmbed(result) {
 module.exports = {
   closedDecisionEmbed,
   contributorsEmbed,
+  contributorsHtmlPayload,
   createEventPayoutChoices,
   donateFromBalance,
   decisionMessagePayload,

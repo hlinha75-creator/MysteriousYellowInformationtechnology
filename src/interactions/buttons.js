@@ -193,7 +193,7 @@ async function handleButton(interaction) {
   }
 
   if (scope === 'campaign' && action === 'view_contributors') {
-    return interaction.reply({ embeds: [campaigns.contributorsEmbed()], flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } });
+    return interaction.reply({ ...campaigns.contributorsHtmlPayload(), flags: MessageFlags.Ephemeral });
   }
 
   if (scope === 'campaign' && action === 'confirm_balance_donation') {
