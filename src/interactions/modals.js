@@ -322,6 +322,26 @@ async function handleModal(interaction) {
     });
   }
 
+  if (interaction.customId === 'deposit:create_list_modal') {
+    if (!can(interaction.member, 'approvePayment')) {
+      return interaction.reply({ content: 'Voce nao tem permissao para criar deposito por lista.', flags: MessageFlags.Ephemeral });
+    }
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const draft = await deposit.createListDraft({
+      actorId: interaction.user.id,
+      guild: interaction.guild,
+      totalAmount: parseSilver(interaction.fields.getTextInputValue('totalAmount')),
+      reason: fieldOrDefault(interaction, 'reason', 'Deposito por lista'),
+      rawList: interaction.fields.getTextInputValue('names')
+    });
+
+    return interaction.editReply({
+      content: 'Previa do deposito por lista. Confira nomes e valores antes de confirmar.',
+      embeds: [deposit.listDraftEmbed(draft)],
+      components: deposit.listDraftComponents(draft.id, draft.matched.length > 0)
+    });
+  }
+
   if (interaction.customId === 'admin:remove_balance_modal') {
     if (!can(interaction.member, 'withdrawBalance')) {
       return interaction.reply({ content: 'Voce nao tem permissao para retirar saldo.', flags: MessageFlags.Ephemeral });

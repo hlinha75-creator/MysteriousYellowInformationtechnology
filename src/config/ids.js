@@ -31,7 +31,8 @@ module.exports = {
     waitingVoice: '1492707400485179664',
     notagChat: '1481363760110243910',
     campaignAnnouncements: '1484312044772655154',
-    inactivityNotice: '1518215036030685214'
+    inactivityNotice: '1518215036030685214',
+    staffTutorial: '1516001418052501614'
   },
   importantChannels: [
     '1497902778771701800',

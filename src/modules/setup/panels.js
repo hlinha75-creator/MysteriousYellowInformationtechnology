@@ -9,6 +9,7 @@ const { getDatabase } = require('../../database/connection');
 const memberList = require('../members/memberList.service');
 const memberPanel = require('../members/memberPanel.service');
 const operations = require('../operations/operations.service');
+const staffTutorial = require('../tutorials/staffTutorial.service');
 
 const archiveEmbed = new EmbedBuilder()
   .setTitle('Arquivar')
@@ -62,7 +63,7 @@ const panels = [
   {
     type: 'admin',
     channelId: ids.channels.adminPanel,
-    dynamic: adminPanelPayload
+    dynamic: operations.adminPanelPayload
   },
   {
     type: 'deposit',
@@ -70,7 +71,8 @@ const panels = [
     embed: new EmbedBuilder().setTitle('Deposito').setDescription('Staff pode criar deposito rapido dividido igualmente entre participantes.').setColor(0x38a169),
     components: [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('deposit:create').setLabel('Criar deposito').setStyle(ButtonStyle.Primary)
+        new ButtonBuilder().setCustomId('deposit:create').setLabel('Criar deposito').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('deposit:create_list').setLabel('Deposito por lista').setStyle(ButtonStyle.Success)
       )
     ]
   },
@@ -89,26 +91,13 @@ const panels = [
     channelId: ids.channels.archive,
     embed: archiveEmbed,
     components: archiveComponents
+  },
+  {
+    type: 'staff_tutorial',
+    channelId: ids.channels.staffTutorial,
+    dynamic: staffTutorial.panelPayload
   }
 ];
-
-function adminPanelPayload() {
-  const queue = operations.pendingQueuePayload();
-  return {
-    embeds: [
-      new EmbedBuilder().setTitle('Painel ADM').setDescription('Acoes administrativas e fila de pendencias.').setColor(0xdd6b20),
-      ...queue.embeds,
-      archiveEmbed
-    ],
-    components: [
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('admin:remove_balance').setLabel('Retirar saldo').setStyle(ButtonStyle.Danger)
-      ),
-      ...queue.components,
-      ...archiveComponents
-    ]
-  };
-}
 
 async function upsertSetupPanels(client) {
   const db = getDatabase();
@@ -135,3 +124,4 @@ async function upsertSetupPanels(client) {
 module.exports = {
   upsertSetupPanels
 };
+

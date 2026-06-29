@@ -19,6 +19,7 @@ const memberPanel = require('../modules/members/memberPanel.service');
 const inactiveEvents = require('../modules/members/inactiveEvents.service');
 const inactiveGuests = require('../modules/members/inactiveGuests.service');
 const operations = require('../modules/operations/operations.service');
+const staffTutorial = require('../modules/tutorials/staffTutorial.service');
 const campaigns = require('../modules/campaigns/campaigns.service');
 const { formatSilver } = require('../utils/silver');
 const registration = require('../modules/registration/registration.service');
@@ -553,6 +554,14 @@ async function handleButton(interaction) {
       ]);
     }
 
+    if (action === 'create_list') {
+      return showModal(interaction, 'deposit:create_list_modal', 'Deposito por lista', [
+        textInput('totalAmount', 'Valor total liquido', true, 'Ex: 48m'),
+        textInput('reason', 'Motivo', false, 'Ex: Split DPS meter / ajuste de evento'),
+        textInput('names', 'Lista de nomes', true, 'Cole a lista do DPS meter ou um nome por linha', TextInputStyle.Paragraph)
+      ]);
+    }
+
     if (action === 'confirm') {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const result = await deposit.confirmDraft({ draftId: id, actorId: interaction.user.id, client: interaction.client });
@@ -560,6 +569,21 @@ async function handleButton(interaction) {
       return interaction.editReply({
         content: `Deposito aplicado nos saldos. ${result.participants.length} membro(s) receberam ${formatSilver(result.amount)}.`
       });
+    }
+
+    if (action === 'list_confirm') {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      const result = await deposit.confirmListDraft({ draftId: id, actorId: interaction.user.id, client: interaction.client });
+      await clearSourceMessage(interaction, 'Deposito por lista aplicado.');
+      return interaction.editReply({
+        content: `Deposito por lista aplicado. ${result.participants.length} membro(s) receberam ${formatSilver(result.amount)}. Sobra: ${formatSilver(result.remainder)}.`
+      });
+    }
+
+    if (action === 'list_cancel') {
+      deposit.cancelDraft(id);
+      await clearSourceMessage(interaction, 'Deposito por lista cancelado.');
+      return interaction.reply({ content: 'Deposito por lista cancelado.', flags: MessageFlags.Ephemeral });
     }
 
     if (action === 'cancel') {
@@ -741,6 +765,26 @@ async function handleButton(interaction) {
     return interaction.reply({ content: 'Saque pago e saldo descontado.', flags: MessageFlags.Ephemeral });
   }
 
+  if (scope === 'admin_menu') {
+    if (!can(interaction.member, 'approvePayment') && !can(interaction.member, 'approveRegistration') && !can(interaction.member, 'importCsv')) {
+      return interaction.reply({ content: 'Sem permissao para usar o menu ADM.', flags: MessageFlags.Ephemeral });
+    }
+    return interaction.reply({
+      ...operations.adminMenuPayload(action),
+      flags: MessageFlags.Ephemeral
+    });
+  }
+
+  if (scope === 'tutorial' && action === 'staff_html') {
+    if (!can(interaction.member, 'approvePayment') && !can(interaction.member, 'approveRegistration') && !can(interaction.member, 'importCsv')) {
+      return interaction.reply({ content: 'Sem permissao para baixar o tutorial da staff.', flags: MessageFlags.Ephemeral });
+    }
+    return interaction.reply({
+      content: 'Tutorial HTML gerado.',
+      files: [staffTutorial.htmlAttachment()],
+      flags: MessageFlags.Ephemeral
+    });
+  }
   if (interaction.customId === 'admin:remove_balance') {
     if (!can(interaction.member, 'withdrawBalance')) return interaction.reply({ content: 'Sem permissao.', flags: MessageFlags.Ephemeral });
     return interaction.reply({

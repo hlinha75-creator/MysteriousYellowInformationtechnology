@@ -39,32 +39,114 @@ function pendingQueuePayload() {
         .setColor(0xf6ad55)
         .setTimestamp(new Date())
     ],
-    components: pendingQueueComponents()
+    components: adminMainComponents()
   };
 }
 
-function pendingQueueComponents() {
+function adminPanelPayload() {
+  const queue = pendingQueuePayload();
+  return {
+    embeds: [
+      new EmbedBuilder()
+        .setTitle('Painel ADM')
+        .setDescription('Use os botoes principais. Os detalhes abrem em menus privados para nao poluir o canal.')
+        .setColor(0xdd6b20),
+      ...queue.embeds
+    ],
+    components: adminMainComponents()
+  };
+}
+
+function adminMainComponents() {
   return [
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('admin:refresh_pending_queue').setLabel('Atualizar fila').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId('admin:refresh_career_panel').setLabel('Atualizar carreira').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('admin:preview_career_rebuild').setLabel('Previa recalc carreira').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('admin:verify_pending_registrations').setLabel('Sincronizar Albion').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('inactive_events:preview').setLabel('Inativos eventos').setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId('admin:remove_balance').setLabel('Retirar saldo').setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId('admin_menu:finance').setLabel('Financeiro').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('admin_menu:albion').setLabel('Albion').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('admin_menu:events').setLabel('Eventos').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('admin_menu:members').setLabel('Membros').setStyle(ButtonStyle.Secondary)
     ),
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('albion_weekly:help:rank').setLabel('Importar Rank PvE').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('albion_weekly:help:logs').setLabel('Importar Logs Albion').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('albion_weekly:summary:current').setLabel('Resumo Albion').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId('albion_weekly:export:pve').setLabel('Exportar PvE').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('albion_weekly:export:logs').setLabel('Exportar Logs').setStyle(ButtonStyle.Secondary)
-    ),
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('inactive_guests:preview').setLabel('Inativos convidados').setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId('admin_menu:files').setLabel('Arquivos').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('admin_menu:tutorial').setLabel('Tutorial').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('admin:refresh_pending_queue').setLabel('Atualizar fila').setStyle(ButtonStyle.Primary)
     )
   ];
 }
 
+function adminMenuPayload(menu) {
+  const menus = {
+    finance: {
+      title: 'Financeiro',
+      description: 'Saldo, logs financeiros e importacao manual de saldos.',
+      rows: [[
+        button('admin:remove_balance', 'Retirar saldo', ButtonStyle.Danger),
+        button('csv:export_balances', 'Exportar saldos'),
+        button('csv:export_transactions', 'Logs financeiros'),
+        button('csv:import_help', 'Importar CSV', ButtonStyle.Primary)
+      ]]
+    },
+    albion: {
+      title: 'Albion',
+      description: 'Sincronizacao da guild, rank PvE semanal e logs manuais do Albion.',
+      rows: [[
+        button('admin:verify_pending_registrations', 'Sincronizar Albion', ButtonStyle.Primary),
+        button('albion_weekly:help:rank', 'Importar Rank PvE'),
+        button('albion_weekly:help:logs', 'Importar Logs'),
+        button('albion_weekly:summary:current', 'Resumo Albion'),
+        button('albion_weekly:export:pve', 'Exportar PvE')
+      ], [
+        button('albion_weekly:export:logs', 'Exportar Logs')
+      ]]
+    },
+    events: {
+      title: 'Eventos',
+      description: 'Carreira por arma, recalculo e inatividade por eventos/calls.',
+      rows: [[
+        button('admin:refresh_career_panel', 'Atualizar carreira', ButtonStyle.Primary),
+        button('admin:preview_career_rebuild', 'Previa recalc carreira'),
+        button('inactive_events:preview', 'Inativos eventos')
+      ]]
+    },
+    members: {
+      title: 'Membros',
+      description: 'Vinculos Discord x Albion, convidados inativos e lista comparativa.',
+      rows: [[
+        button('admin:verify_pending_registrations', 'Sincronizar Albion', ButtonStyle.Primary),
+        button('inactive_guests:preview', 'Inativos convidados'),
+        button('guild:export_members_html', 'Discord x Albion')
+      ]]
+    },
+    files: {
+      title: 'Arquivos',
+      description: 'Exportacoes e importacoes manuais para conferencia e backup.',
+      rows: [[
+        button('csv:export_balances', 'Exportar saldos'),
+        button('csv:export_transactions', 'Logs financeiros'),
+        button('csv:export_audit', 'Auditoria'),
+        button('guild:export_members_html', 'Discord x Albion'),
+        button('csv:import_help', 'Importar CSV', ButtonStyle.Primary)
+      ]]
+    },
+    tutorial: {
+      title: 'Tutorial Staff',
+      description: 'Baixe um HTML com o guia completo para ADM/staff/caller/recrutador/tesouraria.',
+      rows: [[
+        button('tutorial:staff_html', 'Baixar tutorial HTML', ButtonStyle.Primary)
+      ]]
+    }
+  };
+
+  const data = menus[menu] || menus.files;
+  return {
+    embeds: [new EmbedBuilder().setTitle(data.title).setDescription(data.description).setColor(0x4f46e5)],
+    components: data.rows.map((row) => new ActionRowBuilder().addComponents(...row))
+  };
+}
+
+function button(customId, label, style = ButtonStyle.Secondary) {
+  return new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style);
+}
 function pendingSummary() {
   const db = getDatabase();
   return {
@@ -96,7 +178,7 @@ function pendingSummary() {
 
 async function refreshPendingQueueMessage(interaction) {
   if (interaction.message) {
-    await interaction.message.edit(pendingQueuePayload());
+    await interaction.message.edit(adminPanelPayload());
   }
 }
 
@@ -260,6 +342,8 @@ function weekKey() {
 }
 
 module.exports = {
+  adminMenuPayload,
+  adminPanelPayload,
   pendingQueuePayload,
   postMonthlyInactivityPreviewIfNeeded,
   postWeeklyAlbionReminderIfNeeded,
