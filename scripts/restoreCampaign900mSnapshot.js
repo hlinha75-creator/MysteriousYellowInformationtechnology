@@ -27,7 +27,7 @@ const visibleSnapshot = [
   { discordName: '.Hi6or', albionName: 'Hi6or', amount: 1790000, entries: 3 },
   { discordName: 'KuNaKiNa', albionName: 'KuNaKiNa', amount: 1400000, entries: 2 },
 
-  // A lista de contribuidores foi cortada pelo Discord, mas estas entradas aparecem em "Ultimas entradas".
+  // A lista de contribuidores foi cortada, mas estas entradas aparecem em "Ultimas entradas".
   { discordName: '!Sabedoria7', albionName: 'Sabedoria7', amount: 401710, entries: 1 },
   { discordName: '.MineMim', albionName: 'MineMim', amount: 655260, entries: 1 },
   { discordName: '.goncalves23', albionName: 'goncalves23', amount: 425950, entries: 1 }
@@ -67,26 +67,35 @@ function findUser(db, item) {
   ));
 }
 
-function printPreview({ rows, missingRows, visibleTotal, current }) {
+function printPreview({ rows, missingRows, visibleTotal, current, apply }) {
   console.log('Restauracao da meta @900m');
+  console.log(`Modo: ${apply ? 'APLICAR' : 'PREVIA'}`);
   console.log(`Total antigo da lista: ${formatSilver(SNAPSHOT_TOTAL)} (${SNAPSHOT_CONTRIBUTORS} contribuidores)`);
   console.log(`Total visivel neste script: ${formatSilver(visibleTotal)} (${visibleSnapshot.length} nomes colados)`);
   console.log(`Encontrados no banco: ${rows.length}. Nao encontrados: ${missingRows.length}.`);
   console.log(`Falta na lista colada/cortada: ${formatSilver(SNAPSHOT_TOTAL - visibleTotal)} (${SNAPSHOT_CONTRIBUTORS - visibleSnapshot.length} contribuidores)`);
   console.log('');
   console.log(`Banco atual: ${formatSilver(Number(current.raised || 0))}, ${current.contributors} contribuidores, ${current.entries} entradas.`);
+  if (Number(current.raised || 0) > 0) {
+    console.log('O banco atual ja tem contribuicoes. O script nao vai inserir nada para evitar duplicar a meta.');
+  }
   console.log('');
+
   if (missingRows.length > 0) {
-    console.log('Nomes nao encontrados no banco pelo albion_name:');
+    console.log('Nomes nao encontrados no banco pelo albion_name/discord_name:');
     for (const item of missingRows) console.log(`- ${item.albionName}`);
     console.log('');
   }
-  console.log('Linhas que serao inseridas:');
+
+  console.log('Linhas que seriam inseridas se o banco estivesse zerado:');
   for (const item of rows) {
     console.log(`- ${item.albionName}: ${formatSilver(item.amount)} (${item.entries} entrada(s)) -> ${item.user.discord_id}`);
   }
   console.log('');
-  console.log(`Para aplicar: node scripts/restoreCampaign900mSnapshot.js ${APPLY_TOKEN}`);
+
+  if (!apply) {
+    console.log(`Para aplicar: node scripts/restoreCampaign900mSnapshot.js ${APPLY_TOKEN}`);
+  }
 }
 
 function main() {
@@ -110,14 +119,16 @@ function main() {
     }
   }
 
-  printPreview({ rows, missingRows, visibleTotal, current });
+  printPreview({ rows, missingRows, visibleTotal, current, apply });
 
   if (!apply) return;
   if (Number(current.raised || 0) > 0) {
-    throw new Error('O banco atual ja tem contribuicoes na meta. Parei para evitar duplicar valores.');
+    console.log('Nada aplicado. Banco preservado.');
+    return;
   }
   if (missingRows.length > 0) {
-    throw new Error('Existem nomes nao encontrados. Corrija o cadastro ou complete manualmente antes de aplicar.');
+    console.log('Nada aplicado. Existem nomes nao encontrados. Corrija o cadastro ou complete manualmente antes de aplicar.');
+    return;
   }
 
   const restore = transaction(() => {
@@ -143,7 +154,7 @@ function main() {
   const after = getCurrentTotals(db, campaign.id);
   console.log('');
   console.log(`Aplicado. Novo total no banco: ${formatSilver(Number(after.raised || 0))}, ${after.contributors} contribuidores.`);
-  console.log(`Ainda falta conferir/lançar: ${formatSilver(SNAPSHOT_TOTAL - visibleTotal)}.`);
+  console.log(`Ainda falta conferir/lancar: ${formatSilver(SNAPSHOT_TOTAL - visibleTotal)}.`);
 }
 
 main();
