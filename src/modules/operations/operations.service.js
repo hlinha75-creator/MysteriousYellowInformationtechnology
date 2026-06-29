@@ -26,6 +26,7 @@ function pendingQueuePayload() {
           { name: 'Financeiro', value: [
             `Saques solicitados: ${summary.withdraws.requested}`,
             `Saques aprovados: ${summary.withdraws.approved}`,
+            `Pedidos de pagamento: ${summary.paymentRequests.requested}`,
             `Backups com erro: ${summary.backups.failed}`,
             `Ultimo backup: ${summary.backups.lastSent || 'nenhum'}`
           ].join('\n'), inline: true },
@@ -159,6 +160,9 @@ function pendingSummary() {
     withdraws: {
       requested: count(db, "SELECT COUNT(*) AS total FROM withdraw_requests WHERE status = 'requested'"),
       approved: count(db, "SELECT COUNT(*) AS total FROM withdraw_requests WHERE status = 'approved'")
+    },
+    paymentRequests: {
+      requested: count(db, "SELECT COUNT(*) AS total FROM payment_requests WHERE status = 'requested'")
     },
     registrations: {
       pending: count(db, "SELECT COUNT(*) AS total FROM registrations WHERE status = 'pending'")

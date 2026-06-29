@@ -10,6 +10,7 @@ const csv = require('../modules/csv/csv.service');
 const balanceBackup = require('../modules/csv/balanceBackup.service');
 const albionVerification = require('../modules/albion/guildVerification.service');
 const albionWeekly = require('../modules/albion/weekly.service');
+const statsOcr = require('../modules/albion/statsOcr.service');
 const deposit = require('../modules/deposit/deposit.service');
 const polls = require('../modules/polls/polls.service');
 const auctions = require('../modules/auctions/auctions.service');
@@ -71,6 +72,24 @@ function withdrawRequestContent(request, options = {}) {
   return options.warning ? `${line}\n${options.warning}` : line;
 }
 
+function paymentRequestContent(request, options = {}) {
+  const status = options.status || request.status || 'requested';
+  const amount = formatSilver(Math.abs(Number(request.amount || 0)));
+  const reviewedBy = options.reviewedBy || request.reviewed_by;
+  const statusText = {
+    requested: 'Aguardando aprovacao',
+    approved: `Aprovado e depositado: ${mentionOrDash(reviewedBy)}`,
+    refused: `Recusado: ${mentionOrDash(reviewedBy)}`
+  }[status] || `Status: ${status}`;
+  const lines = [
+    `Pedido de pagamento #${request.id} | ${mentionOrDash(request.user_id)} | ${amount} | ${statusText}`,
+    `Servico: ${truncateInline(request.service, 140)}`,
+    `Motivo: ${truncateInline(request.description, 220)}`
+  ];
+  if (request.evidence) lines.push(`Prova: ${truncateInline(request.evidence, 220)}`);
+  return lines.join('\n');
+}
+
 function canManageEvent(member, event) {
   if (!event) return false;
   if (event.creator_id === member.id) return true;
@@ -83,6 +102,34 @@ function canForceStartFinish(member) {
 
 async function handleButton(interaction) {
   const [scope, action, id, extra] = interaction.customId.split(':');
+  if (scope === 'stats_ocr') {
+    if (!can(interaction.member, 'approveRegistration') && !can(interaction.member, 'importCsv')) {
+      return interaction.reply({ content: 'Sem permissao para usar OCR de stats.', flags: MessageFlags.Ephemeral });
+    }
+    if (action === 'how_to') {
+      return interaction.reply({ content: statsOcr.howToText(), flags: MessageFlags.Ephemeral });
+    }
+    if (action === 'apply' || action === 'force_member' || action === 'force_guest') {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      const forcedRole = action === 'force_member' ? 'member' : action === 'force_guest' ? 'guest' : null;
+      const submission = await statsOcr.applySubmission({
+        guild: interaction.guild,
+        submissionId: Number(id),
+        actorId: interaction.user.id,
+        forcedRole
+      });
+      await interaction.message.edit(statsOcr.reviewPayload(submission)).catch(() => {});
+      return interaction.editReply({
+        content: `Cadastro atualizado: <@${submission.target_discord_id}> ficou como ${submission.applied_role === 'member' ? 'Membro' : 'Convidado'}.`
+      });
+    }
+    if (action === 'reject') {
+      const submission = statsOcr.rejectSubmission({ submissionId: Number(id), actorId: interaction.user.id });
+      await interaction.message.edit(statsOcr.reviewPayload(submission)).catch(() => {});
+      return interaction.reply({ content: 'Leitura OCR marcada como ruim. Nenhum cargo foi alterado.', flags: MessageFlags.Ephemeral });
+    }
+  }
+
   if (scope === 'campaign' && ['donate_event', 'keep_event'].includes(action)) {
     await interaction.deferReply(interaction.guild ? { flags: MessageFlags.Ephemeral } : {});
     const result = await campaigns.resolveEventPayoutChoice({
@@ -655,6 +702,15 @@ async function handleButton(interaction) {
     ]);
   }
 
+  if (interaction.customId === 'finance:payment_request') {
+    return showModal(interaction, 'finance:payment_request_modal', 'Pedir Pagamento', [
+      textInput('amount', 'Valor pedido', true, 'Ex: 12m ou 12000000'),
+      textInput('service', 'O que voce fez?', true, 'Ex: vendi loot da guild'),
+      textInput('description', 'Motivo / descricao', true, 'Explique o servico, item, combinado ou venda', TextInputStyle.Paragraph),
+      textInput('evidence', 'Print/link/prova', false, 'Ex: https://prnt.sc/... ou "sem print"')
+    ]);
+  }
+
   if (scope === 'finance' && action === 'confirm_withdraw') {
     const draft = finance.takeWithdrawDraft(id);
     if (!draft) {
@@ -697,6 +753,114 @@ async function handleButton(interaction) {
   if (scope === 'finance' && action === 'cancel_withdraw') {
     finance.takeWithdrawDraft(id);
     return interaction.update({ content: 'Solicitacao de saque cancelada. Nada foi enviado para a staff.', components: [] });
+  }
+
+  if (scope === 'finance' && action === 'confirm_payment_request') {
+    const draft = finance.takePaymentRequestDraft(id);
+    if (!draft) {
+      return interaction.update({ content: 'Essa confirmacao expirou. Abra o pedido novamente.', components: [] });
+    }
+    if (draft.userId !== interaction.user.id) {
+      return interaction.reply({ content: 'Essa confirmacao de pedido nao foi criada para voce.', flags: MessageFlags.Ephemeral });
+    }
+    const request = finance.requestPayment({
+      userId: interaction.user.id,
+      amount: draft.amount,
+      service: draft.service,
+      description: draft.description,
+      evidence: draft.evidence
+    });
+    const requestId = request.lastInsertRowid;
+    audit.createAuditLog({
+      type: 'payment_request_created',
+      actorId: interaction.user.id,
+      targetId: interaction.user.id,
+      afterValue: draft.amount,
+      reason: draft.service,
+      metadata: {
+        description: draft.description,
+        evidence: draft.evidence
+      }
+    });
+    await safeSend(interaction.client, ids.channels.finance, {
+      content: paymentRequestContent({
+        id: requestId,
+        user_id: interaction.user.id,
+        amount: draft.amount,
+        service: draft.service,
+        description: draft.description,
+        evidence: draft.evidence,
+        status: 'requested'
+      }),
+      components: [
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId(`finance:approve_payment_request:${requestId}`).setLabel('Aprovar e depositar').setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId(`finance:refuse_payment_request:${requestId}`).setLabel('Recusar').setStyle(ButtonStyle.Danger)
+        )
+      ]
+    });
+    return interaction.update({ content: `Pedido de pagamento enviado para a staff: ${formatSilver(draft.amount)}.`, components: [] });
+  }
+
+  if (scope === 'finance' && action === 'cancel_payment_request') {
+    finance.takePaymentRequestDraft(id);
+    return interaction.update({ content: 'Pedido de pagamento cancelado. Nada foi enviado para a staff.', components: [] });
+  }
+
+  if (scope === 'finance' && action === 'approve_payment_request') {
+    if (!can(interaction.member, 'approvePayment')) return interaction.reply({ content: 'Sem permissao.', flags: MessageFlags.Ephemeral });
+    const request = financeRepo.getPaymentRequest(Number(id));
+    if (!request) return interaction.reply({ content: 'Pedido de pagamento nao encontrado.', flags: MessageFlags.Ephemeral });
+    if (request.status === 'approved') {
+      await interaction.message.edit({ components: [] }).catch(() => {});
+      return interaction.reply({ content: 'Esse pedido ja foi aprovado. Removi os botoes antigos.', flags: MessageFlags.Ephemeral });
+    }
+    if (request.status === 'refused') {
+      await interaction.message.edit({ components: [] }).catch(() => {});
+      return interaction.reply({ content: 'Esse pedido ja foi recusado. Removi os botoes antigos.', flags: MessageFlags.Ephemeral });
+    }
+    if (request.status !== 'requested') {
+      await interaction.message.edit({ components: [] }).catch(() => {});
+      return interaction.reply({ content: `Esse pedido nao esta pendente. Status atual: ${request.status}.`, flags: MessageFlags.Ephemeral });
+    }
+    const transaction = finance.approvePaymentRequest({ requestId: Number(id), actorId: interaction.user.id });
+    await finance.notifyBalanceTransactions({ client: interaction.client, transactions: [transaction] });
+    const approvedRequest = financeRepo.getPaymentRequest(Number(id)) || { ...request, status: 'approved', reviewed_by: interaction.user.id };
+    await interaction.message.edit({
+      content: paymentRequestContent(approvedRequest, { status: 'approved', reviewedBy: interaction.user.id }),
+      components: []
+    }).catch(() => {});
+    await safeSend(interaction.client, ids.channels.bankLogs, {
+      content: `Pedido de pagamento #${id} aprovado por <@${interaction.user.id}>: ${formatSilver(request.amount)} para <@${request.user_id}>. Servico: ${request.service}`
+    });
+    return interaction.reply({ content: 'Pedido aprovado e saldo depositado.', flags: MessageFlags.Ephemeral });
+  }
+
+  if (scope === 'finance' && action === 'refuse_payment_request') {
+    if (!can(interaction.member, 'approvePayment')) return interaction.reply({ content: 'Sem permissao.', flags: MessageFlags.Ephemeral });
+    const request = financeRepo.getPaymentRequest(Number(id));
+    if (!request) return interaction.reply({ content: 'Pedido de pagamento nao encontrado.', flags: MessageFlags.Ephemeral });
+    if (request.status === 'approved') {
+      await interaction.message.edit({ components: [] }).catch(() => {});
+      return interaction.reply({ content: 'Esse pedido ja foi aprovado. Nao da para recusar depois do deposito.', flags: MessageFlags.Ephemeral });
+    }
+    if (request.status === 'refused') {
+      await interaction.message.edit({ components: [] }).catch(() => {});
+      return interaction.reply({ content: 'Esse pedido ja foi recusado. Removi os botoes antigos.', flags: MessageFlags.Ephemeral });
+    }
+    if (request.status !== 'requested') {
+      await interaction.message.edit({ components: [] }).catch(() => {});
+      return interaction.reply({ content: `Esse pedido nao pode mais ser recusado. Status atual: ${request.status}.`, flags: MessageFlags.Ephemeral });
+    }
+    finance.refusePaymentRequest({ requestId: Number(id), actorId: interaction.user.id });
+    const refusedRequest = financeRepo.getPaymentRequest(Number(id)) || { ...request, status: 'refused', reviewed_by: interaction.user.id };
+    await interaction.message.edit({
+      content: paymentRequestContent(refusedRequest, { status: 'refused', reviewedBy: interaction.user.id }),
+      components: []
+    }).catch(() => {});
+    const user = await interaction.client.users.fetch(request.user_id).catch(() => null);
+    await user?.send(`Seu pedido de pagamento #${id} no valor de ${formatSilver(request.amount)} foi recusado pela staff. Servico: ${request.service}`).catch(() => {});
+    return interaction.reply({ content: 'Pedido recusado. Nenhum saldo foi alterado.', flags: MessageFlags.Ephemeral });
   }
 
   if (scope === 'finance' && action === 'approve_withdraw') {

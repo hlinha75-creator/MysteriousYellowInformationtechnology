@@ -301,6 +301,46 @@ async function handleModal(interaction) {
     });
   }
 
+  if (interaction.customId === 'finance:payment_request_modal') {
+    const rawAmount = interaction.fields.getTextInputValue('amount');
+    const amount = parseSilver(rawAmount);
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
+      throw new Error('Valor de pedido invalido. Informe um valor maior que zero. Ex: 12m ou 12000000.');
+    }
+    const service = interaction.fields.getTextInputValue('service').trim();
+    const description = interaction.fields.getTextInputValue('description').trim();
+    const evidence = interaction.fields.getTextInputValue('evidence').trim();
+    if (!service || !description) {
+      throw new Error('Informe o que voce fez e o motivo/descricao do pedido.');
+    }
+    const draft = finance.createPaymentRequestDraft({
+      userId: interaction.user.id,
+      amount,
+      service,
+      description,
+      evidence
+    });
+    return interaction.reply({
+      content: [
+        'Confira seu pedido de pagamento antes de enviar para a staff:',
+        `Digitado: \`${rawAmount}\``,
+        `Valor pedido: **${formatSilver(amount)}**`,
+        `Servico: **${truncateText(service, 180)}**`,
+        `Motivo: ${truncateText(description, 500)}`,
+        evidence ? `Prova: ${truncateText(evidence, 300)}` : 'Prova: nao informada',
+        '',
+        'Confirma que esse pedido esta correto?'
+      ].join('\n'),
+      components: [
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId(`finance:confirm_payment_request:${draft.id}`).setLabel('Enviar para staff').setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId(`finance:cancel_payment_request:${draft.id}`).setLabel('Cancelar').setStyle(ButtonStyle.Danger)
+        )
+      ],
+      flags: MessageFlags.Ephemeral
+    });
+  }
+
   if (interaction.customId === 'deposit:create_modal') {
     if (!can(interaction.member, 'approvePayment')) {
       return interaction.reply({ content: 'Voce nao tem permissao para criar deposito.', flags: MessageFlags.Ephemeral });
@@ -480,3 +520,8 @@ async function updateReviewMessage(interaction, eventId, messageId) {
 module.exports = {
   handleModal
 };
+
+function truncateText(value, max) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  return text.length > max ? `${text.slice(0, max - 3)}...` : text;
+}

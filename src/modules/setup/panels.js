@@ -10,11 +10,23 @@ const memberList = require('../members/memberList.service');
 const memberPanel = require('../members/memberPanel.service');
 const operations = require('../operations/operations.service');
 const staffTutorial = require('../tutorials/staffTutorial.service');
+const statsOcr = require('../albion/statsOcr.service');
 
 const archiveEmbed = new EmbedBuilder()
   .setTitle('Arquivar')
   .setDescription('Exportacao e importacao manual de dados.')
   .setColor(0x805ad5);
+
+const paymentRequestAnnouncementEmbed = new EmbedBuilder()
+  .setTitle('Novidade: pedido de pagamento')
+  .setDescription([
+    'Membros agora podem pedir pagamento pelo bot quando fizerem servicos para a guild, venderem loot da guild ou deixarem algo pendente enquanto a staff esta offline.',
+    '',
+    `Use em <#${ids.channels.consultBalance}>: clique em **Pedir pagamento**, informe valor, servico, motivo e print/link se tiver.`,
+    '',
+    'O saldo nao entra automaticamente. A staff/tesouraria revisa e aprova antes do deposito.'
+  ].join('\n'))
+  .setColor(0x38a169);
 
 const archiveComponents = [
   new ActionRowBuilder().addComponents(
@@ -56,6 +68,7 @@ const panels = [
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('finance:balance').setLabel('Consultar').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('finance:withdraw').setLabel('Sacar').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('finance:payment_request').setLabel('Pedir pagamento').setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId('panel:create_auction').setLabel('Criar leilao').setStyle(ButtonStyle.Success)
       )
     ]
@@ -87,6 +100,12 @@ const panels = [
     dynamic: memberPanel.panelPayload
   },
   {
+    type: 'payment_request_announcement',
+    channelId: ids.channels.notagChat,
+    embed: paymentRequestAnnouncementEmbed,
+    components: []
+  },
+  {
     type: 'archive',
     channelId: ids.channels.archive,
     embed: archiveEmbed,
@@ -96,6 +115,11 @@ const panels = [
     type: 'staff_tutorial',
     channelId: ids.channels.staffTutorial,
     dynamic: staffTutorial.panelPayload
+  },
+  {
+    type: 'stats_ocr_test',
+    channelId: ids.channels.staff,
+    dynamic: statsOcr.panelPayload
   }
 ];
 

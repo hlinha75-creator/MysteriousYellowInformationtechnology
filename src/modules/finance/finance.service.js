@@ -5,6 +5,7 @@ const repo = require('./finance.repository');
 const { formatSilver } = require('../../utils/silver');
 
 const withdrawDrafts = new Map();
+const paymentRequestDrafts = new Map();
 
 function applyBalanceTransaction({ type, userId, amount, reason, referenceType, referenceId, createdBy }) {
   repo.ensureBalance(userId);
@@ -86,8 +87,32 @@ function takeWithdrawDraft(id) {
   return draft;
 }
 
+function createPaymentRequestDraft({ userId, amount, service, description, evidence }) {
+  const id = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  paymentRequestDrafts.set(id, {
+    id,
+    userId,
+    amount,
+    service,
+    description,
+    evidence,
+    createdAt: Date.now()
+  });
+  return paymentRequestDrafts.get(id);
+}
+
+function takePaymentRequestDraft(id) {
+  const draft = paymentRequestDrafts.get(id);
+  paymentRequestDrafts.delete(id);
+  return draft;
+}
+
 function requestWithdraw({ userId, amount, note }) {
   return repo.createWithdrawRequest({ userId, amount, note });
+}
+
+function requestPayment({ userId, amount, service, description, evidence }) {
+  return repo.createPaymentRequest({ userId, amount, service, description, evidence });
 }
 
 function approveWithdraw({ requestId, actorId }) {
@@ -143,15 +168,71 @@ const payWithdraw = transaction(({ requestId, actorId }) => {
   return result;
 });
 
+const approvePaymentRequest = transaction(({ requestId, actorId }) => {
+  backupDatabase('before_payment_request_approval');
+  const request = repo.getPaymentRequest(requestId);
+  if (!request) throw new Error('Pedido de pagamento nao encontrado.');
+  if (request.status !== 'requested') throw new Error('Pedido de pagamento nao esta pendente.');
+
+  const result = applyBalanceTransaction({
+    type: 'payment_request_approved',
+    userId: request.user_id,
+    amount: Math.abs(request.amount),
+    reason: `Pedido de pagamento #${request.id}: ${request.service}`,
+    referenceType: 'payment_request',
+    referenceId: String(request.id),
+    createdBy: actorId
+  });
+  repo.updatePaymentRequestStatus({ id: request.id, status: 'approved', actorId });
+  audit.createAuditLog({
+    type: 'payment_request_approved',
+    actorId,
+    targetId: request.user_id,
+    afterValue: request.amount,
+    reason: `Pedido de pagamento #${request.id} aprovado`,
+    metadata: {
+      service: request.service,
+      description: request.description,
+      evidence: request.evidence
+    }
+  });
+  return result;
+});
+
+function refusePaymentRequest({ requestId, actorId }) {
+  const request = repo.getPaymentRequest(requestId);
+  if (!request) throw new Error('Pedido de pagamento nao encontrado.');
+  if (request.status !== 'requested') throw new Error('Pedido de pagamento nao esta pendente.');
+  repo.updatePaymentRequestStatus({ id: request.id, status: 'refused', actorId });
+  audit.createAuditLog({
+    type: 'payment_request_refused',
+    actorId,
+    targetId: request.user_id,
+    afterValue: request.amount,
+    reason: `Pedido de pagamento #${request.id} recusado`,
+    metadata: {
+      service: request.service,
+      description: request.description,
+      evidence: request.evidence
+    }
+  });
+  return request;
+}
+
 module.exports = {
   applyBalanceTransaction,
   applyManyTransactions,
   approveWithdraw,
+  approvePaymentRequest,
+  createPaymentRequestDraft,
   createWithdrawDraft,
   refuseWithdraw,
+  refusePaymentRequest,
   notifyBalanceTransactions,
   notifyPositiveTransactions,
   payWithdraw,
+  requestPayment,
   requestWithdraw,
+  takePaymentRequestDraft,
   takeWithdrawDraft
 };

@@ -4,6 +4,7 @@ data/*.sqlite
 data/*.sqlite-*
 data/backups/
 *.log
+*.traineddata
 .replit
 .upm/
 .codex-remote-check/

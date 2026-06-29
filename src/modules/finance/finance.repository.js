@@ -109,15 +109,37 @@ function getWithdrawRequest(id) {
   return getDatabase().prepare('SELECT * FROM withdraw_requests WHERE id = ?').get(id);
 }
 
+function createPaymentRequest({ userId, amount, service, description, evidence }) {
+  return getDatabase()
+    .prepare(`
+      INSERT INTO payment_requests (user_id, amount, service, description, evidence)
+      VALUES (?, ?, ?, ?, ?)
+    `)
+    .run(userId, amount, service, description, evidence || null);
+}
+
+function updatePaymentRequestStatus({ id, status, actorId }) {
+  return getDatabase()
+    .prepare('UPDATE payment_requests SET status = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP WHERE id = ?')
+    .run(status, actorId, id);
+}
+
+function getPaymentRequest(id) {
+  return getDatabase().prepare('SELECT * FROM payment_requests WHERE id = ?').get(id);
+}
+
 module.exports = {
+  createPaymentRequest,
   createWithdrawRequest,
   ensureBalance,
   getBalance,
+  getPaymentRequest,
   getWithdrawRequest,
   insertTransaction,
   listAllBalances,
   listBalances,
   listTransactions,
   setBalance,
+  updatePaymentRequestStatus,
   updateWithdrawStatus
 };

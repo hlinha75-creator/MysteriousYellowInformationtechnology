@@ -772,6 +772,61 @@ const migrations = [
           ('900m', 'Meta 900m NOTAG', 900000000, 'open', '900m', '1484312044772655154', 'system');
       `);
     }
+  },
+  {
+    version: 25,
+    name: 'payment_requests',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS payment_requests (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id TEXT NOT NULL,
+          amount INTEGER NOT NULL,
+          service TEXT NOT NULL,
+          description TEXT NOT NULL,
+          evidence TEXT,
+          status TEXT NOT NULL DEFAULT 'requested',
+          reviewed_by TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          reviewed_at TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_payment_requests_status
+          ON payment_requests (status, created_at);
+      `);
+    }
+  },
+  {
+    version: 26,
+    name: 'albion_stats_ocr_submissions',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS albion_stats_ocr_submissions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          submitted_by TEXT NOT NULL,
+          target_discord_id TEXT NOT NULL,
+          channel_id TEXT,
+          message_id TEXT,
+          image_url TEXT NOT NULL,
+          character_name TEXT,
+          guild_name TEXT,
+          total_fame TEXT,
+          is_notag_member INTEGER,
+          ocr_text TEXT,
+          status TEXT NOT NULL DEFAULT 'pending',
+          applied_role TEXT,
+          reviewed_by TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          reviewed_at TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_albion_stats_ocr_submissions_status
+          ON albion_stats_ocr_submissions (status, created_at);
+
+        CREATE INDEX IF NOT EXISTS idx_albion_stats_ocr_submissions_target
+          ON albion_stats_ocr_submissions (target_discord_id, created_at);
+      `);
+    }
   }
 ];
 
