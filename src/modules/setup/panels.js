@@ -118,7 +118,7 @@ const panels = [
   },
   {
     type: 'stats_ocr_test',
-    channelId: ids.channels.staff,
+    channelId: ids.channels.statsOcr,
     dynamic: statsOcr.panelPayload
   }
 ];

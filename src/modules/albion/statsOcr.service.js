@@ -43,7 +43,7 @@ function panelPayload() {
 
 async function handleStaffMessage(message) {
   if (message.author?.bot) return false;
-  if (message.channelId !== ids.channels.staff) return false;
+  if (message.channelId !== ids.channels.statsOcr) return false;
 
   const staffMember = message.member || await message.guild?.members.fetch(message.author.id).catch(() => null);
   if (!can(staffMember, 'approveRegistration') && !can(staffMember, 'importCsv')) return false;
