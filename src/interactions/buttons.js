@@ -100,6 +100,36 @@ function canForceStartFinish(member) {
   return isOwner(member) || hasRole(member, 'staff') || hasRole(member, 'adm');
 }
 
+const publicEventActions = new Set([
+  'raid_slot',
+  'raid_role',
+  'raid_helper',
+  'join_role',
+  'auto_join',
+  'spectate',
+  'pause',
+  'start',
+  'confirm_start',
+  'finish',
+  'confirm_finish',
+  'cancel'
+]);
+
+function isInteractiveEvent(event) {
+  return event && ['created', 'running'].includes(event.status);
+}
+
+async function replyUnavailableEvent(interaction, event) {
+  await interaction.message?.edit({ components: [] }).catch(() => {});
+  const statusText = event?.status
+    ? `Status atual: ${event.status}.`
+    : 'O registro desse evento nao existe mais no banco atual.';
+  return interaction.reply({
+    content: `Esse evento nao esta mais aberto. ${statusText} Removi os botoes antigos desta mensagem.`,
+    flags: MessageFlags.Ephemeral
+  });
+}
+
 async function handleButton(interaction) {
   const [scope, action, id, extra] = interaction.customId.split(':');
   if (scope === 'stats_ocr') {
@@ -396,6 +426,9 @@ async function handleButton(interaction) {
   if (scope === 'event') {
     const eventId = Number(id);
     const event = eventsRepo.getEvent(eventId);
+    if (publicEventActions.has(action) && !isInteractiveEvent(event)) {
+      return replyUnavailableEvent(interaction, event);
+    }
     if (action === 'raid_slot') {
       const select = raidWeaponSlotSelect(eventId, interaction.user.id);
       if (!select) {

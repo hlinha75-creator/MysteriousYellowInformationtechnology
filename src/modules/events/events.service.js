@@ -516,7 +516,7 @@ async function refreshRunningEventMessages(client) {
 
 async function joinEvent(interaction, eventId, role) {
   const event = repo.getEvent(eventId);
-  if (!event || ['cancelled', 'approved'].includes(event.status)) throw new Error('Evento indisponivel.');
+  if (!event || !['created', 'running'].includes(event.status)) throw new Error('Evento nao esta aberto.');
   repo.upsertParticipant({ eventId, discordId: interaction.user.id, role, isSpectator: 0 });
   await addEventRoleToMember(interaction.guild, event, interaction.user.id).catch(() => {});
   audit.createAuditLog({ type: 'event_joined', actorId: interaction.user.id, targetId: String(eventId), afterValue: role });
@@ -528,7 +528,7 @@ async function joinEvent(interaction, eventId, role) {
 
 async function joinRaidAvalonRole(interaction, { eventId, role, weapon, itemPower }) {
   const event = repo.getEvent(eventId);
-  if (!event || ['cancelled', 'approved'].includes(event.status)) throw new Error('Evento indisponivel.');
+  if (!event || !['created', 'running'].includes(event.status)) throw new Error('Evento nao esta aberto.');
   if (!repo.getRaidAvalonEventMeta(eventId)) throw new Error('Esse evento nao e uma Raid Avalon Full.');
   const normalizedWeapon = normalizeRaidWeapon(role, weapon);
   const normalizedWeaponKey = weaponKey(normalizedWeapon);
@@ -561,7 +561,7 @@ async function joinRaidAvalonRole(interaction, { eventId, role, weapon, itemPowe
 
 async function joinRaidAvalonHelper(interaction, eventId, helperRole) {
   const event = repo.getEvent(eventId);
-  if (!event || ['cancelled', 'approved'].includes(event.status)) throw new Error('Evento indisponivel.');
+  if (!event || !['created', 'running'].includes(event.status)) throw new Error('Evento nao esta aberto.');
   if (!repo.getRaidAvalonEventMeta(eventId)) throw new Error('Esse evento nao e uma Raid Avalon Full.');
   if (!raidAvalonHelpers[helperRole]) throw new Error('Funcao auxiliar invalida.');
   repo.upsertParticipant({ eventId, discordId: interaction.user.id, role: helperRole, isSpectator: 1 });

@@ -435,7 +435,8 @@ function sourceLabel(sourceType) {
   const labels = {
     event_payout: 'loot split',
     manual_deposit: 'doacao manual',
-    balance_donation: 'saldo'
+    balance_donation: 'saldo',
+    manual_restore: 'restauracao'
   };
   return labels[sourceType] || sourceType;
 }

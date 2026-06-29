@@ -13,7 +13,8 @@
     "rename:channels": "node --no-warnings scripts/renameChannels.js",
     "import:members": "node --no-warnings scripts/importMemberSnapshot.js",
     "backup:db": "node --no-warnings scripts/backupDatabase.js",
-    "restore:db": "node --no-warnings scripts/restoreDatabase.js"
+    "restore:db": "node --no-warnings scripts/restoreDatabase.js",
+    "restore:campaign900m": "node --no-warnings scripts/restoreCampaign900mSnapshot.js"
   },
   "dependencies": {
     "@discordjs/builders": "^1.8.2",
