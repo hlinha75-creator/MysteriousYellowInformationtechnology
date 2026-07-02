@@ -69,10 +69,10 @@ function adminMainComponents() {
       new ButtonBuilder().setCustomId('admin_menu:finance').setLabel('Financeiro').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('admin_menu:events').setLabel('Eventos').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('admin_menu:members').setLabel('Membros').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('admin_menu:files').setLabel('Arquivos').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('admin_menu:tutorial').setLabel('Tutorial').setStyle(ButtonStyle.Primary)
+      new ButtonBuilder().setCustomId('admin_menu:files').setLabel('Arquivos').setStyle(ButtonStyle.Secondary)
     ),
     new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('admin_menu:tutorial').setLabel('Tutorial').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId('admin:daily_report').setLabel('Relatorio ADM').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId('admin:test_backup').setLabel('Teste backup').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('admin:refresh_pending_queue').setLabel('Atualizar fila').setStyle(ButtonStyle.Primary)
