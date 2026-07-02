@@ -27,6 +27,17 @@ const memberList = require('../modules/members/memberList.service');
 const inactiveEvents = require('../modules/members/inactiveEvents.service');
 const inactiveGuests = require('../modules/members/inactiveGuests.service');
 
+const pausedCommands = new Set([
+  'albion',
+  'auditar_canais',
+  'enquete',
+  'leilao',
+  'list',
+  'objetivo',
+  'relatorio_diario',
+  'renomear_canais'
+]);
+
 function input(id, label, style = TextInputStyle.Short, required = true) {
   return new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setRequired(required);
 }
@@ -39,6 +50,13 @@ function modal(customId, title, inputs) {
 }
 
 async function handleCommand(interaction) {
+  if (pausedCommands.has(interaction.commandName)) {
+    return interaction.reply({
+      content: 'Esse comando foi pausado para simplificar o bot. Use os comandos principais de evento, saldo, registro, exportacao/importacao, sincronizacao ou inativos.',
+      flags: MessageFlags.Ephemeral
+    });
+  }
+
   if (interaction.commandName === 'setup') {
     if (!can(interaction.member, 'approvePayment')) {
       return interaction.reply({ content: 'Voce nao tem permissao para rodar o setup.', flags: MessageFlags.Ephemeral });

@@ -9,10 +9,7 @@ const { backupDatabase } = require('./database/backup');
 const registration = require('./modules/registration/registration.service');
 const voice = require('./modules/voice/voice.service');
 const events = require('./modules/events/events.service');
-const auctions = require('./modules/auctions/auctions.service');
 const guildVerification = require('./modules/albion/guildVerification.service');
-const statsOcr = require('./modules/albion/statsOcr.service');
-const faq = require('./modules/faq/faq.service');
 const balanceBackup = require('./modules/csv/balanceBackup.service');
 const operations = require('./modules/operations/operations.service');
 const campaigns = require('./modules/campaigns/campaigns.service');
@@ -58,9 +55,6 @@ client.once('clientReady', () => {
     events.checkEventStartWarnings(client).catch((error) => console.error('Falha ao verificar avisos de eventos:', error));
   }, 30000);
   setInterval(() => {
-    auctions.refreshOpenAuctions(client).catch((error) => console.error('Falha ao atualizar leiloes:', error));
-  }, 60000);
-  setInterval(() => {
     campaigns.processExpiredEventPayouts(client).catch((error) => console.error('Falha ao processar escolhas vencidas da campanha:', error));
   }, 10 * 60 * 1000);
   setInterval(() => {
@@ -87,9 +81,7 @@ client.on('guildMemberAdd', registration.handleGuildMemberAdd);
 client.on('voiceStateUpdate', voice.handleVoiceStateUpdate);
 client.on('interactionCreate', handleInteraction);
 client.on('messageCreate', (message) => {
-  statsOcr.handleStaffMessage(message).catch((error) => console.error('Falha ao tratar OCR de stats Albion:', error));
   guildVerification.handleDirectNickReply(message).catch((error) => console.error('Falha ao tratar resposta de nick por DM:', error));
-  faq.handleMessage(message).catch((error) => console.error('Falha ao tratar FAQ/tutorial:', error));
 });
 
 process.on('unhandledRejection', (error) => {

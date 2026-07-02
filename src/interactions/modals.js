@@ -9,9 +9,6 @@ const { safeSend, baseEmbed } = require('../utils/discord');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
 const financeRepo = require('../modules/finance/finance.repository');
 const deposit = require('../modules/deposit/deposit.service');
-const polls = require('../modules/polls/polls.service');
-const auctions = require('../modules/auctions/auctions.service');
-const memberPanel = require('../modules/members/memberPanel.service');
 
 function intField(fields, name) {
   const value = Number.parseInt(fields.getTextInputValue(name), 10);
@@ -50,6 +47,18 @@ async function handleModal(interaction) {
       flags: MessageFlags.Ephemeral
     });
   }
+  if (
+    interaction.customId.startsWith('member_panel:') ||
+    interaction.customId.startsWith('member_panel_staff:') ||
+    interaction.customId.startsWith('auction:') ||
+    interaction.customId === 'poll:create'
+  ) {
+    return interaction.reply({
+      content: 'Esse recurso foi pausado para simplificar o bot. Use os paineis principais de evento, saldo, registro ou ADM.',
+      flags: MessageFlags.Ephemeral
+    });
+  }
+
   if (interaction.customId === 'member_panel:ask_staff_modal') {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const text = interaction.fields.getTextInputValue('text').trim();

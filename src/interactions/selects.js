@@ -2,13 +2,15 @@ const { ActionRowBuilder, MessageFlags, ModalBuilder, TextInputBuilder, TextInpu
 const events = require('../modules/events/events.service');
 const eventsRepo = require('../modules/events/events.repository');
 const deposit = require('../modules/deposit/deposit.service');
-const polls = require('../modules/polls/polls.service');
-const faq = require('../modules/faq/faq.service');
 const operations = require('../modules/operations/operations.service');
 const { can } = require('../config/permissions');
 
 async function handleSelect(interaction) {
   const [scope, action, id, messageId] = interaction.customId.split(':');
+  if (['auction_channel_select', 'faq_tutorial', 'poll'].includes(scope)) {
+    return pausedFeatureReply(interaction);
+  }
+
   if (scope === 'faq_tutorial' && action === 'select') {
     return faq.handleTutorialSelect(interaction);
   }
@@ -179,6 +181,13 @@ async function handleSelect(interaction) {
 module.exports = {
   handleSelect
 };
+
+function pausedFeatureReply(interaction) {
+  return interaction.reply({
+    content: 'Esse recurso foi pausado para simplificar o bot. Use os paineis principais de evento, saldo, registro ou ADM.',
+    flags: MessageFlags.Ephemeral
+  });
+}
 
 function showModal(interaction, customId, title, inputs) {
   const modal = new ModalBuilder()

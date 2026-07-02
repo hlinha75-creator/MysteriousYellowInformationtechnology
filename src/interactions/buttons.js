@@ -9,14 +9,7 @@ const audit = require('../modules/audit/audit.repository');
 const csv = require('../modules/csv/csv.service');
 const balanceBackup = require('../modules/csv/balanceBackup.service');
 const albionVerification = require('../modules/albion/guildVerification.service');
-const albionWeekly = require('../modules/albion/weekly.service');
-const statsOcr = require('../modules/albion/statsOcr.service');
 const deposit = require('../modules/deposit/deposit.service');
-const polls = require('../modules/polls/polls.service');
-const auctions = require('../modules/auctions/auctions.service');
-const auctionsRepo = require('../modules/auctions/auctions.repository');
-const memberList = require('../modules/members/memberList.service');
-const memberPanel = require('../modules/members/memberPanel.service');
 const inactiveEvents = require('../modules/members/inactiveEvents.service');
 const inactiveGuests = require('../modules/members/inactiveGuests.service');
 const operations = require('../modules/operations/operations.service');
@@ -25,6 +18,20 @@ const campaigns = require('../modules/campaigns/campaigns.service');
 const { formatSilver } = require('../utils/silver');
 const registration = require('../modules/registration/registration.service');
 const { safeSend } = require('../utils/discord');
+
+const pausedButtonScopes = new Set([
+  'auction',
+  'albion_weekly',
+  'member_list',
+  'member_panel',
+  'member_panel_staff',
+  'poll',
+  'stats_ocr'
+]);
+
+const pausedButtonIds = new Set([
+  'panel:create_auction'
+]);
 
 function textInput(id, label, required = true, placeholder = null, style = TextInputStyle.Short) {
   const component = new TextInputBuilder()
@@ -133,6 +140,10 @@ async function replyUnavailableEvent(interaction, event) {
 
 async function handleButton(interaction) {
   const [scope, action, id, extra] = interaction.customId.split(':');
+  if (pausedButtonScopes.has(scope) || pausedButtonIds.has(interaction.customId)) {
+    return pausedFeatureReply(interaction);
+  }
+
   if (scope === 'stats_ocr') {
     if (!can(interaction.member, 'approveRegistration') && !can(interaction.member, 'importCsv')) {
       return interaction.reply({ content: 'Sem permissao para usar OCR de stats.', flags: MessageFlags.Ephemeral });
@@ -1347,6 +1358,13 @@ function showLootModal(interaction, eventId) {
 async function clearSourceMessage(interaction, fallbackContent) {
   await interaction.message.delete().catch(async () => {
     await interaction.message.edit({ content: fallbackContent, embeds: [], components: [] }).catch(() => {});
+  });
+}
+
+function pausedFeatureReply(interaction) {
+  return interaction.reply({
+    content: 'Esse recurso foi pausado para simplificar o bot. Use os paineis principais de evento, saldo, registro ou ADM.',
+    flags: MessageFlags.Ephemeral
   });
 }
 

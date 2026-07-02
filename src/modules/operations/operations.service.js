@@ -37,8 +37,7 @@ function pendingQueuePayload() {
           ].join('\n'), inline: true },
           { name: 'Membros', value: [
             `Registros pendentes: ${summary.registrations.pending}`,
-            `DMs de guild pendentes: ${summary.guildReplies.pending}`,
-            `Enquetes abertas: ${summary.polls.open}`
+            `DMs de guild pendentes: ${summary.guildReplies.pending}`
           ].join('\n'), inline: true },
           { name: 'Rotina Albion semanal', value: weeklyChecklistText(), inline: false }
         )
@@ -68,13 +67,12 @@ function adminMainComponents() {
     new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('admin:remove_balance').setLabel('Retirar saldo').setStyle(ButtonStyle.Danger),
       new ButtonBuilder().setCustomId('admin_menu:finance').setLabel('Financeiro').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('admin_menu:albion').setLabel('Albion').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('admin_menu:events').setLabel('Eventos').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('admin_menu:members').setLabel('Membros').setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId('admin_menu:members').setLabel('Membros').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('admin_menu:files').setLabel('Arquivos').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('admin_menu:tutorial').setLabel('Tutorial').setStyle(ButtonStyle.Primary)
     ),
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('admin_menu:files').setLabel('Arquivos').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('admin_menu:tutorial').setLabel('Tutorial').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId('admin:daily_report').setLabel('Relatorio ADM').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId('admin:test_backup').setLabel('Teste backup').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('admin:refresh_pending_queue').setLabel('Atualizar fila').setStyle(ButtonStyle.Primary)
@@ -94,22 +92,9 @@ function adminMenuPayload(menu) {
         button('csv:import_help', 'Importar CSV', ButtonStyle.Primary)
       ]]
     },
-    albion: {
-      title: 'Albion',
-      description: 'Sincronizacao da guild, rank PvE semanal e logs manuais do Albion.',
-      rows: [[
-        button('admin:verify_pending_registrations', 'Sincronizar Albion', ButtonStyle.Primary),
-        button('albion_weekly:help:rank', 'Importar Rank PvE'),
-        button('albion_weekly:help:logs', 'Importar Logs'),
-        button('albion_weekly:summary:current', 'Resumo Albion'),
-        button('albion_weekly:export:pve', 'Exportar PvE')
-      ], [
-        button('albion_weekly:export:logs', 'Exportar Logs')
-      ]]
-    },
     events: {
       title: 'Eventos',
-      description: 'Carreira por arma, recalculo e inatividade por eventos/calls.',
+      description: `Presenca, inatividade e carreira PvE. O painel de carreira fica em <#${ids.channels.pveCareer}>.`,
       rows: [[
         button('admin:refresh_career_panel', 'Atualizar carreira', ButtonStyle.Primary),
         button('admin:preview_career_rebuild', 'Previa recalc carreira'),
@@ -119,12 +104,11 @@ function adminMenuPayload(menu) {
     },
     members: {
       title: 'Membros',
-      description: 'Vinculos Discord x Albion, convidados inativos e lista comparativa.',
+      description: 'Vinculos Discord x Albion, registros pendentes e convidados inativos.',
       rows: [[
         button('admin:verify_pending_registrations', 'Sincronizar Albion', ButtonStyle.Primary),
         button('inactive_guests:preview', 'Inativos convidados'),
-        button('guild:export_members_html', 'Discord x Albion'),
-        button('admin:member_profile', 'Perfil membro', ButtonStyle.Primary)
+        button('guild:export_members_html', 'Discord x Albion')
       ]]
     },
     files: {
@@ -137,6 +121,7 @@ function adminMenuPayload(menu) {
         button('guild:export_members_html', 'Discord x Albion')
       ], [
         button('admin:pending_html', 'Fila HTML', ButtonStyle.Primary),
+        button('admin:presence_report', 'Presenca HTML'),
         button('admin:test_backup', 'Teste backup'),
         button('csv:import_help', 'Importar CSV', ButtonStyle.Primary)
       ]]
@@ -181,9 +166,6 @@ function pendingSummary() {
     },
     guildReplies: {
       pending: count(db, "SELECT COUNT(*) AS total FROM guild_verification_pending_replies WHERE status = 'pending'")
-    },
-    polls: {
-      open: count(db, "SELECT COUNT(*) AS total FROM polls WHERE status = 'open'")
     },
     backups: {
       failed: count(db, "SELECT COUNT(*) AS total FROM balance_csv_backups WHERE status = 'failed'"),
@@ -528,11 +510,10 @@ async function postMonthlyInactivityPreviewIfNeeded(client) {
 function weeklyChecklistText() {
   return [
     '1. Enviar CSV/TSV atual da guild Albion para verificar registros pendentes.',
-    '2. Enviar lista/rank PvE e logs gerais do Albion quando tiver arquivo novo.',
-    '3. Guardar prints de pontos de temporada quando virar ciclo de 60 dias.',
-    '4. Revisar links pendentes de builds PvE.',
-    '5. Conferir backup de saldos no canal de arquivos.',
-    '6. Olhar eventos financeiros pendentes, saques e logs do Discloud.'
+    '2. Conferir eventos em revisao e pagamentos pendentes.',
+    '3. Conferir saques, pedidos de pagamento e ajustes manuais.',
+    '4. Conferir backup de saldos no canal de arquivos.',
+    '5. Olhar logs do Discloud e testar restauracao quando tiver tempo.'
   ].join('\n');
 }
 

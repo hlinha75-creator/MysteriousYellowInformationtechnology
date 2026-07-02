@@ -1648,7 +1648,7 @@ function buildCareerRebuildPlan({ refreshSeconds = false, createdBy = null } = {
 }
 
 async function refreshRaidAvalonCareerPanel(client) {
-  const channel = await client.channels.fetch(ids.channels.adminPanel).catch(() => null);
+  const channel = await client.channels.fetch(ids.channels.pveCareer || ids.channels.adminPanel).catch(() => null);
   if (!channel) return null;
   const payload = raidAvalonCareerPanelPayload();
   const previous = repo.getPersistentMessage('raid_avalon_career_panel');

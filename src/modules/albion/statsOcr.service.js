@@ -4,7 +4,6 @@ const {
   ButtonStyle,
   EmbedBuilder
 } = require('discord.js');
-const { createWorker } = require('tesseract.js');
 const ids = require('../../config/ids');
 const { can, hasRole, isOwner } = require('../../config/permissions');
 const { getDatabase } = require('../../database/connection');
@@ -12,6 +11,7 @@ const audit = require('../audit/audit.repository');
 const registrationRepo = require('../registration/registration.repository');
 
 let workerPromise = null;
+let tesseract = null;
 
 function panelPayload() {
   return {
@@ -104,9 +104,20 @@ async function recognizeText(imageBuffer) {
 
 async function getWorker() {
   if (!workerPromise) {
+    const { createWorker } = loadTesseract();
     workerPromise = createWorker('eng');
   }
   return workerPromise;
+}
+
+function loadTesseract() {
+  if (tesseract) return tesseract;
+  try {
+    tesseract = require('tesseract.js');
+    return tesseract;
+  } catch (error) {
+    throw new Error('OCR esta pausado e a dependencia tesseract.js nao esta instalada.');
+  }
 }
 
 function parseAlbionStatsText(text) {

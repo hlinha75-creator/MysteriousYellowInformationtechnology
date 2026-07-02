@@ -133,9 +133,7 @@ function renderHtml() {
           <li><code>/sincronizar_albion arquivo</code> atualiza vinculo Discord x Albion.</li>
           <li>Ele tambem resolve registros pendentes encontrados na lista da guild.</li>
           <li>Nomes ambiguos ou conflitantes sao ignorados para evitar erro.</li>
-          <li><code>/albion importar_rank</code> salva o rank PvE semanal.</li>
-          <li><code>/albion importar_logs</code> salva logs gerais semanais.</li>
-          <li><code>/albion resumo</code> mostra a semana importada.</li>
+          <li>Rank PvE semanal, logs detalhados e OCR foram pausados para manter o bot simples.</li>
         </ul>
       </section>
 
@@ -164,10 +162,10 @@ function renderHtml() {
         <h2>Rotina semanal</h2>
         <ol>
           <li>Enviar lista atual da guild pelo <code>/sincronizar_albion</code>.</li>
-          <li>Importar rank PvE e logs gerais se houver arquivo novo.</li>
+          <li>Conferir eventos em revisao e pagamentos pendentes.</li>
+          <li>Conferir saques, pedidos de pagamento e ajustes manuais.</li>
           <li>Conferir backups de saldos no canal de arquivos.</li>
           <li>Olhar fila do Painel ADM.</li>
-          <li>Revisar links de builds PvE pendentes.</li>
           <li>Conferir logs do Discloud se houve reinicio ou erro.</li>
         </ol>
       </section>
@@ -179,11 +177,9 @@ function renderHtml() {
           <tbody>
             <tr><td><code>/setup</code></td><td>Atualiza paineis fixos.</td><td>Use depois de deploy quando botoes/paineis mudarem.</td></tr>
             <tr><td><code>/sincronizar_albion</code></td><td>Atualiza Discord x Albion.</td><td>Leia a previa antes de confirmar.</td></tr>
-            <tr><td><code>/exportar</code></td><td>Gera CSVs de saldo, voz, auditoria e Albion.</td><td>Guarde arquivos importantes fora do Discord tambem.</td></tr>
+            <tr><td><code>/exportar</code></td><td>Gera HTML/CSV de saldos, financeiro, voz, auditoria e membros.</td><td>Guarde arquivos importantes fora do Discord tambem.</td></tr>
             <tr><td><code>/importar</code></td><td>Importa CSV de saldos.</td><td>Confirme total antes/depois.</td></tr>
             <tr><td><code>/inativos</code></td><td>Gera previa de inatividade.</td><td>Nao aplicar sem revisar.</td></tr>
-            <tr><td><code>/renomear_canais</code></td><td>Padroniza nomes de canais.</td><td>So use aplicar:sim quando tiver certeza.</td></tr>
-            <tr><td><code>/auditar_canais</code></td><td>Lista canais conhecidos/desconhecidos.</td><td>Bom antes de reorganizar servidor.</td></tr>
           </tbody>
         </table>
       </section>
