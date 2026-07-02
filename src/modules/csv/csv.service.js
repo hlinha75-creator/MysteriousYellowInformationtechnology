@@ -2,8 +2,9 @@ const { AttachmentBuilder } = require('discord.js');
 const ids = require('../../config/ids');
 const { backupDatabase } = require('../../database/backup');
 const { transaction } = require('../../database/connection');
-const { parseSilver } = require('../../utils/silver');
+const { formatSilver, parseSilver } = require('../../utils/silver');
 const { parseCsv, toCsv } = require('../../utils/csv');
+const { htmlReportAttachment } = require('../../utils/htmlReport');
 const audit = require('../audit/audit.repository');
 const financeRepo = require('../finance/finance.repository');
 const registrationRepo = require('../registration/registration.repository');
@@ -14,8 +15,23 @@ const importPreviews = new Map();
 
 function balancesAttachment() {
   const rows = financeRepo.listBalances();
-  const csv = toCsv(rows, ['discord_id', 'discord_name', 'albion_name', 'balance', 'last_updated']);
-  return new AttachmentBuilder(Buffer.from(csv, 'utf8'), { name: 'saldos-guilda.csv' });
+  return htmlReportAttachment({
+    title: 'Saldos da guilda',
+    fileName: 'saldos-guilda.html',
+    csvName: 'saldos-guilda.csv',
+    rows,
+    columns: [
+      'discord_id',
+      'discord_name',
+      'albion_name',
+      { key: 'balance', label: 'balance', align: 'right', format: formatSilver },
+      'last_updated'
+    ],
+    summary: [
+      ['Membros com saldo', rows.length],
+      ['Total', formatSilver(rows.reduce((total, row) => total + Number(row.balance || 0), 0))]
+    ]
+  });
 }
 
 async function balancesHtmlAttachment(guild = null) {
@@ -100,6 +116,8 @@ function balanceName(row) {
 function renderBalancesHtml(rows) {
   const generatedAt = new Date().toISOString();
   const json = JSON.stringify(rows).replace(/</g, '\\u003c');
+  const csvColumns = ['discord_id', 'discord_name', 'albion_name', 'balance', 'last_updated', 'guild_status', 'voice_seconds', 'voice_time'];
+  const csvData = toCsv(rows, csvColumns);
   return `<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -138,6 +156,23 @@ function renderBalancesHtml(rows) {
     }
     h1 { margin: 0 0 6px; font-size: 28px; }
     p { margin: 0; color: var(--muted); }
+    .header-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    button {
+      border: 0;
+      border-radius: 7px;
+      padding: 10px 12px;
+      color: #fff;
+      background: #2563eb;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    button.secondary { background: #475467; }
     .filters, .metrics, .table-wrap {
       background: var(--panel);
       border: 1px solid var(--line);
@@ -239,7 +274,11 @@ function renderBalancesHtml(rows) {
         <h1>Saldos da guilda</h1>
         <p>Gerado em ${escapeHtml(generatedAt)}. Use os filtros para procurar membros e faixas de saldo.</p>
       </div>
-      <p id="visibleCount">0 linhas</p>
+      <div class="header-actions">
+        <p id="visibleCount">0 linhas</p>
+        <button onclick="downloadCsv()">Baixar CSV</button>
+        <button class="secondary" onclick="copyCsv()">Copiar CSV</button>
+      </div>
     </header>
 
     <section class="filters">
@@ -298,6 +337,8 @@ function renderBalancesHtml(rows) {
   </main>
   <script>
     const balances = ${json};
+    const csvData = ${JSON.stringify(csvData)};
+    const csvName = 'saldos-guilda.csv';
     const search = document.querySelector('#search');
     const status = document.querySelector('#status');
     const guildStatus = document.querySelector('#guildStatus');
@@ -399,6 +440,28 @@ function renderBalancesHtml(rows) {
       }[char]));
     }
 
+    function downloadCsv() {
+      const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = csvName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    async function copyCsv() {
+      try {
+        await navigator.clipboard.writeText(csvData);
+        alert('CSV copiado.');
+      } catch (error) {
+        downloadCsv();
+        alert('Seu navegador bloqueou copiar. Baixei o CSV no lugar.');
+      }
+    }
+
     render();
   </script>
 </body>
@@ -417,14 +480,40 @@ function transactionsAttachment() {
     created_by: row.created_by,
     created_at: row.created_at
   }));
-  const csv = toCsv(rows, ['id', 'type', 'user_id', 'amount', 'before_balance', 'after_balance', 'reason', 'created_by', 'created_at']);
-  return new AttachmentBuilder(Buffer.from(csv, 'utf8'), { name: 'logs-financeiros.csv' });
+  return htmlReportAttachment({
+    title: 'Logs financeiros',
+    fileName: 'logs-financeiros.html',
+    csvName: 'logs-financeiros.csv',
+    rows,
+    columns: [
+      'id',
+      'type',
+      'user_id',
+      { key: 'amount', label: 'amount', align: 'right', format: formatSilver },
+      { key: 'before_balance', label: 'before_balance', align: 'right', format: formatSilver },
+      { key: 'after_balance', label: 'after_balance', align: 'right', format: formatSilver },
+      'reason',
+      'created_by',
+      'created_at'
+    ],
+    summary: [
+      ['Transacoes', rows.length],
+      ['Entradas', formatSilver(rows.filter((row) => Number(row.amount || 0) > 0).reduce((total, row) => total + Number(row.amount || 0), 0))],
+      ['Saidas', formatSilver(rows.filter((row) => Number(row.amount || 0) < 0).reduce((total, row) => total + Number(row.amount || 0), 0))]
+    ]
+  });
 }
 
 function auditAttachment() {
   const rows = audit.listAuditLogs(5000);
-  const csv = toCsv(rows, ['id', 'type', 'actor_id', 'target_id', 'before_value', 'after_value', 'reason', 'metadata', 'created_at']);
-  return new AttachmentBuilder(Buffer.from(csv, 'utf8'), { name: 'audit-logs.csv' });
+  return htmlReportAttachment({
+    title: 'Auditoria',
+    fileName: 'audit-logs.html',
+    csvName: 'audit-logs.csv',
+    rows,
+    columns: ['id', 'type', 'actor_id', 'target_id', 'before_value', 'after_value', 'reason', 'metadata', 'created_at'],
+    summary: [['Registros', rows.length]]
+  });
 }
 
 function voiceAttachment() {
@@ -450,8 +539,17 @@ function voiceAttachment() {
     'weekday',
     'joined_hour'
   ];
-  const csv = toCsv(rows, columns);
-  return new AttachmentBuilder(Buffer.from(csv, 'utf8'), { name: 'voice-sessions.csv' });
+  return htmlReportAttachment({
+    title: 'Sessoes de voz',
+    fileName: 'voice-sessions.html',
+    csvName: 'voice-sessions.csv',
+    rows,
+    columns,
+    summary: [
+      ['Sessoes', rows.length],
+      ['Tempo total', formatVoiceTime(rows.reduce((total, row) => total + Number(row.seconds || 0), 0))]
+    ]
+  });
 }
 
 function voiceDailyAttachment(dateText = todayIsoDate()) {
@@ -506,8 +604,18 @@ function voiceDailyAttachment(dateText = todayIsoDate()) {
     'top_channels',
     'favorite_hours'
   ];
-  const csv = toCsv(rows, columns);
-  return new AttachmentBuilder(Buffer.from(csv, 'utf8'), { name: `voice-daily-${dateText}.csv` });
+  return htmlReportAttachment({
+    title: `Voz diaria ${dateText}`,
+    fileName: `voice-daily-${dateText}.html`,
+    csvName: `voice-daily-${dateText}.csv`,
+    rows,
+    columns,
+    summary: [
+      ['Membros', rows.length],
+      ['Sessoes', rows.reduce((total, row) => total + Number(row.voice_sessions || 0), 0)],
+      ['Tempo total', formatVoiceTime(rows.reduce((total, row) => total + Number(row.voice_seconds || 0), 0))]
+    ]
+  });
 }
 
 function todayIsoDate() {
@@ -627,6 +735,35 @@ function saveImportPreview({ preview, actorId }) {
   return id;
 }
 
+function importPreviewAttachment(preview) {
+  const rows = preview.changes.map((change) => ({
+    user_id: change.userId,
+    albion_name: change.albionName || '',
+    before_balance: change.before,
+    after_balance: change.after,
+    diff: change.after - change.before
+  }));
+  return htmlReportAttachment({
+    title: 'Previa de importacao de saldos',
+    fileName: 'previa-importacao-saldos.html',
+    csvName: 'previa-importacao-saldos.csv',
+    rows,
+    columns: [
+      'user_id',
+      'albion_name',
+      { key: 'before_balance', label: 'before_balance', align: 'right', format: formatSilver },
+      { key: 'after_balance', label: 'after_balance', align: 'right', format: formatSilver },
+      { key: 'diff', label: 'diff', align: 'right', format: formatSilver }
+    ],
+    summary: [
+      ['Encontrados', preview.found],
+      ['Nao encontrados', preview.missing],
+      ['Total antes', formatSilver(preview.totalBefore)],
+      ['Total depois', formatSilver(preview.totalAfter)]
+    ]
+  });
+}
+
 function takeImportPreview(id) {
   const session = importPreviews.get(id);
   importPreviews.delete(id);
@@ -681,6 +818,7 @@ module.exports = {
   auditAttachment,
   balancesAttachment,
   balancesHtmlAttachment,
+  importPreviewAttachment,
   saveImportPreview,
   previewBalanceImport,
   takeImportPreview,

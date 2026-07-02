@@ -4,6 +4,7 @@ const eventsRepo = require('../modules/events/events.repository');
 const deposit = require('../modules/deposit/deposit.service');
 const polls = require('../modules/polls/polls.service');
 const faq = require('../modules/faq/faq.service');
+const operations = require('../modules/operations/operations.service');
 const { can } = require('../config/permissions');
 
 async function handleSelect(interaction) {
@@ -144,6 +145,14 @@ async function handleSelect(interaction) {
       input('reason', 'Motivo', '', 'Ex: saque pago, ajuste manual'),
       input('confirmation', 'CONFIRMAR se ficar negativo', '', 'Digite CONFIRMAR se o saldo ficar negativo', false)
     ]);
+  }
+
+  if (scope === 'admin_profile_select') {
+    if (!can(interaction.member, 'approveRegistration') && !can(interaction.member, 'approvePayment')) {
+      return interaction.reply({ content: 'Sem permissao para ver perfil de membro.', flags: MessageFlags.Ephemeral });
+    }
+    const discordId = interaction.values[0];
+    return interaction.reply({ ...operations.memberProfilePayload(discordId), flags: MessageFlags.Ephemeral });
   }
 
   if (scope === 'deposit_select') {

@@ -1,6 +1,7 @@
 const { AttachmentBuilder, EmbedBuilder } = require('discord.js');
 const { getDatabase, transaction } = require('../../database/connection');
 const { toCsv } = require('../../utils/csv');
+const { htmlReportAttachment } = require('../../utils/htmlReport');
 
 const previews = new Map();
 
@@ -143,6 +144,27 @@ function pveRankCsvAttachment(weekKey = currentWeekKey()) {
   return new AttachmentBuilder(Buffer.from(csv, 'utf8'), { name: `albion-pve-rank-${safeFilePart(weekKey)}.csv` });
 }
 
+function pveRankReportAttachment(weekKey = currentWeekKey()) {
+  const rows = listPveRank(weekKey, 1000);
+  return htmlReportAttachment({
+    title: `Rank PvE Albion ${weekKey}`,
+    fileName: `albion-pve-rank-${safeFilePart(weekKey)}.html`,
+    csvName: `albion-pve-rank-${safeFilePart(weekKey)}.csv`,
+    rows,
+    columns: [
+      'week_key',
+      { key: 'rank', label: 'rank', align: 'right' },
+      'albion_name',
+      'guild_role',
+      { key: 'amount', label: 'amount', align: 'right', format: formatCompact }
+    ],
+    summary: [
+      ['Jogadores', rows.length],
+      ['Fama total', formatCompact(rows.reduce((total, row) => total + Number(row.amount || 0), 0))]
+    ]
+  });
+}
+
 function guildLogsCsvAttachment(weekKey = currentWeekKey()) {
   const rows = getDatabase()
     .prepare(`
@@ -154,6 +176,28 @@ function guildLogsCsvAttachment(weekKey = currentWeekKey()) {
     .all(weekKey);
   const csv = toCsv(rows, ['week_key', 'event_date', 'actor_name', 'action_type', 'target_hint', 'raw_reason']);
   return new AttachmentBuilder(Buffer.from(csv, 'utf8'), { name: `albion-guild-logs-${safeFilePart(weekKey)}.csv` });
+}
+
+function guildLogsReportAttachment(weekKey = currentWeekKey()) {
+  const rows = getDatabase()
+    .prepare(`
+      SELECT week_key, event_date, actor_name, action_type, target_hint, raw_reason
+      FROM albion_guild_logs
+      WHERE week_key = ?
+      ORDER BY event_date DESC
+    `)
+    .all(weekKey);
+  return htmlReportAttachment({
+    title: `Logs Albion ${weekKey}`,
+    fileName: `albion-guild-logs-${safeFilePart(weekKey)}.html`,
+    csvName: `albion-guild-logs-${safeFilePart(weekKey)}.csv`,
+    rows,
+    columns: ['week_key', 'event_date', 'actor_name', 'action_type', 'target_hint', 'raw_reason'],
+    summary: [
+      ['Logs', rows.length],
+      ['Atores', new Set(rows.map((row) => row.actor_name).filter(Boolean)).size]
+    ]
+  });
 }
 
 function previewText(preview) {
@@ -383,10 +427,12 @@ module.exports = {
   applyPreview,
   cancelPreview,
   guildLogsCsvAttachment,
+  guildLogsReportAttachment,
   previewGuildLogs,
   previewPveRank,
   previewText,
   pveRankCsvAttachment,
+  pveRankReportAttachment,
   saveGuildLogs,
   savePreview,
   savePveRank,

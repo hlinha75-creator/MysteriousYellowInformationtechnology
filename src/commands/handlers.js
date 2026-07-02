@@ -137,11 +137,11 @@ async function handleCommand(interaction) {
             : type === 'members_discord'
               ? await memberList.csvAttachment(interaction.guild)
               : type === 'albion_pve'
-                ? albionWeekly.pveRankCsvAttachment(date || undefined)
+                ? albionWeekly.pveRankReportAttachment(date || undefined)
                 : type === 'albion_logs'
-                ? albionWeekly.guildLogsCsvAttachment(date || undefined)
+                ? albionWeekly.guildLogsReportAttachment(date || undefined)
                 : csv.auditAttachment();
-    return interaction.editReply({ content: 'Exportacao gerada.', files: [attachment] });
+    return interaction.editReply({ content: 'Exportacao HTML gerada. Abra o arquivo e use Baixar CSV se precisar de planilha.', files: [attachment] });
   }
 
   if (interaction.commandName === 'list') {
@@ -185,6 +185,7 @@ async function handleCommand(interaction) {
         '',
         sample
       ].join('\n'),
+      files: [csv.importPreviewAttachment(preview)],
       components: [
         new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId(`csv:confirm_import:${sessionId}`).setLabel('Confirmar importacao').setStyle(ButtonStyle.Danger),

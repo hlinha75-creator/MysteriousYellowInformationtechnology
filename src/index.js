@@ -46,6 +46,7 @@ client.once('clientReady', () => {
   console.log(`Notag bot online como ${client.user.tag}`);
   events.cleanupExpiredReviewChannels(client).catch((error) => console.error('Falha ao limpar canais de revisao:', error));
   balanceBackup.postDailyBackupIfNeeded(client).catch((error) => console.error('Falha ao postar backup diario de saldos:', error));
+  operations.postDailyAdminReportIfNeeded(client).catch((error) => console.error('Falha ao enviar relatorio diario ADM:', error));
   operations.postWeeklyAlbionReminderIfNeeded(client).catch((error) => console.error('Falha ao postar lembrete semanal Albion:', error));
   operations.postMonthlyInactivityPreviewIfNeeded(client).catch((error) => console.error('Falha ao postar previa mensal de inatividade:', error));
   campaigns.refreshActiveCampaignProgress(client).catch((error) => console.error('Falha ao atualizar progresso da campanha:', error));
@@ -70,6 +71,7 @@ client.once('clientReady', () => {
   }, 60 * 60 * 1000);
   setInterval(() => {
     balanceBackup.postDailyBackupIfNeeded(client).catch((error) => console.error('Falha ao postar backup diario de saldos:', error));
+    operations.postDailyAdminReportIfNeeded(client).catch((error) => console.error('Falha ao enviar relatorio diario ADM:', error));
   }, 60 * 60 * 1000);
   setInterval(() => {
     operations.postWeeklyAlbionReminderIfNeeded(client).catch((error) => console.error('Falha ao postar lembrete semanal Albion:', error));

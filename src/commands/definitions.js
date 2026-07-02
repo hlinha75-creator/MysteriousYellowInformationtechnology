@@ -39,7 +39,7 @@ const commands = [
       .setDescription('Print do objetivo. Opcional.')),
   new SlashCommandBuilder()
     .setName('exportar')
-    .setDescription('Exporta dados em CSV.')
+    .setDescription('Exporta dados em HTML com botao para baixar CSV.')
     .addStringOption((option) => option
       .setName('tipo')
       .setDescription('Tipo de exportacao')

@@ -13,7 +13,7 @@ const knownFeatures = [
   { type: 'command', name: '/enquete', label: 'Criar enquete' },
   { type: 'command', name: '/leilao', label: 'Criar ou editar leilao' },
   { type: 'command', name: '/objetivo', label: 'Avisar objetivo temporario' },
-  { type: 'command', name: '/exportar', label: 'Exportar CSV' },
+  { type: 'command', name: '/exportar', label: 'Exportar HTML/CSV' },
   { type: 'command', name: '/importar', label: 'Importar CSV' },
   { type: 'command', name: '/relatorio_diario', label: 'Relatorio diario' },
   { type: 'command', name: '/sincronizar_albion', label: 'Sincronizar Discord x Albion' },

@@ -1,0 +1,185 @@
+# Arquitetura
+
+## Resumo
+
+O projeto e um bot Discord em Node.js CommonJS.
+
+Principais tecnologias:
+
+- `discord.js`: conexao com Discord, comandos, botoes, modais e eventos.
+- `better-sqlite3`: banco SQLite local.
+- `dotenv`: variaveis de ambiente.
+- `tesseract.js`: OCR de prints/stats Albion.
+
+## Entrada Principal
+
+Arquivo:
+
+```text
+src/index.js
+```
+
+Responsabilidades:
+
+- carregar ambiente;
+- rodar migrations;
+- criar backup de startup;
+- inicializar client Discord;
+- registrar listeners;
+- iniciar rotinas periodicas;
+- fazer login com `DISCORD_TOKEN`.
+
+Eventos Discord principais:
+
+- `clientReady`
+- `guildMemberAdd`
+- `voiceStateUpdate`
+- `interactionCreate`
+- `messageCreate`
+
+## Estrutura De Pastas
+
+```text
+src/
+  commands/
+  config/
+  database/
+  interactions/
+  modules/
+  server/
+  utils/
+dashboard/
+data/
+resources/
+scripts/
+docs/
+```
+
+## `src/commands`
+
+Define e trata comandos slash.
+
+- `definitions.js`: lista os comandos registrados no Discord.
+- `handlers.js`: executa a logica quando comando slash e usado.
+
+Quando mudar comando, rode:
+
+```bash
+npm run deploy:commands
+```
+
+## `src/interactions`
+
+Roteia botoes, selects e modais.
+
+- `router.js`: decide se interacao e comando, botao, select ou modal.
+- `buttons.js`: botoes dos paineis, eventos, financeiro, admin, CSV, registro e outros.
+- `modals.js`: formularios de evento, loot, registro, saque, pagamento, deposito etc.
+- `selects.js`: menus de selecao, como vagas, leilao, deposito e revisao.
+
+Regra pratica:
+
+- comando slash fica em `commands`;
+- botao fica em `interactions/buttons.js`;
+- formulario fica em `interactions/modals.js`;
+- menu de selecao fica em `interactions/selects.js`.
+
+## `src/config`
+
+- `env.js`: leitura de variaveis de ambiente.
+- `ids.js`: IDs fixos da guild Notag, cargos, canais e categorias.
+- `permissions.js`: grupos de permissao usados pelo bot.
+
+Este projeto depende muito de `ids.js`. Se um canal ou cargo mudar no Discord, atualize esse arquivo.
+
+## `src/database`
+
+- `connection.js`: abre conexao SQLite.
+- `migrate.js`: cria/altera tabelas.
+- `backup.js`: cria backups do banco.
+
+Migrations rodam automaticamente no startup.
+
+## `src/modules`
+
+Cada modulo concentra uma area de negocio.
+
+| Modulo | Responsabilidade |
+| --- | --- |
+| `albion` | sincronizacao Albion, imports semanais, OCR de stats |
+| `analytics` | tracking de uso e relatorios/dashboard |
+| `auctions` | leiloes, lances, fechamento |
+| `audit` | logs de auditoria |
+| `campaigns` | campanha 900m e decisoes de doacao |
+| `csv` | import/export CSV, HTML de saldos, backup de saldos |
+| `deposit` | deposito manual e deposito por lista |
+| `events` | eventos, vagas, voz, loot split, financeiro, carreira |
+| `faq` | respostas/tutorial via mensagens |
+| `finance` | saldos, transacoes, saques, pedidos de pagamento |
+| `members` | lista de membros, painel do membro, inatividade |
+| `objectives` | objetivos temporarios |
+| `operations` | painel ADM, lembretes, fila de pendencias |
+| `polls` | enquetes e criacao de evento por resultado |
+| `registration` | registro de nick Albion |
+| `reports` | relatorio diario |
+| `setup` | paineis fixos e auditoria/renomeacao de canais |
+| `tutorials` | tutorial HTML para staff |
+| `voice` | sessoes de voz e recuperacao pos-reinicio |
+
+## Padrao Repository/Service
+
+Alguns modulos usam dois arquivos:
+
+- `*.repository.js`: acesso ao banco.
+- `*.service.js`: regra de negocio.
+
+Exemplos:
+
+- `events.repository.js` e `events.service.js`
+- `finance.repository.js` e `finance.service.js`
+- `campaigns.repository.js` e `campaigns.service.js`
+
+Quando adicionar comportamento novo, tente seguir esse padrao.
+
+## Fluxo De Interacao
+
+```text
+Discord
+  -> src/index.js
+  -> interactions/router.js
+  -> commands/handlers.js ou interactions/buttons.js/modals.js/selects.js
+  -> modules/* service
+  -> modules/* repository
+  -> database SQLite
+```
+
+## Fluxo De Evento
+
+```text
+Painel Criar Evento
+  -> modal event:create
+  -> events.createEventFromModal
+  -> events.repository cria evento
+  -> mensagem no canal de participacao
+  -> membros clicam vagas
+  -> caller inicia
+  -> sala de voz criada
+  -> voice registra tempo
+  -> caller finaliza
+  -> modal de loot
+  -> revisao/split
+  -> financeiro aprova
+  -> finance deposita saldos
+```
+
+## Dashboard
+
+A pasta `dashboard/` contem HTML/CSS/JS e previews.
+
+O servidor relacionado fica em:
+
+```text
+src/server/dashboard.server.js
+```
+
+Uso atual informado: local.

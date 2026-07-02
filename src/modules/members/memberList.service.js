@@ -1,13 +1,12 @@
 const {
   ActionRowBuilder,
-  AttachmentBuilder,
   ButtonBuilder,
   ButtonStyle,
   EmbedBuilder
 } = require('discord.js');
 const ids = require('../../config/ids');
 const { getDatabase } = require('../../database/connection');
-const { toCsv } = require('../../utils/csv');
+const { htmlReportAttachment } = require('../../utils/htmlReport');
 
 const roleFilters = {
   members: { label: 'Membros', role: 'member' },
@@ -32,7 +31,7 @@ async function refreshPanel(interaction) {
 
 async function csvAttachment(guild) {
   const rows = await collectMembers(guild);
-  const csv = toCsv(rows.map((row) => ({
+  const exportRows = rows.map((row) => ({
     discord_id: row.discordId,
     discord_tag: row.discordTag,
     display_name: row.displayName,
@@ -41,17 +40,29 @@ async function csvAttachment(guild) {
     guild_status: row.guildStatus,
     roles: row.roleNames.join('|'),
     joined_at: row.joinedAt
-  })), [
-    'discord_id',
-    'discord_tag',
-    'display_name',
-    'albion_name',
-    'registration_status',
-    'guild_status',
-    'roles',
-    'joined_at'
-  ]);
-  return new AttachmentBuilder(Buffer.from(csv, 'utf8'), { name: `lista-membros-${dateKey()}.csv` });
+  }));
+  return htmlReportAttachment({
+    title: 'Lista de membros Discord x Albion',
+    fileName: `lista-membros-${dateKey()}.html`,
+    csvName: `lista-membros-${dateKey()}.csv`,
+    rows: exportRows,
+    columns: [
+      'discord_id',
+      'discord_tag',
+      'display_name',
+      'albion_name',
+      'registration_status',
+      'guild_status',
+      'roles',
+      'joined_at'
+    ],
+    summary: [
+      ['Total', exportRows.length],
+      ['Membros', rows.filter((row) => row.guildStatus === 'membro').length],
+      ['Convidados', rows.filter((row) => row.guildStatus === 'convidado').length],
+      ['Pendentes', rows.filter((row) => row.guildStatus === 'pendente').length]
+    ]
+  });
 }
 
 async function filteredEmbed(guild, filterKey) {
@@ -62,7 +73,7 @@ async function filteredEmbed(guild, filterKey) {
     .slice(0, 35)
     .map((row, index) => `${index + 1}. <@${row.discordId}> - ${row.albionName || row.displayName}`)
     .join('\n') || 'Nenhum membro encontrado nesse filtro.';
-  const hidden = filtered.length > 35 ? `\n... e mais ${filtered.length - 35}. Use Exportar CSV para lista completa.` : '';
+  const hidden = filtered.length > 35 ? `\n... e mais ${filtered.length - 35}. Use Exportar HTML para lista completa.` : '';
 
   return new EmbedBuilder()
     .setTitle(`Lista de membros - ${filter.label}`)
@@ -155,7 +166,7 @@ function panelComponents() {
   return [
     new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('member_list:refresh').setLabel('Atualizar').setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId('member_list:csv').setLabel('Exportar CSV').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('member_list:csv').setLabel('Exportar HTML').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId('member_list:view:members').setLabel('Membros').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('member_list:view:guests').setLabel('Convidados').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('member_list:view:pending').setLabel('Pendentes').setStyle(ButtonStyle.Secondary)

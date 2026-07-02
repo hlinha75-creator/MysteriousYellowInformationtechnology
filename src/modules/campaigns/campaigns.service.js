@@ -498,6 +498,8 @@ function contributorsHtml({ campaign, totals, rows, entries }) {
     .card strong { display: block; font-size: 20px; margin-top: 4px; }
     .bar { height: 16px; background: #030712; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; margin: 14px 0 8px; }
     .fill { height: 100%; width: ${percent.toFixed(2)}%; background: linear-gradient(90deg, var(--gold), var(--green)); }
+    .table-actions { display: flex; justify-content: flex-end; margin: 0 0 8px; }
+    button { border: 0; border-radius: 7px; padding: 8px 10px; background: #2563eb; color: #fff; font-weight: 800; cursor: pointer; }
     table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
     th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
     th { color: #f3f4f6; background: #111827; position: sticky; top: 0; }
@@ -526,6 +528,7 @@ function contributorsHtml({ campaign, totals, rows, entries }) {
     </section>
 
     <h2>Contribuidores</h2>
+    <div class="table-actions"><button onclick="downloadSiblingTableCsv(this, 'meta-contribuidores')">Baixar CSV</button></div>
     <table>
       <thead>
         <tr><th>#</th><th>Discord</th><th>Albion</th><th>Discord ID</th><th>Total</th><th>Entradas</th></tr>
@@ -536,6 +539,7 @@ ${contributorRows || '        <tr><td colspan="6">Nenhuma contribuicao registrad
     </table>
 
     <h2>Entradas</h2>
+    <div class="table-actions"><button onclick="downloadSiblingTableCsv(this, 'meta-entradas')">Baixar CSV</button></div>
     <table>
       <thead>
         <tr><th>Data</th><th>Discord</th><th>Albion</th><th>Discord ID</th><th>Valor</th><th>Origem</th><th>Ref.</th><th>Nota</th></tr>
@@ -545,6 +549,26 @@ ${entryRows || '        <tr><td colspan="8">Nenhuma entrada registrada.</td></tr
       </tbody>
     </table>
   </main>
+  <script>
+    function csvCell(value) {
+      const text = String(value == null ? '' : value);
+      return /[",\\n\\r]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
+    }
+    function downloadSiblingTableCsv(button, name) {
+      const table = button.closest('.table-actions')?.nextElementSibling;
+      if (!table) return;
+      const rows = Array.from(table.querySelectorAll('tr')).map((tr) => Array.from(tr.children).map((cell) => csvCell(cell.innerText.trim())).join(',')).join('\\n');
+      const blob = new Blob([rows], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = (name || 'meta') + '.csv';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
+  </script>
 </body>
 </html>`;
 }

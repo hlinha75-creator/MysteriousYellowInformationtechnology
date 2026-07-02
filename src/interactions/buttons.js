@@ -351,7 +351,7 @@ async function handleButton(interaction) {
     if (action === 'csv') {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       return interaction.editReply({
-        content: 'CSV da lista de membros gerado.',
+        content: 'HTML da lista de membros gerado. Abra o arquivo e use Baixar CSV se precisar de planilha.',
         files: [await memberList.csvAttachment(interaction.guild)]
       });
     }
@@ -999,6 +999,45 @@ async function handleButton(interaction) {
     return interaction.reply({ content: 'Fila de pendencias atualizada.', flags: MessageFlags.Ephemeral });
   }
 
+  if (interaction.customId === 'admin:daily_report') {
+    if (!can(interaction.member, 'approvePayment')) {
+      return interaction.reply({ content: 'Sem permissao para gerar relatorio ADM.', flags: MessageFlags.Ephemeral });
+    }
+    return interaction.reply({ ...operations.adminDailyReportPayload(), flags: MessageFlags.Ephemeral });
+  }
+
+  if (interaction.customId === 'admin:test_backup') {
+    if (!can(interaction.member, 'approvePayment')) {
+      return interaction.reply({ content: 'Sem permissao para testar backup.', flags: MessageFlags.Ephemeral });
+    }
+    return interaction.reply({ ...operations.backupTestPayload(), flags: MessageFlags.Ephemeral });
+  }
+
+  if (interaction.customId === 'admin:pending_html') {
+    if (!can(interaction.member, 'approvePayment')) {
+      return interaction.reply({ content: 'Sem permissao para exportar pendencias.', flags: MessageFlags.Ephemeral });
+    }
+    return interaction.reply({ ...operations.pendingQueueHtmlPayload(), flags: MessageFlags.Ephemeral });
+  }
+
+  if (interaction.customId === 'admin:presence_report') {
+    if (!can(interaction.member, 'approveRegistration') && !can(interaction.member, 'approvePayment')) {
+      return interaction.reply({ content: 'Sem permissao para gerar relatorio de presenca.', flags: MessageFlags.Ephemeral });
+    }
+    return interaction.reply({ ...operations.presenceReportPayload(30), flags: MessageFlags.Ephemeral });
+  }
+
+  if (interaction.customId === 'admin:member_profile') {
+    if (!can(interaction.member, 'approveRegistration') && !can(interaction.member, 'approvePayment')) {
+      return interaction.reply({ content: 'Sem permissao para ver perfil de membro.', flags: MessageFlags.Ephemeral });
+    }
+    return interaction.reply({
+      content: 'Escolha o membro para abrir o perfil:',
+      components: [adminMemberProfileUserSelect()],
+      flags: MessageFlags.Ephemeral
+    });
+  }
+
   if (interaction.customId === 'admin:refresh_career_panel') {
     if (!can(interaction.member, 'approvePayment')) {
       return interaction.reply({ content: 'Sem permissao para atualizar carreira.', flags: MessageFlags.Ephemeral });
@@ -1180,8 +1219,8 @@ async function handleButton(interaction) {
 
     if (action === 'export') {
       const file = id === 'pve'
-        ? albionWeekly.pveRankCsvAttachment()
-        : albionWeekly.guildLogsCsvAttachment();
+        ? albionWeekly.pveRankReportAttachment()
+        : albionWeekly.guildLogsReportAttachment();
       return interaction.reply({ content: 'Exportacao Albion gerada.', files: [file], flags: MessageFlags.Ephemeral });
     }
 
@@ -1223,7 +1262,7 @@ async function handleButton(interaction) {
 
   if (interaction.customId === 'csv:export_balances') {
     if (!can(interaction.member, 'importCsv')) return interaction.reply({ content: 'Sem permissao.', flags: MessageFlags.Ephemeral });
-    return interaction.reply({ content: 'Saldos exportados.', files: [csv.balancesAttachment()], flags: MessageFlags.Ephemeral });
+    return interaction.reply({ content: 'Saldos exportados em HTML. Abra o arquivo e use Baixar CSV se precisar de planilha.', files: [csv.balancesAttachment()], flags: MessageFlags.Ephemeral });
   }
 
   if (interaction.customId === 'guild:export_members_html') {
@@ -1240,12 +1279,12 @@ async function handleButton(interaction) {
 
   if (interaction.customId === 'csv:export_transactions') {
     if (!can(interaction.member, 'importCsv')) return interaction.reply({ content: 'Sem permissao.', flags: MessageFlags.Ephemeral });
-    return interaction.reply({ content: 'Logs financeiros exportados.', files: [csv.transactionsAttachment()], flags: MessageFlags.Ephemeral });
+    return interaction.reply({ content: 'Logs financeiros exportados em HTML.', files: [csv.transactionsAttachment()], flags: MessageFlags.Ephemeral });
   }
 
   if (interaction.customId === 'csv:export_audit') {
     if (!can(interaction.member, 'importCsv')) return interaction.reply({ content: 'Sem permissao.', flags: MessageFlags.Ephemeral });
-    return interaction.reply({ content: 'Auditoria exportada.', files: [csv.auditAttachment()], flags: MessageFlags.Ephemeral });
+    return interaction.reply({ content: 'Auditoria exportada em HTML.', files: [csv.auditAttachment()], flags: MessageFlags.Ephemeral });
   }
 
   if (interaction.customId === 'csv:import_help') {
@@ -1346,6 +1385,16 @@ function adminRemoveBalanceUserSelect() {
     new UserSelectMenuBuilder()
       .setCustomId('admin_remove_balance_select:user')
       .setPlaceholder('Buscar membro para retirar saldo')
+      .setMinValues(1)
+      .setMaxValues(1)
+  );
+}
+
+function adminMemberProfileUserSelect() {
+  return new ActionRowBuilder().addComponents(
+    new UserSelectMenuBuilder()
+      .setCustomId('admin_profile_select:user')
+      .setPlaceholder('Buscar membro para abrir perfil')
       .setMinValues(1)
       .setMaxValues(1)
   );

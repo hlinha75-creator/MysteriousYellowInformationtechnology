@@ -2,6 +2,7 @@ const { AttachmentBuilder, ChannelType } = require('discord.js');
 const ids = require('../../config/ids');
 const { transaction } = require('../../database/connection');
 const { backupDatabase } = require('../../database/backup');
+const { htmlReportAttachment } = require('../../utils/htmlReport');
 const audit = require('../audit/audit.repository');
 
 const STATUS = {
@@ -315,10 +316,14 @@ function importantLines(result, limit = 12) {
 
 function csvAttachment(rows, name) {
   const columns = ['discord_id', 'discord_tag', 'discord_name', 'albion_name', 'status', 'score', 'pode_renomear', 'motivo'];
-  const csv = [columns, ...rows.map((row) => columns.map((column) => row[column] || ''))]
-    .map((row) => row.map(csvCell).join(','))
-    .join('\n');
-  return new AttachmentBuilder(Buffer.from(csv, 'utf8'), { name });
+  return htmlReportAttachment({
+    title: name.replace(/\.csv$/i, ''),
+    fileName: name.replace(/\.csv$/i, '.html'),
+    csvName: name,
+    rows,
+    columns,
+    summary: [['Linhas', rows.length]]
+  });
 }
 
 function analysisAttachments(result) {
@@ -327,11 +332,6 @@ function analysisAttachments(result) {
     csvAttachment(result.missing, `verificacao_${result.id}_nao_encontrados.csv`),
     csvAttachment(result.issues, `verificacao_${result.id}_problemas.csv`)
   ];
-}
-
-function csvCell(value) {
-  const text = String(value ?? '');
-  return `"${text.replace(/"/g, '""')}"`;
 }
 
 async function applySimilarRenames(guild, verificationId, actorId) {
@@ -466,10 +466,14 @@ function markPendingAnswered(discordId, status) {
 
 function actionAttachment(rows, name) {
   const columns = ['discord_id', 'discord_tag', 'discord_name', 'albion_name', 'status', 'resultado', 'detalhe'];
-  const csv = [columns, ...rows.map((row) => columns.map((column) => row[column] || ''))]
-    .map((row) => row.map(csvCell).join(','))
-    .join('\n');
-  return new AttachmentBuilder(Buffer.from(csv, 'utf8'), { name });
+  return htmlReportAttachment({
+    title: name.replace(/\.csv$/i, ''),
+    fileName: name.replace(/\.csv$/i, '.html'),
+    csvName: name,
+    rows,
+    columns,
+    summary: [['Linhas', rows.length]]
+  });
 }
 
 async function membersHtmlAttachment(guild) {
@@ -1061,10 +1065,14 @@ function syncApplyAttachment(result) {
 
 function syncRowsAttachment(rows, name) {
   const columns = ['discord_id', 'discord_tag', 'discord_name', 'old_albion_name', 'albion_name', 'status', 'score', 'action', 'applied', 'result', 'motivo'];
-  const csv = [columns, ...rows.map((row) => columns.map((column) => row[column] || ''))]
-    .map((row) => row.map(csvCell).join(','))
-    .join('\n');
-  return new AttachmentBuilder(Buffer.from(csv, 'utf8'), { name });
+  return htmlReportAttachment({
+    title: name.replace(/\.csv$/i, ''),
+    fileName: name.replace(/\.csv$/i, '.html'),
+    csvName: name,
+    rows,
+    columns,
+    summary: [['Linhas', rows.length]]
+  });
 }
 async function fetchGuildMembersWithRetry(guild) {
   for (let attempt = 1; attempt <= 3; attempt += 1) {

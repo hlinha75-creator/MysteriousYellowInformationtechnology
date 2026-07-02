@@ -1,13 +1,18 @@
 const {
   ActionRowBuilder,
+  AttachmentBuilder,
   ButtonBuilder,
   ButtonStyle,
   EmbedBuilder
 } = require('discord.js');
 const ids = require('../../config/ids');
 const { getDatabase } = require('../../database/connection');
+const { testLatestBackupRestore } = require('../../database/backup');
+const { formatSilver } = require('../../utils/silver');
 const inactiveEvents = require('../members/inactiveEvents.service');
 const inactiveGuests = require('../members/inactiveGuests.service');
+
+const dailyAdminRecipients = ['1436716667894759475', '1276439186513203234'];
 
 function pendingQueuePayload() {
   const summary = pendingSummary();
@@ -70,6 +75,8 @@ function adminMainComponents() {
     new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('admin_menu:files').setLabel('Arquivos').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('admin_menu:tutorial').setLabel('Tutorial').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('admin:daily_report').setLabel('Relatorio ADM').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('admin:test_backup').setLabel('Teste backup').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('admin:refresh_pending_queue').setLabel('Atualizar fila').setStyle(ButtonStyle.Primary)
     )
   ];
@@ -106,7 +113,8 @@ function adminMenuPayload(menu) {
       rows: [[
         button('admin:refresh_career_panel', 'Atualizar carreira', ButtonStyle.Primary),
         button('admin:preview_career_rebuild', 'Previa recalc carreira'),
-        button('inactive_events:preview', 'Inativos eventos')
+        button('inactive_events:preview', 'Inativos eventos'),
+        button('admin:presence_report', 'Relatorio presenca')
       ]]
     },
     members: {
@@ -115,7 +123,8 @@ function adminMenuPayload(menu) {
       rows: [[
         button('admin:verify_pending_registrations', 'Sincronizar Albion', ButtonStyle.Primary),
         button('inactive_guests:preview', 'Inativos convidados'),
-        button('guild:export_members_html', 'Discord x Albion')
+        button('guild:export_members_html', 'Discord x Albion'),
+        button('admin:member_profile', 'Perfil membro', ButtonStyle.Primary)
       ]]
     },
     files: {
@@ -125,7 +134,10 @@ function adminMenuPayload(menu) {
         button('csv:export_balances', 'Exportar saldos'),
         button('csv:export_transactions', 'Logs financeiros'),
         button('csv:export_audit', 'Auditoria'),
-        button('guild:export_members_html', 'Discord x Albion'),
+        button('guild:export_members_html', 'Discord x Albion')
+      ], [
+        button('admin:pending_html', 'Fila HTML', ButtonStyle.Primary),
+        button('admin:test_backup', 'Teste backup'),
         button('csv:import_help', 'Importar CSV', ButtonStyle.Primary)
       ]]
     },
@@ -184,6 +196,204 @@ async function refreshPendingQueueMessage(interaction) {
   if (interaction.message) {
     await interaction.message.edit(adminPanelPayload());
   }
+}
+
+function adminDailyReportPayload() {
+  const summary = pendingSummary();
+  const today = saoPauloDateKey();
+  const finance = financeLast24h();
+  const events = eventsLast24h();
+  const campaign = campaignSummary();
+  const backup = testLatestBackupRestore();
+
+  const embed = new EmbedBuilder()
+    .setTitle(`Relatorio ADM - ${today}`)
+    .setDescription('Resumo diario automatico do NOTAG Bot.')
+    .addFields(
+      {
+        name: 'Pendencias agora',
+        value: [
+          `Eventos em revisao: ${summary.events.review}`,
+          `Eventos no financeiro: ${summary.events.pendingPayment}`,
+          `Saques solicitados/aprovados: ${summary.withdraws.requested}/${summary.withdraws.approved}`,
+          `Pedidos de pagamento: ${summary.paymentRequests.requested}`,
+          `Registros pendentes: ${summary.registrations.pending}`
+        ].join('\n'),
+        inline: true
+      },
+      {
+        name: 'Ultimas 24h',
+        value: [
+          `Eventos aprovados: ${events.approved}`,
+          `Eventos criados: ${events.created}`,
+          `Entrou saldo: ${formatSilver(finance.inflow)}`,
+          `Saiu saldo: ${formatSilver(Math.abs(finance.outflow))}`,
+          `Transacoes: ${finance.transactions}`
+        ].join('\n'),
+        inline: true
+      },
+      {
+        name: 'Meta 900m',
+        value: campaign
+          ? [
+            `${formatSilver(campaign.raised)} / ${formatSilver(campaign.goal)} (${campaign.percent.toFixed(1)}%)`,
+            `Contribuidores: ${campaign.contributors}`,
+            `Pendentes DM: ${campaign.pending}`
+          ].join('\n')
+          : 'Nenhuma meta aberta.',
+        inline: true
+      },
+      {
+        name: 'Backup',
+        value: [
+          backup.ok ? 'Teste: OK' : 'Teste: ATENCAO',
+          backup.latest ? `Arquivo: ${backup.latest.name}` : 'Arquivo: nenhum',
+          backup.latest ? `Tamanho: ${bytesText(backup.latest.size)}` : null
+        ].filter(Boolean).join('\n'),
+        inline: false
+      },
+      { name: 'Rotina semanal Albion', value: weeklyChecklistText(), inline: false }
+    )
+    .setColor(backup.ok ? 0x38a169 : 0xd69e2e)
+    .setTimestamp(new Date());
+
+  return {
+    content: 'Relatorio diario do NOTAG Bot.',
+    embeds: [embed],
+    allowedMentions: { parse: [] }
+  };
+}
+
+async function postDailyAdminReportIfNeeded(client) {
+  const hour = saoPauloHour();
+  if (hour < 9) return null;
+
+  const key = `admin-daily:${saoPauloDateKey()}`;
+  const db = getDatabase();
+  const existing = db.prepare('SELECT reminder_key FROM operation_reminders WHERE reminder_key = ?').get(key);
+  if (existing) return null;
+
+  const payload = adminDailyReportPayload();
+  let sent = 0;
+  for (const userId of dailyAdminRecipients) {
+    const user = await client.users.fetch(userId).catch(() => null);
+    if (!user) continue;
+    await user.send(payload).then(() => { sent += 1; }).catch(() => {});
+  }
+
+  db.prepare(`
+    INSERT INTO operation_reminders (reminder_key, type, message_id, channel_id)
+    VALUES (?, ?, ?, ?)
+  `).run(key, 'admin_daily_report', String(sent), 'dm');
+  return { sent };
+}
+
+function backupTestPayload() {
+  const result = testLatestBackupRestore();
+  const checks = result.checks.map((check) => `${check.ok ? 'OK' : 'ERRO'} ${check.name}: ${check.value}`).join('\n') || 'Nenhum teste executado.';
+  return {
+    embeds: [
+      new EmbedBuilder()
+        .setTitle(result.ok ? 'Teste de backup OK' : 'Teste de backup com atencao')
+        .setDescription(result.message)
+        .addFields(
+          { name: 'Ultimo backup', value: result.latest ? `${result.latest.name}\n${bytesText(result.latest.size)}\n${result.latest.modifiedAt.toISOString()}` : 'Nenhum backup encontrado.', inline: false },
+          { name: 'Checks', value: truncate(checks, 1024), inline: false }
+        )
+        .setColor(result.ok ? 0x38a169 : 0xe53e3e)
+        .setTimestamp(new Date())
+    ]
+  };
+}
+
+function pendingQueueHtmlPayload() {
+  const html = renderPendingQueueHtml();
+  return {
+    content: 'Fila completa de pendencias em HTML.',
+    files: [
+      new AttachmentBuilder(Buffer.from(html, 'utf8'), { name: `fila-pendencias-${saoPauloDateKey()}.html` })
+    ],
+    allowedMentions: { parse: [] }
+  };
+}
+
+function presenceReportPayload(days = 30) {
+  const rows = presenceRows(days);
+  const html = renderPresenceHtml(rows, days);
+  const active = rows.filter((row) => row.event_seconds > 0 || row.voice_seconds > 0).length;
+  return {
+    content: `Relatorio de presenca dos ultimos ${days} dias. Membros com atividade: ${active}/${rows.length}.`,
+    files: [
+      new AttachmentBuilder(Buffer.from(html, 'utf8'), { name: `presenca-${days}d-${saoPauloDateKey()}.html` })
+    ],
+    allowedMentions: { parse: [] }
+  };
+}
+
+function memberProfilePayload(userId) {
+  const db = getDatabase();
+  const user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(userId);
+  const balance = db.prepare('SELECT COALESCE(balance, 0) AS balance FROM balances WHERE discord_id = ?').get(userId);
+  const finance = db.prepare(`
+    SELECT
+      COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) AS earned,
+      COALESCE(SUM(CASE WHEN amount < 0 THEN amount ELSE 0 END), 0) AS spent,
+      COUNT(*) AS transactions
+    FROM balance_transactions
+    WHERE user_id = ?
+  `).get(userId);
+  const events = db.prepare(`
+    SELECT
+      COUNT(DISTINCT ep.event_id) AS events,
+      COALESCE(SUM(COALESCE(ep.manual_seconds, ep.calculated_seconds, 0)), 0) AS event_seconds,
+      COALESCE(SUM(ep.payout_amount), 0) AS payout,
+      MAX(e.started_at) AS last_event_at
+    FROM event_participants ep
+    LEFT JOIN events e ON e.id = ep.event_id
+    WHERE ep.discord_id = ?
+      AND COALESCE(ep.is_spectator, 0) = 0
+  `).get(userId);
+  const voice = db.prepare(`
+    SELECT COUNT(*) AS sessions, COALESCE(SUM(seconds), 0) AS seconds, MAX(COALESCE(left_at, joined_at)) AS last_voice_at
+    FROM voice_sessions
+    WHERE discord_id = ?
+  `).get(userId);
+  const career = db.prepare(`
+    SELECT weapon_name, points
+    FROM raid_avalon_weapon_career
+    WHERE discord_id = ?
+    ORDER BY points DESC, weapon_name COLLATE NOCASE
+    LIMIT 8
+  `).all(userId);
+
+  const embed = new EmbedBuilder()
+    .setTitle('Perfil do membro')
+    .setDescription(`<@${userId}>`)
+    .addFields(
+      { name: 'Cadastro', value: [
+        `Discord ID: ${userId}`,
+        `Discord: ${user?.discord_name || '-'}`,
+        `Albion: ${user?.albion_name || '-'}`,
+        `Status: ${user?.registration_status || 'sem registro'}`
+      ].join('\n'), inline: false },
+      { name: 'Financeiro', value: [
+        `Saldo atual: ${formatSilver(balance?.balance || 0)}`,
+        `Recebido total: ${formatSilver(finance?.earned || 0)}`,
+        `Saidas total: ${formatSilver(Math.abs(finance?.spent || 0))}`,
+        `Transacoes: ${finance?.transactions || 0}`
+      ].join('\n'), inline: true },
+      { name: 'Eventos e voz', value: [
+        `Eventos: ${events?.events || 0}`,
+        `Tempo eventos: ${durationText(events?.event_seconds || 0)}`,
+        `Tempo voz geral: ${durationText(voice?.seconds || 0)}`,
+        `Ultima call: ${shortDate(voice?.last_voice_at)}`
+      ].join('\n'), inline: true },
+      { name: 'Carreira PvE', value: career.length ? career.map((row) => `${row.weapon_name}: ${row.points}`).join('\n') : 'Sem pontos registrados.', inline: false }
+    )
+    .setColor(0x4f46e5)
+    .setTimestamp(new Date());
+
+  return { embeds: [embed], allowedMentions: { users: [userId] } };
 }
 
 async function postWeeklyAlbionReminderIfNeeded(client) {
@@ -308,8 +518,281 @@ function weeklyChecklistText() {
   ].join('\n');
 }
 
+function financeLast24h() {
+  const db = getDatabase();
+  const row = db.prepare(`
+    SELECT
+      COUNT(*) AS transactions,
+      COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) AS inflow,
+      COALESCE(SUM(CASE WHEN amount < 0 THEN amount ELSE 0 END), 0) AS outflow
+    FROM balance_transactions
+    WHERE created_at >= datetime('now', '-1 day')
+  `).get();
+  return {
+    transactions: Number(row?.transactions || 0),
+    inflow: Number(row?.inflow || 0),
+    outflow: Number(row?.outflow || 0)
+  };
+}
+
+function eventsLast24h() {
+  const db = getDatabase();
+  return {
+    created: count(db, "SELECT COUNT(*) AS total FROM events WHERE created_at >= datetime('now', '-1 day')"),
+    approved: count(db, "SELECT COUNT(*) AS total FROM events WHERE status = 'approved' AND updated_at >= datetime('now', '-1 day')")
+  };
+}
+
+function campaignSummary() {
+  const db = getDatabase();
+  const campaign = db.prepare("SELECT * FROM campaigns WHERE status = 'open' ORDER BY id ASC LIMIT 1").get();
+  if (!campaign) return null;
+  const raised = Number(db.prepare(`
+    SELECT COALESCE(SUM(amount), 0) AS total
+    FROM campaign_contributions
+    WHERE campaign_id = ?
+      AND status = 'approved'
+  `).get(campaign.id)?.total || 0);
+  const contributors = count(db, `SELECT COUNT(DISTINCT user_id) AS total FROM campaign_contributions WHERE campaign_id = ${Number(campaign.id)} AND status = 'approved'`);
+  const pending = count(db, `SELECT COUNT(*) AS total FROM campaign_event_payouts WHERE campaign_id = ${Number(campaign.id)} AND status = 'pending'`);
+  const goal = Number(campaign.goal_amount || 0);
+  return {
+    campaign,
+    raised,
+    goal,
+    contributors,
+    pending,
+    percent: goal > 0 ? Math.min(100, (raised / goal) * 100) : 0
+  };
+}
+
+function renderPendingQueueHtml() {
+  const db = getDatabase();
+  const sections = [
+    {
+      title: 'Eventos aguardando acao',
+      rows: db.prepare(`
+        SELECT id, event_code, title, status, creator_id, created_at, updated_at
+        FROM events
+        WHERE status IN ('created', 'running', 'review', 'pending_payment')
+        ORDER BY updated_at DESC, id DESC
+      `).all(),
+      columns: ['id', 'event_code', 'title', 'status', 'creator_id', 'created_at', 'updated_at']
+    },
+    {
+      title: 'Saques pendentes',
+      rows: db.prepare(`
+        SELECT id, user_id, amount, status, note, created_at, reviewed_at
+        FROM withdraw_requests
+        WHERE status IN ('requested', 'approved')
+        ORDER BY created_at ASC
+      `).all().map((row) => ({ ...row, amount: formatSilver(row.amount) })),
+      columns: ['id', 'user_id', 'amount', 'status', 'note', 'created_at', 'reviewed_at']
+    },
+    {
+      title: 'Pedidos de pagamento',
+      rows: db.prepare(`
+        SELECT id, user_id, amount, service, status, created_at
+        FROM payment_requests
+        WHERE status = 'requested'
+        ORDER BY created_at ASC
+      `).all().map((row) => ({ ...row, amount: formatSilver(row.amount) })),
+      columns: ['id', 'user_id', 'amount', 'service', 'status', 'created_at']
+    },
+    {
+      title: 'Registros pendentes',
+      rows: db.prepare(`
+        SELECT id, discord_id, albion_name, status, created_at
+        FROM registrations
+        WHERE status = 'pending'
+        ORDER BY created_at ASC
+      `).all(),
+      columns: ['id', 'discord_id', 'albion_name', 'status', 'created_at']
+    },
+    {
+      title: 'Escolhas pendentes da meta',
+      rows: db.prepare(`
+        SELECT id, campaign_id, event_id, user_id, amount, status, expires_at, created_at
+        FROM campaign_event_payouts
+        WHERE status = 'pending'
+        ORDER BY expires_at ASC
+      `).all().map((row) => ({ ...row, amount: formatSilver(row.amount) })),
+      columns: ['id', 'campaign_id', 'event_id', 'user_id', 'amount', 'status', 'expires_at', 'created_at']
+    }
+  ];
+
+  return baseHtml('Fila de pendencias NOTAG', `
+    <h1>Fila de pendencias NOTAG</h1>
+    <p class="muted">Gerado em ${escapeHtml(new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }))}</p>
+    ${sections.map((section) => `
+      <section>
+        <h2>${escapeHtml(section.title)} <span>${section.rows.length}</span></h2>
+        ${htmlTable(section.rows, section.columns)}
+      </section>
+    `).join('')}
+  `);
+}
+
+function presenceRows(days) {
+  const db = getDatabase();
+  return db.prepare(`
+    WITH event_stats AS (
+      SELECT
+        ep.discord_id,
+        COUNT(DISTINCT ep.event_id) AS events,
+        COALESCE(SUM(COALESCE(ep.manual_seconds, ep.calculated_seconds, 0)), 0) AS event_seconds,
+        COALESCE(SUM(ep.payout_amount), 0) AS payout,
+        MAX(e.started_at) AS last_event_at
+      FROM event_participants ep
+      JOIN events e ON e.id = ep.event_id
+      WHERE COALESCE(ep.is_spectator, 0) = 0
+        AND COALESCE(e.started_at, e.created_at) >= datetime('now', @window)
+      GROUP BY ep.discord_id
+    ),
+    voice_stats AS (
+      SELECT
+        discord_id,
+        COUNT(*) AS sessions,
+        COALESCE(SUM(seconds), 0) AS voice_seconds,
+        MAX(COALESCE(left_at, joined_at)) AS last_voice_at
+      FROM voice_sessions
+      WHERE joined_at >= datetime('now', @window)
+      GROUP BY discord_id
+    )
+    SELECT
+      u.discord_id,
+      u.discord_name,
+      u.albion_name,
+      u.registration_status,
+      COALESCE(es.events, 0) AS events,
+      COALESCE(es.event_seconds, 0) AS event_seconds,
+      COALESCE(es.payout, 0) AS payout,
+      es.last_event_at,
+      COALESCE(vs.sessions, 0) AS voice_sessions,
+      COALESCE(vs.voice_seconds, 0) AS voice_seconds,
+      vs.last_voice_at
+    FROM users u
+    LEFT JOIN event_stats es ON es.discord_id = u.discord_id
+    LEFT JOIN voice_stats vs ON vs.discord_id = u.discord_id
+    ORDER BY event_seconds DESC, voice_seconds DESC, COALESCE(u.albion_name, u.discord_name, u.discord_id) COLLATE NOCASE
+  `).all({ window: `-${Number(days || 30)} days` });
+}
+
+function renderPresenceHtml(rows, days) {
+  const printableRows = rows.map((row) => ({
+    discord_id: row.discord_id,
+    discord_name: row.discord_name || '',
+    albion_name: row.albion_name || '',
+    status: row.registration_status || '',
+    events: row.events,
+    event_time: durationText(row.event_seconds),
+    voice_sessions: row.voice_sessions,
+    voice_time: durationText(row.voice_seconds),
+    payout: formatSilver(row.payout),
+    last_event_at: shortDate(row.last_event_at),
+    last_voice_at: shortDate(row.last_voice_at)
+  }));
+  return baseHtml(`Presenca ${days} dias`, `
+    <h1>Relatorio de presenca</h1>
+    <p class="muted">Janela: ultimos ${Number(days || 30)} dias. Gerado em ${escapeHtml(new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }))}</p>
+    ${htmlTable(printableRows, ['discord_id', 'discord_name', 'albion_name', 'status', 'events', 'event_time', 'voice_sessions', 'voice_time', 'payout', 'last_event_at', 'last_voice_at'])}
+  `);
+}
+
+function baseHtml(title, body) {
+  return `<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escapeHtml(title)}</title>
+  <style>
+    body { margin: 0; background: #111827; color: #e5e7eb; font-family: Arial, sans-serif; }
+    main { max-width: 1180px; margin: 0 auto; padding: 24px; }
+    h1 { margin: 0 0 8px; font-size: 28px; }
+    h2 { margin: 28px 0 10px; font-size: 18px; }
+    h2 span { color: #f59e0b; font-size: 14px; }
+    .muted { color: #9ca3af; }
+    .table-actions { display: flex; justify-content: flex-end; margin: 0 0 8px; }
+    button { border: 0; border-radius: 7px; padding: 8px 10px; background: #2563eb; color: #fff; font-weight: 800; cursor: pointer; }
+    table { width: 100%; border-collapse: collapse; background: #1f2937; border: 1px solid #374151; border-radius: 8px; overflow: hidden; margin-bottom: 16px; }
+    th, td { padding: 8px 10px; border-bottom: 1px solid #374151; text-align: left; vertical-align: top; }
+    th { background: #030712; position: sticky; top: 0; }
+    tr:hover td { background: rgba(255,255,255,.04); }
+    code { color: #bfdbfe; }
+    @media (max-width: 760px) { main { padding: 12px; } table { font-size: 12px; } th, td { padding: 6px; } }
+  </style>
+</head>
+<body><main>${body}</main>
+<script>
+function csvCell(value) {
+  const text = String(value == null ? '' : value);
+  return /[",\\n\\r]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
+}
+function downloadSiblingTableCsv(button, name) {
+  const table = button.closest('.table-actions')?.nextElementSibling;
+  if (!table) return;
+  const rows = Array.from(table.querySelectorAll('tr')).map((tr) => Array.from(tr.children).map((cell) => csvCell(cell.innerText.trim())).join(',')).join('\\n');
+  const blob = new Blob([rows], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = (name || document.title || 'relatorio').toLowerCase().replace(/[^a-z0-9_-]+/g, '-') + '.csv';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>`;
+}
+
+function htmlTable(rows, columns) {
+  if (!rows.length) return '<p class="muted">Nada pendente.</p>';
+  return `<div class="table-actions"><button onclick="downloadSiblingTableCsv(this, 'tabela')">Baixar CSV</button></div><table data-report-table><thead><tr>${columns.map((column) => `<th>${escapeHtml(column)}</th>`).join('')}</tr></thead><tbody>${rows.map((row) => (
+    `<tr>${columns.map((column) => `<td>${escapeHtml(row[column] ?? '')}</td>`).join('')}</tr>`
+  )).join('')}</tbody></table>`;
+}
+
 function count(db, sql) {
   return Number(db.prepare(sql).get()?.total || 0);
+}
+
+function bytesText(bytes) {
+  const value = Number(bytes || 0);
+  if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(2)} MB`;
+  if (value >= 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${value} B`;
+}
+
+function durationText(seconds) {
+  const value = Math.max(0, Number(seconds || 0));
+  const hours = Math.floor(value / 3600);
+  const minutes = Math.floor((value % 3600) / 60);
+  if (hours > 0) return `${hours}h${String(minutes).padStart(2, '0')}m`;
+  return `${minutes}m`;
+}
+
+function shortDate(value) {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+}
+
+function truncate(value, max) {
+  const text = String(value || '');
+  return text.length > max ? `${text.slice(0, max - 20)}\n... texto cortado` : text;
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function lastBackupLabel(db) {
@@ -337,6 +820,21 @@ function saoPauloNowParts() {
   return { weekday: weekdays[weekdayText] ?? 0, hour };
 }
 
+function saoPauloHour() {
+  return Number(saoPauloNowParts().hour || 0);
+}
+
+function saoPauloDateKey(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
 function weekKey() {
   const now = new Date();
   const start = new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
@@ -346,11 +844,17 @@ function weekKey() {
 }
 
 module.exports = {
+  adminDailyReportPayload,
   adminMenuPayload,
   adminPanelPayload,
+  backupTestPayload,
+  memberProfilePayload,
   pendingQueuePayload,
+  pendingQueueHtmlPayload,
+  postDailyAdminReportIfNeeded,
   postMonthlyInactivityPreviewIfNeeded,
   postWeeklyAlbionReminderIfNeeded,
+  presenceReportPayload,
   refreshPendingQueueMessage,
   weeklyChecklistText
 };
