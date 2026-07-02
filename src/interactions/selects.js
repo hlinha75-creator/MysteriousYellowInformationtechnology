@@ -29,8 +29,15 @@ async function handleSelect(interaction) {
 
   if (scope === 'event' && action === 'join') {
     const role = interaction.values[0];
-    await events.joinEvent(interaction, Number(id), role);
-    return interaction.reply({ content: `Voce entrou como ${role}.`, flags: MessageFlags.Ephemeral });
+    try {
+      await events.joinEvent(interaction, Number(id), role);
+    } catch (error) {
+      if (String(error.message || '').includes('Nao ha vaga')) {
+        return interaction.reply({ content: error.message, flags: MessageFlags.Ephemeral });
+      }
+      throw error;
+    }
+    return interaction.reply({ content: `Voce entrou como ${roleLabel(role)}.`, flags: MessageFlags.Ephemeral });
   }
 
   if (scope === 'event_raid_weapon_select' && action === 'weapon') {
@@ -194,10 +201,10 @@ function input(id, label, value = '', placeholder = null, required = true) {
 
 function roleLabel(role) {
   const labels = {
-    tank: 'tank',
-    healer: 'healer',
-    support: 'sup',
-    dps: 'dps'
+    tank: 'Tank',
+    healer: 'Healer',
+    support: 'Suporte',
+    dps: 'DPS'
   };
   return labels[role] || role;
 }

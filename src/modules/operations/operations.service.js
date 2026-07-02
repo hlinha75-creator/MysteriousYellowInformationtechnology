@@ -359,10 +359,28 @@ function memberProfilePayload(userId) {
     WHERE discord_id = ?
   `).get(userId);
   const career = db.prepare(`
-    SELECT weapon_name, points
+    SELECT
+      CASE weapon_key
+        WHEN 'classe_tank' THEN 'Tank'
+        WHEN 'classe_healer' THEN 'Healer'
+        WHEN 'classe_support' THEN 'Suporte'
+        WHEN 'classe_dps' THEN 'DPS'
+        WHEN 'classe_caller' THEN 'Caller'
+        ELSE weapon_name
+      END AS weapon_name,
+      points
     FROM raid_avalon_weapon_career
     WHERE discord_id = ?
-    ORDER BY points DESC, weapon_name COLLATE NOCASE
+      AND weapon_key LIKE 'classe_%'
+    ORDER BY
+      CASE weapon_key
+        WHEN 'classe_tank' THEN 1
+        WHEN 'classe_healer' THEN 2
+        WHEN 'classe_support' THEN 3
+        WHEN 'classe_dps' THEN 4
+        WHEN 'classe_caller' THEN 5
+        ELSE 99
+      END
     LIMIT 8
   `).all(userId);
 

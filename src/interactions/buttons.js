@@ -105,6 +105,7 @@ const publicEventActions = new Set([
   'raid_role',
   'raid_helper',
   'join_role',
+  'change_role',
   'auto_join',
   'spectate',
   'pause',
@@ -456,9 +457,27 @@ async function handleButton(interaction) {
       const helperName = await events.joinRaidAvalonHelper(interaction, eventId, extra);
       return interaction.reply({ content: `Voce entrou como ${helperName}.`, flags: MessageFlags.Ephemeral });
     }
+    if (action === 'change_role') {
+      const select = eventRoleChangeSelect(event, interaction.user.id);
+      if (!select) {
+        return interaction.reply({ content: 'Nao ha funcoes disponiveis para trocar neste evento.', flags: MessageFlags.Ephemeral });
+      }
+      return interaction.reply({
+        content: 'Escolha sua nova funcao:',
+        components: [select],
+        flags: MessageFlags.Ephemeral
+      });
+    }
     if (action === 'join_role') {
       const role = extra;
-      await events.joinEvent(interaction, eventId, role);
+      try {
+        await events.joinEvent(interaction, eventId, role);
+      } catch (error) {
+        if (String(error.message || '').includes('Nao ha vaga')) {
+          return interaction.reply({ content: error.message, flags: MessageFlags.Ephemeral });
+        }
+        throw error;
+      }
       return interaction.reply({ content: `Voce entrou como ${roleLabel(role)}.`, flags: MessageFlags.Ephemeral });
     }
     if (action === 'auto_join') {
@@ -1336,7 +1355,8 @@ function careerRebuildPreviewText(preview) {
     '**Previa do recalculo de carreira**',
     '',
     'Esse processo vai apagar a carreira atual e recriar a partir dos eventos aprovados.',
-    'Ele usa o ledger para evitar ponto duplicado por evento/membro/arma.',
+    'Ele usa o ledger para evitar ponto duplicado por evento/membro/categoria.',
+    'Regra nova: Tank, Healer, Suporte, DPS e Caller. Scout/Looter contam como Suporte.',
     '',
     `Eventos aprovados encontrados: ${preview.approvedEvents}`,
     `Eventos com pontos: ${preview.eventsWithPoints}`,
@@ -1431,6 +1451,49 @@ function raidWeaponSlotSelect(eventId, discordId) {
       .setPlaceholder('Escolher vaga da Raid Avalon')
       .addOptions(options)
   );
+}
+
+function eventRoleChangeSelect(event, discordId) {
+  if (!event) return null;
+  const participants = eventsRepo.listParticipants(event.id);
+  const current = participants.find((participant) => participant.discord_id === discordId && !participant.is_spectator);
+  const roleSlots = [
+    ['tank', Number(event.tank_slots || 0)],
+    ['healer', Number(event.healer_slots || 0)],
+    ['support', Number(event.support_slots || 0)],
+    ['dps', Number(event.dps_slots || 0)]
+  ];
+  const options = roleSlots.map(([role, slots]) => {
+    const usedByOthers = participants.filter((participant) => (
+      participant.role === role && !participant.is_spectator && participant.discord_id !== discordId
+    )).length;
+    const isCurrent = current?.role === role;
+    if (!isCurrent && usedByOthers >= slots) return null;
+    if (slots <= 0 && !isCurrent) return null;
+    return {
+      label: rolePlainLabel(role),
+      value: role,
+      description: isCurrent ? 'Sua funcao atual' : `${usedByOthers}/${slots} ocupado(s)`
+    };
+  }).filter(Boolean);
+
+  if (!options.length) return null;
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`event:join:${event.id}`)
+      .setPlaceholder('Escolher nova funcao')
+      .addOptions(options)
+  );
+}
+
+function rolePlainLabel(role) {
+  const labels = {
+    tank: 'Tank',
+    healer: 'Healer',
+    support: 'Suporte',
+    dps: 'DPS'
+  };
+  return labels[role] || role;
 }
 
 function roleLabel(role) {

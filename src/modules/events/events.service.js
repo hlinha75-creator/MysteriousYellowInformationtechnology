@@ -58,9 +58,15 @@ const emojiRefs = {
 const raidAvalonSlots = { tank: 3, healer: 3, support: 3, dps: 11 };
 const raidAvalonWeaponSlots = {
   tank: ['Martelo', 'Incubus', 'Quebra Reinos'],
-  healer: ['Hallow', 'Fallen', 'Raiz'],
-  support: ['SC', 'Danacao', 'Enig'],
+  healer: ['Fallen', 'Raiz', 'Hallow'],
+  support: ['SC', 'Enig', 'Danacao'],
   dps: ['Aguia', 'Uivo Frio', 'Furabruma', 'Repetidor 1', 'Repetidor 2', 'Repetidor 3', 'Repetidor 4', 'Repetidor 5', 'Repetidor 6', 'Repetidor 7', 'Repetidor 8']
+};
+const raidAvalonUnlockRules = {
+  raiz: 6,
+  quebra_reinos: 7,
+  danacao: 8,
+  hallow: 9
 };
 const raidAvalonWeapons = Object.fromEntries(
   Object.entries(raidAvalonWeaponSlots).map(([role, weapons]) => [role, [...new Set(weapons)]])
@@ -169,6 +175,17 @@ const defaultFunctionByRole = {
   healer: 'Hallow',
   support: 'SC',
   dps: 'Furabruma'
+};
+const careerCategories = {
+  tank: { key: 'classe_tank', name: 'Tank' },
+  healer: { key: 'classe_healer', name: 'Healer' },
+  support: { key: 'classe_support', name: 'Suporte' },
+  dps: { key: 'classe_dps', name: 'DPS' },
+  caller: { key: 'classe_caller', name: 'Caller' }
+};
+const careerHelperCategories = {
+  scout: 'support',
+  looter: 'support'
 };
 
 function eventEmbed(event, participants = []) {
@@ -287,6 +304,7 @@ function roleOccupants(event, participants, role) {
 
 function raidRoleSlotsSummary(participants, role) {
   const roleParticipants = participants.filter((p) => p.role === role && !p.is_spectator);
+  const dpsCount = raidDpsCount(participants);
   const remaining = new Map();
   for (const participant of roleParticipants) {
     const raid = repo.getRaidAvalonParticipant({ eventId: participant.event_id, discordId: participant.discord_id });
@@ -300,8 +318,9 @@ function raidRoleSlotsSummary(participants, role) {
     const key = weaponKey(weapon);
     const match = remaining.get(key)?.shift();
     const label = `${weaponEmoji(weapon)} ${weapon}`.trim();
+    if (!match && !isRaidWeaponUnlocked(weapon, dpsCount)) return `${label} \u{1F512} libera com ${raidWeaponRequiredDps(weapon)} DPS`;
     if (!match) return `${label} \u{1F7E2} Livre`;
-    const count = careerPointsForWeapon(match.participant.discord_id, match.raid.weapon_name || weapon);
+    const count = careerPointsForCategory(match.participant.discord_id, role);
     return `${label} <@${match.participant.discord_id}> | ${match.raid.item_power || '?'} IP (${count})`;
   });
 
@@ -314,8 +333,22 @@ function raidHelpersSummary(participants) {
   return helpers.map((participant) => {
     const raid = repo.getRaidAvalonParticipant({ eventId: participant.event_id, discordId: participant.discord_id });
     const label = raid?.helper_role ? raidAvalonHelpers[raid.helper_role] || raid.helper_role : 'Assistir';
-    return `<@${participant.discord_id}> - ${label}`;
+    const countText = careerHelperCategories[raid?.helper_role] ? ` (${careerPointsForCategory(participant.discord_id, 'support')})` : '';
+    return `<@${participant.discord_id}> - ${label}${countText}`;
   }).join('\n');
+}
+
+function raidDpsCount(participants) {
+  return participants.filter((participant) => participant.role === 'dps' && !participant.is_spectator).length;
+}
+
+function raidWeaponRequiredDps(weapon) {
+  return raidAvalonUnlockRules[weaponKey(weapon)] || 0;
+}
+
+function isRaidWeaponUnlocked(weapon, dpsCount) {
+  const required = raidWeaponRequiredDps(weapon);
+  return required <= 0 || Number(dpsCount || 0) >= required;
 }
 
 function raidParticipantLabel(participant) {
@@ -370,6 +403,7 @@ function eventComponents(event) {
     ));
     rows.push(new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId(`event:spectate:${event.id}:raid`).setLabel('Assistir').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`event:raid_slot:${event.id}:raid`).setLabel('Trocar vaga').setStyle(ButtonStyle.Primary),
       ...Object.entries(raidAvalonHelpers).map(([key, label]) => new ButtonBuilder()
         .setCustomId(`event:raid_helper:${event.id}:${key}`)
         .setLabel(label)
@@ -382,6 +416,13 @@ function eventComponents(event) {
         .setLabel(roleButtonLabel(role))
         .setEmoji(roleButtonEmoji(role))
         .setStyle(roleConfigs[role].style))
+    ));
+  } else if (event.status === 'running') {
+    rows.push(new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`event:change_role:${event.id}:main`)
+        .setLabel('Trocar funcao')
+        .setStyle(ButtonStyle.Primary)
     ));
   }
 
@@ -517,6 +558,9 @@ async function refreshRunningEventMessages(client) {
 async function joinEvent(interaction, eventId, role) {
   const event = repo.getEvent(eventId);
   if (!event || !['created', 'running'].includes(event.status)) throw new Error('Evento nao esta aberto.');
+  if (!canJoinEventRole(event, interaction.user.id, role)) {
+    throw new Error(`Nao ha vaga livre para ${roleButtonLabel(role)} neste evento.`);
+  }
   repo.upsertParticipant({ eventId, discordId: interaction.user.id, role, isSpectator: 0 });
   await addEventRoleToMember(interaction.guild, event, interaction.user.id).catch(() => {});
   audit.createAuditLog({ type: 'event_joined', actorId: interaction.user.id, targetId: String(eventId), afterValue: role });
@@ -524,6 +568,18 @@ async function joinEvent(interaction, eventId, role) {
     await ensureParticipantVoiceSession(interaction, event);
   }
   await refreshEventMessage(interaction.client, eventId);
+}
+
+function canJoinEventRole(event, discordId, role) {
+  if (!eventRoles.includes(role)) return false;
+  const slots = Number(event[roleConfigs[role].slots] || 0);
+  const participants = repo.listParticipants(event.id);
+  const current = participants.find((participant) => participant.discord_id === discordId && !participant.is_spectator);
+  if (current?.role === role) return true;
+  const used = participants.filter((participant) => (
+    participant.role === role && !participant.is_spectator && participant.discord_id !== discordId
+  )).length;
+  return slots > used;
 }
 
 async function joinRaidAvalonRole(interaction, { eventId, role, weapon, itemPower }) {
@@ -536,6 +592,11 @@ async function joinRaidAvalonRole(interaction, { eventId, role, weapon, itemPowe
     .listRaidAvalonParticipants(eventId)
     .find((participant) => participant.weapon_key === normalizedWeaponKey && participant.discord_id !== interaction.user.id);
   if (occupied) throw new Error(`A vaga ${normalizedWeapon} ja esta ocupada por <@${occupied.discord_id}>.`);
+  const currentParticipant = repo.getRaidAvalonParticipant({ eventId, discordId: interaction.user.id });
+  const isKeepingOwnSlot = currentParticipant?.weapon_key === normalizedWeaponKey;
+  if (!isKeepingOwnSlot && !isRaidWeaponUnlocked(normalizedWeapon, raidDpsCount(repo.listParticipants(eventId)))) {
+    throw new Error(`${normalizedWeapon} libera com ${raidWeaponRequiredDps(normalizedWeapon)} DPS inscritos.`);
+  }
   repo.upsertParticipant({ eventId, discordId: interaction.user.id, role, isSpectator: 0 });
   await addEventRoleToMember(interaction.guild, event, interaction.user.id).catch(() => {});
   repo.upsertRaidAvalonParticipant({
@@ -1348,11 +1409,13 @@ function raidWeaponRoleOptions(eventId, role, discordId) {
   for (const participant of repo.listRaidAvalonParticipants(eventId)) {
     if (participant.weapon_key) occupied.set(participant.weapon_key, participant.discord_id);
   }
+  const dpsCount = raidDpsCount(repo.listParticipants(eventId));
 
   return (raidAvalonWeaponSlots[role] || []).map((weapon) => {
     const key = weaponKey(weapon);
     const owner = occupied.get(key);
     if (owner && owner !== discordId) return null;
+    if (!owner && !isRaidWeaponUnlocked(weapon, dpsCount)) return null;
     return {
       label: weapon,
       value: key,
@@ -1366,11 +1429,13 @@ function raidWeaponSlotOptions(eventId, discordId) {
   for (const participant of repo.listRaidAvalonParticipants(eventId)) {
     if (participant.weapon_key) occupied.set(participant.weapon_key, participant.discord_id);
   }
+  const dpsCount = raidDpsCount(repo.listParticipants(eventId));
 
   return eventRoles.flatMap((role) => (raidAvalonWeaponSlots[role] || []).map((weapon) => {
     const key = weaponKey(weapon);
     const owner = occupied.get(key);
     if (owner && owner !== discordId) return null;
+    if (!owner && !isRaidWeaponUnlocked(weapon, dpsCount)) return null;
     return {
       label: weapon,
       value: `${role}|${key}`,
@@ -1404,8 +1469,9 @@ function raidWeaponInfoKey(role, keyOrName) {
 
 async function grantRaidAvalonRewards({ guild, eventId, actorId = null }) {
   repo.refreshParticipantSeconds(eventId);
+  const event = repo.getEvent(eventId);
   const isRaid = Boolean(repo.getRaidAvalonEventMeta(eventId));
-  const participants = repo.listParticipants(eventId).filter((participant) => !participant.is_spectator);
+  const participants = repo.listParticipants(eventId);
   let granted = 0;
   let points = 0;
   let skipped = 0;
@@ -1413,129 +1479,101 @@ async function grantRaidAvalonRewards({ guild, eventId, actorId = null }) {
 
   for (const participant of participants) {
     const seconds = participant.manual_seconds ?? participant.calculated_seconds ?? 0;
-    const role = normalizeParticipantRole(participant.role);
+    const category = careerCategoryForParticipant(eventId, participant);
     const functionName = eventFunctionName(eventId, participant);
-    const pointInfo = careerPointInfo({ eventId, participant, role, functionName, seconds, source: 'event_approval' });
+    const pointInfo = careerPointInfo({ eventId, discordId: participant.discord_id, category, seconds, source: 'event_approval' });
     if (!pointInfo) {
       skipped += 1;
       continue;
     }
 
-    let roleId = null;
-    if (isRaid) {
+    if (isRaid && !participant.is_spectator && functionName) {
       const member = await guild.members.fetch(participant.discord_id).catch(() => null);
       const roleName = `Raid Avalon - ${functionName}`;
       let discordRole = guild.roles.cache.find((item) => item.name.toLowerCase() === roleName.toLowerCase());
       if (!discordRole) {
         discordRole = await guild.roles.create({ name: roleName, mentionable: false, reason: `Tag da funcao ${functionName} na Raid Avalon` }).catch(() => null);
       }
-      roleId = discordRole?.id || null;
       if (member && discordRole && !member.roles.cache.has(discordRole.id)) {
         const added = await member.roles.add(discordRole, `Completou Raid Avalon com ${functionName}`).then(() => true).catch(() => false);
         if (added) granted += 1;
       }
     }
 
-    const classResult = repo.addCareerPointTransaction({ ...pointInfo.classEntry, createdBy: actorId });
-    const weaponResult = repo.addCareerPointTransaction({ ...pointInfo.weaponEntry, roleId, createdBy: actorId });
+    const result = repo.addCareerPointTransaction({ ...pointInfo.entry, createdBy: actorId });
+    points += result.points;
+    if (!result.inserted) duplicates += 1;
+  }
 
-    points += classResult.points + weaponResult.points;
-    if (!classResult.inserted && !weaponResult.inserted) duplicates += 1;
+  const callerInfo = careerCallerPointInfo({ event, participants, source: 'event_approval' });
+  if (callerInfo) {
+    const result = repo.addCareerPointTransaction({ ...callerInfo.entry, createdBy: actorId });
+    points += result.points;
+    if (!result.inserted) duplicates += 1;
   }
 
   await refreshRaidAvalonCareerPanel(guild.client).catch(() => {});
   return { granted, points, skipped, duplicates };
 }
 
-function careerPointInfo({ eventId, participant, role, functionName, seconds, source }) {
+function careerPointInfo({ eventId, discordId, category, seconds, source }) {
   const pointsToAdd = Math.floor(Number(seconds || 0) / 1800);
-  if (pointsToAdd <= 0 || !role || !functionName) return null;
-  const weapon = careerWeaponInfo(functionName);
+  const info = careerCategoryInfo(category);
+  if (pointsToAdd <= 0 || !discordId || !info) return null;
   return {
-    classEntry: {
+    entry: {
       eventId,
-      discordId: participant.discord_id,
-      pointType: 'class',
-      role,
-      weaponKey: `classe_${role}`,
-      weaponName: `Classe ${roleButtonLabel(role)}`,
+      discordId,
+      pointType: category === 'caller' ? 'caller' : 'class',
+      role: category,
+      weaponKey: info.key,
+      weaponName: info.name,
       seconds,
       points: pointsToAdd,
       source
     },
-    weaponEntry: {
-      eventId,
-      discordId: participant.discord_id,
-      pointType: 'weapon',
-      role,
-      weaponKey: weapon.key,
-      weaponName: weapon.name,
-      seconds,
-      points: pointsToAdd,
-      source
-    },
-    points: pointsToAdd * 2
+    points: pointsToAdd
   };
 }
 
-function careerPointsForWeapon(discordId, functionName) {
-  return careerWeaponKeys(functionName)
-    .map((key) => repo.getRaidAvalonCareer({ discordId, weaponKey: key })?.points || 0)
-    .reduce((total, points) => total + Number(points || 0), 0);
+function careerCallerPointInfo({ event, participants, source }) {
+  if (!event?.creator_id) return null;
+  const creatorParticipant = participants.find((participant) => participant.discord_id === event.creator_id);
+  const participantSeconds = creatorParticipant
+    ? creatorParticipant.manual_seconds ?? creatorParticipant.calculated_seconds ?? 0
+    : 0;
+  const seconds = participantSeconds > 0 ? participantSeconds : eventDurationSeconds(event);
+  return careerPointInfo({
+    eventId: event.id,
+    discordId: event.creator_id,
+    category: 'caller',
+    seconds,
+    source
+  });
 }
 
-function careerWeaponKeys(functionName) {
-  const rawKey = weaponKey(functionName);
-  const canonical = careerWeaponInfo(functionName).key;
-  const aliases = Object.entries(careerWeaponAliases)
-    .filter(([, value]) => value === canonical)
-    .map(([key]) => key);
-  return [...new Set([canonical, rawKey, ...aliases])].filter(Boolean);
+function careerCategoryForParticipant(eventId, participant) {
+  if (!participant?.is_spectator) return normalizeParticipantRole(participant.role);
+  const raid = repo.getRaidAvalonParticipant({ eventId, discordId: participant.discord_id });
+  return careerHelperCategories[raid?.helper_role] || null;
 }
 
-const careerWeaponAliases = {
-  quebra: 'quebra_reinos',
-  realbreaker: 'quebra_reinos',
-  real_breaker: 'quebra_reinos',
-  queda_santa: 'hallow',
-  quesasanta: 'hallow',
-  corrompido: 'fallen',
-  raiz_ferrea: 'raiz',
-  iron: 'raiz',
-  ironroot: 'raiz',
-  iron_root: 'raiz',
-  shadow: 'sc',
-  shadow_caller: 'sc',
-  chama_sombra: 'sc',
-  damnation: 'danacao',
-  lightcaller: 'aguia',
-  light_caller: 'aguia',
-  lc: 'aguia',
-  chill: 'uivo_frio',
-  mist: 'furabruma',
-  fura_bruma: 'furabruma'
-};
+function careerCategoryInfo(category) {
+  return careerCategories[category] || null;
+}
 
-const careerWeaponNames = {
-  martelo: 'Martelo',
-  incubus: 'Incubus',
-  quebra_reinos: 'Quebra Reinos',
-  hallow: 'Hallow',
-  fallen: 'Fallen',
-  raiz: 'Raiz',
-  sc: 'SC',
-  danacao: 'Danacao',
-  enig: 'Enig',
-  aguia: 'Aguia',
-  uivo_frio: 'Uivo Frio',
-  furabruma: 'Furabruma',
-  repetidor: 'Repetidor'
-};
+function careerPointsForCategory(discordId, category) {
+  const info = careerCategoryInfo(category);
+  if (!info) return 0;
+  return Number(repo.getRaidAvalonCareer({ discordId, weaponKey: info.key })?.points || 0);
+}
 
-function careerWeaponInfo(functionName) {
-  const key = weaponKey(functionName);
-  const canonicalKey = /^repetidor_\d+$/.test(key) ? 'repetidor' : (careerWeaponAliases[key] || key);
-  return { key: canonicalKey, name: careerWeaponNames[canonicalKey] || functionName };
+function eventDurationSeconds(event) {
+  if (!event?.started_at) return 0;
+  const start = Date.parse(event.started_at);
+  const end = Date.parse(event.ended_at || new Date().toISOString());
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return 0;
+  return Math.max(0, Math.floor((end - start) / 1000));
 }
 
 function previewCareerRebuild() {
@@ -1563,16 +1601,14 @@ function buildCareerRebuildPlan({ refreshSeconds = false, createdBy = null } = {
   for (const event of events) {
     if (refreshSeconds) repo.refreshParticipantSeconds(event.id);
     let eventPoints = 0;
-    const participants = repo.listParticipants(event.id).filter((participant) => !participant.is_spectator);
+    const participants = repo.listParticipants(event.id);
     for (const participant of participants) {
       const seconds = participant.manual_seconds ?? participant.calculated_seconds ?? 0;
-      const role = normalizeParticipantRole(participant.role);
-      const functionName = eventFunctionName(event.id, participant);
+      const category = careerCategoryForParticipant(event.id, participant);
       const pointInfo = careerPointInfo({
         eventId: event.id,
-        participant,
-        role,
-        functionName,
+        discordId: participant.discord_id,
+        category,
         seconds,
         source: 'career_rebuild'
       });
@@ -1580,12 +1616,19 @@ function buildCareerRebuildPlan({ refreshSeconds = false, createdBy = null } = {
         skipped += 1;
         continue;
       }
-      entries.push({ ...pointInfo.classEntry, createdBy });
-      entries.push({ ...pointInfo.weaponEntry, createdBy });
+      entries.push({ ...pointInfo.entry, createdBy });
       participantsWithPoints += 1;
       eventPoints += pointInfo.points;
       members.add(participant.discord_id);
     }
+
+    const callerInfo = careerCallerPointInfo({ event, participants, source: 'career_rebuild' });
+    if (callerInfo) {
+      entries.push({ ...callerInfo.entry, createdBy });
+      eventPoints += callerInfo.points;
+      members.add(event.creator_id);
+    }
+
     if (eventPoints > 0) eventsWithPoints += 1;
   }
 
@@ -1647,38 +1690,50 @@ async function deleteDuplicateCareerPanelMessages(channel, keepMessageId, botId)
 function isCareerPanelMessage(message, botId) {
   if (botId && message.author?.id !== botId) return false;
   const title = message.embeds?.[0]?.title || '';
-  return ['Raid Avalon - carreira por arma', 'Carreira geral por arma'].includes(title);
+  return ['Raid Avalon - carreira por arma', 'Carreira geral por arma', 'Carreira PvE por categoria'].includes(title);
 }
 
 function raidAvalonCareerPanelPayload() {
-  const weaponRows = repo.listRaidAvalonCareerByWeapon(16);
+  const categoryRows = repo.listRaidAvalonCareerByWeapon(16);
   const memberRows = repo.listRaidAvalonCareer(12);
-  const weaponLines = weaponRows.map((row, index) => {
+  const categoryLines = categoryRows.map((row, index) => {
     const totalUses = Math.floor(Number(row.points || 0));
-    return `${index + 1}. ${weaponEmoji(row.weapon_name)} **${row.weapon_name}** - ${totalUses} ponto(s) | ${row.members} membro(s)`;
+    return `${index + 1}. ${careerCategoryEmoji(row.weapon_key)} **${row.weapon_name}** - ${totalUses} ponto(s) | ${row.members} membro(s)`;
   });
   const memberLines = memberRows.map((row, index) => {
-    return `${index + 1}. <@${row.discord_id}> | ${weaponEmoji(row.weapon_name)} ${row.weapon_name} | ${row.points} ponto(s)`;
+    return `${index + 1}. <@${row.discord_id}> | ${careerCategoryEmoji(row.weapon_key)} ${row.weapon_name} | ${row.points} ponto(s)`;
   });
 
   return {
     embeds: [
       new EmbedBuilder()
-        .setTitle('Carreira geral por arma')
+        .setTitle('Carreira PvE por categoria')
         .setDescription([
           'Conta qualquer content aprovado no financeiro.',
-          'Regra: 30 minutos = 1 ponto na classe e 1 ponto na arma/funcao.',
+          'Regra: 30 minutos = 1 ponto na categoria jogada. Criador tambem soma Caller.',
+          'Scout e Looter contam como Suporte. Assistir nao conta.',
           '',
-          '**Armas mais usadas**',
-          weaponLines.length ? weaponLines.join('\n') : 'Nenhum ponto registrado ainda.',
+          '**Categorias**',
+          categoryLines.length ? categoryLines.join('\n') : 'Nenhum ponto registrado ainda.',
           '',
-          '**Top membros por arma**',
+          '**Top membros por categoria**',
           memberLines.length ? memberLines.join('\n') : 'Nenhum ponto registrado ainda.'
         ].join('\n'))
         .setColor(0x805ad5)
         .setTimestamp(new Date())
     ]
   };
+}
+
+function careerCategoryEmoji(key) {
+  const emojis = {
+    classe_tank: formatCustomEmoji(emojiRefs.role.tank) || '\u{1F6E1}\uFE0F',
+    classe_healer: formatCustomEmoji(emojiRefs.role.healer) || '\u{1F49A}',
+    classe_support: formatCustomEmoji(emojiRefs.role.support) || '\u{1F7E1}',
+    classe_dps: formatCustomEmoji(emojiRefs.role.dps) || '\u2694\uFE0F',
+    classe_caller: '\u{1F4E3}'
+  };
+  return emojis[key] || '';
 }
 
 function normalizeParticipantRole(role) {

@@ -358,9 +358,25 @@ function countCareerPointTransactions() {
 function listRaidAvalonCareer(limit = 30) {
   return getDatabase()
     .prepare(`
-      SELECT *
+      SELECT
+        discord_id,
+        weapon_key,
+        CASE weapon_key
+          WHEN 'classe_tank' THEN 'Tank'
+          WHEN 'classe_healer' THEN 'Healer'
+          WHEN 'classe_support' THEN 'Suporte'
+          WHEN 'classe_dps' THEN 'DPS'
+          WHEN 'classe_caller' THEN 'Caller'
+          ELSE weapon_name
+        END AS weapon_name,
+        points,
+        role_id,
+        first_tag_at,
+        last_point_at,
+        updated_at
       FROM raid_avalon_weapon_career
       WHERE points > 0
+        AND weapon_key LIKE 'classe_%'
       ORDER BY points DESC, updated_at DESC
       LIMIT ?
     `)
@@ -372,14 +388,30 @@ function listRaidAvalonCareerByWeapon(limit = 20) {
     .prepare(`
       SELECT
         weapon_key,
-        weapon_name,
+        CASE weapon_key
+          WHEN 'classe_tank' THEN 'Tank'
+          WHEN 'classe_healer' THEN 'Healer'
+          WHEN 'classe_support' THEN 'Suporte'
+          WHEN 'classe_dps' THEN 'DPS'
+          WHEN 'classe_caller' THEN 'Caller'
+          ELSE weapon_name
+        END AS weapon_name,
         COUNT(*) AS members,
         SUM(points) AS points
       FROM raid_avalon_weapon_career
       WHERE points > 0
-        AND weapon_key NOT LIKE 'classe_%'
-      GROUP BY weapon_key, weapon_name
-      ORDER BY points DESC, members DESC, weapon_name COLLATE NOCASE
+        AND weapon_key LIKE 'classe_%'
+      GROUP BY weapon_key
+      ORDER BY
+        CASE weapon_key
+          WHEN 'classe_tank' THEN 1
+          WHEN 'classe_healer' THEN 2
+          WHEN 'classe_support' THEN 3
+          WHEN 'classe_dps' THEN 4
+          WHEN 'classe_caller' THEN 5
+          ELSE 99
+        END,
+        points DESC
       LIMIT ?
     `)
     .all(limit);
