@@ -1,0 +1,10 @@
+{
+  "enabled": true,
+  "version": "1.23",
+  "title": "Correcoes e bugs dos relatorios",
+  "notes": [
+    "Relatorio diario ADM agora inclui HTML com mais detalhes.",
+    "Painel /setup ajustado para evitar erro de botoes.",
+    "Atualizacoes do bot agora aparecem apenas no canal ADM."
+  ]
+}

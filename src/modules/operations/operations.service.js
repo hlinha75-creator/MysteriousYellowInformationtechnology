@@ -5,6 +5,8 @@ const {
   ButtonStyle,
   EmbedBuilder
 } = require('discord.js');
+const fs = require('fs');
+const path = require('path');
 const ids = require('../../config/ids');
 const { getDatabase } = require('../../database/connection');
 const { testLatestBackupRestore } = require('../../database/backup');
@@ -13,6 +15,7 @@ const inactiveEvents = require('../members/inactiveEvents.service');
 const inactiveGuests = require('../members/inactiveGuests.service');
 
 const dailyAdminRecipients = ['1436716667894759475', '1276439186513203234'];
+const releaseFilePath = path.resolve(__dirname, '../../../RELEASE.json');
 
 function pendingQueuePayload() {
   const summary = pendingSummary();
@@ -291,6 +294,61 @@ async function postDailyAdminReportIfNeeded(client) {
     VALUES (?, ?, ?, ?)
   `).run(key, 'admin_daily_report', String(sent), 'dm');
   return { sent };
+}
+
+async function postReleaseAnnouncementIfNeeded(client) {
+  const release = readReleaseFile();
+  if (!release?.enabled || !release.version) return null;
+
+  const key = `release-announcement:${release.version}`;
+  const db = getDatabase();
+  const existing = db.prepare('SELECT reminder_key FROM operation_reminders WHERE reminder_key = ?').get(key);
+  if (existing) return null;
+
+  const channelId = ids.channels.pveCareer;
+  const channel = await client.channels.fetch(channelId).catch(() => null);
+  if (!channel?.isTextBased()) return null;
+
+  const notes = Array.isArray(release.notes) ? release.notes.filter(Boolean).slice(0, 8) : [];
+  const embed = new EmbedBuilder()
+    .setTitle(`NOTAG Bot atualizado v${release.version}`)
+    .setDescription(release.title || 'Atualizacao do bot.')
+    .addFields({
+      name: 'O que mudou',
+      value: notes.length ? notes.map((note) => `- ${String(note).slice(0, 180)}`).join('\n') : 'Sem detalhes informados.',
+      inline: false
+    })
+    .setColor(0x4f46e5)
+    .setTimestamp(new Date());
+
+  const message = await channel.send({
+    embeds: [embed],
+    allowedMentions: { parse: [] }
+  });
+
+  db.prepare(`
+    INSERT INTO operation_reminders (reminder_key, type, message_id, channel_id)
+    VALUES (?, ?, ?, ?)
+  `).run(key, 'release_announcement', message.id, channel.id);
+
+  return message;
+}
+
+function readReleaseFile() {
+  if (!fs.existsSync(releaseFilePath)) return null;
+
+  try {
+    const data = JSON.parse(fs.readFileSync(releaseFilePath, 'utf8'));
+    return {
+      enabled: data.enabled !== false,
+      version: String(data.version || '').trim(),
+      title: String(data.title || '').trim(),
+      notes: Array.isArray(data.notes) ? data.notes.map((note) => String(note).trim()).filter(Boolean) : []
+    };
+  } catch (error) {
+    console.error('Falha ao ler RELEASE.json:', error);
+    return null;
+  }
 }
 
 function backupTestPayload() {
@@ -1122,6 +1180,7 @@ module.exports = {
   pendingQueueHtmlPayload,
   postDailyAdminReportIfNeeded,
   postMonthlyInactivityPreviewIfNeeded,
+  postReleaseAnnouncementIfNeeded,
   postWeeklyAlbionReminderIfNeeded,
   presenceReportPayload,
   refreshPendingQueueMessage,
