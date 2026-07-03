@@ -187,6 +187,7 @@ function adminDailyReportPayload() {
   const events = eventsLast24h();
   const campaign = campaignSummary();
   const backup = testLatestBackupRestore();
+  const guildHealth = guildHealthReport();
 
   const embed = new EmbedBuilder()
     .setTitle(`Relatorio ADM - ${today}`)
@@ -234,6 +235,24 @@ function adminDailyReportPayload() {
         ].filter(Boolean).join('\n'),
         inline: false
       },
+      {
+        name: 'Comunidade 24h',
+        value: [
+          `Entraram: ${guildHealth.memberEvents.joins.length}`,
+          `Sairam: ${guildHealth.memberEvents.leaves.length}`,
+          `30m+ em voz: ${guildHealth.voiceOver30.length}`,
+          `Pico de voz UTC: ${guildHealth.peakHour ? `${guildHealth.peakHour.hour}:00 (${guildHealth.peakHour.users} pessoas)` : 'sem dados'}`
+        ].join('\n'),
+        inline: false
+      },
+      {
+        name: 'Atencao cadastro',
+        value: [
+          `Nao registrados quase sem voz: ${guildHealth.unregisteredLowVoice.length}`,
+          'Detalhes no HTML anexado.'
+        ].join('\n'),
+        inline: false
+      },
       { name: 'Rotina semanal Albion', value: weeklyChecklistText(), inline: false }
     )
     .setColor(backup.ok ? 0x38a169 : 0xd69e2e)
@@ -242,6 +261,11 @@ function adminDailyReportPayload() {
   return {
     content: 'Relatorio diario do NOTAG Bot.',
     embeds: [embed],
+    files: [
+      new AttachmentBuilder(Buffer.from(renderDailyAdminHtml({ today, finance, events, campaign, backup, guildHealth }), 'utf8'), {
+        name: `relatorio-adm-diario-${today}.html`
+      })
+    ],
     allowedMentions: { parse: [] }
   };
 }
@@ -255,12 +279,11 @@ async function postDailyAdminReportIfNeeded(client) {
   const existing = db.prepare('SELECT reminder_key FROM operation_reminders WHERE reminder_key = ?').get(key);
   if (existing) return null;
 
-  const payload = adminDailyReportPayload();
   let sent = 0;
   for (const userId of dailyAdminRecipients) {
     const user = await client.users.fetch(userId).catch(() => null);
     if (!user) continue;
-    await user.send(payload).then(() => { sent += 1; }).catch(() => {});
+    await user.send(adminDailyReportPayload()).then(() => { sent += 1; }).catch(() => {});
   }
 
   db.prepare(`
@@ -562,6 +585,253 @@ function campaignSummary() {
     contributors,
     pending,
     percent: goal > 0 ? Math.min(100, (raised / goal) * 100) : 0
+  };
+}
+
+function guildHealthReport() {
+  const db = getDatabase();
+  const memberEvents = {
+    joins: db.prepare(`
+      SELECT discord_id, discord_name, display_name, albion_name, registration_status, created_at
+      FROM guild_member_events
+      WHERE event_type = 'join'
+        AND created_at >= datetime('now', '-1 day')
+      ORDER BY created_at DESC
+    `).all(),
+    leaves: db.prepare(`
+      SELECT discord_id, discord_name, display_name, albion_name, registration_status, created_at
+      FROM guild_member_events
+      WHERE event_type = 'leave'
+        AND created_at >= datetime('now', '-1 day')
+      ORDER BY created_at DESC
+    `).all()
+  };
+
+  const voiceOver30 = db.prepare(`
+    SELECT
+      vs.discord_id,
+      COALESCE(u.discord_name, MAX(vs.discord_name), vs.discord_id) AS discord_name,
+      u.albion_name,
+      COALESCE(u.registration_status, 'desconhecido') AS registration_status,
+      COUNT(*) AS sessions,
+      COALESCE(SUM(vs.seconds), 0) AS seconds,
+      MAX(COALESCE(vs.left_at, vs.joined_at)) AS last_voice_at
+    FROM voice_sessions vs
+    LEFT JOIN users u ON u.discord_id = vs.discord_id
+    WHERE vs.joined_at >= datetime('now', '-1 day')
+    GROUP BY vs.discord_id
+    HAVING seconds >= 1800
+    ORDER BY seconds DESC
+  `).all();
+
+  const voiceSessions = db.prepare(`
+    SELECT discord_id, discord_name, channel_name, joined_at, left_at, seconds
+    FROM voice_sessions
+    WHERE joined_at >= datetime('now', '-1 day')
+       OR COALESCE(left_at, joined_at) >= datetime('now', '-1 day')
+    ORDER BY joined_at ASC
+  `).all();
+  const hourlyFlow = computeHourlyVoiceFlow(voiceSessions);
+  const peakHour = hourlyFlow.reduce((best, row) => {
+    if (!best) return row;
+    if (row.users > best.users) return row;
+    if (row.users === best.users && row.minutes > best.minutes) return row;
+    return best;
+  }, null);
+
+  const unregisteredLowVoice = db.prepare(`
+    WITH voice_30d AS (
+      SELECT
+        discord_id,
+        COALESCE(SUM(seconds), 0) AS seconds,
+        MAX(COALESCE(left_at, joined_at)) AS last_voice_at
+      FROM voice_sessions
+      WHERE joined_at >= datetime('now', '-30 days')
+      GROUP BY discord_id
+    )
+    SELECT
+      u.discord_id,
+      u.discord_name,
+      u.albion_name,
+      u.registration_status,
+      COALESCE(v.seconds, 0) AS seconds_30d,
+      v.last_voice_at,
+      u.created_at,
+      u.updated_at
+    FROM users u
+    LEFT JOIN voice_30d v ON v.discord_id = u.discord_id
+    WHERE COALESCE(u.registration_status, 'unregistered') IN ('unregistered', 'pending')
+      AND COALESCE(v.seconds, 0) < 1800
+    ORDER BY COALESCE(v.seconds, 0) ASC, u.created_at ASC
+    LIMIT 200
+  `).all();
+
+  return {
+    memberEvents,
+    voiceOver30,
+    hourlyFlow,
+    peakHour,
+    unregisteredLowVoice
+  };
+}
+
+function computeHourlyVoiceFlow(sessions) {
+  const now = new Date();
+  const windowStart = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const buckets = [];
+
+  for (let index = 0; index < 24; index += 1) {
+    const start = new Date(windowStart.getTime() + index * 60 * 60 * 1000);
+    const end = new Date(start.getTime() + 60 * 60 * 1000);
+    buckets.push({
+      hour: `${String(start.getUTCHours()).padStart(2, '0')}`,
+      start,
+      end,
+      usersSet: new Set(),
+      minutes: 0
+    });
+  }
+
+  for (const session of sessions) {
+    const joined = parseDate(session.joined_at);
+    const left = parseDate(session.left_at) || now;
+    if (!joined || left <= windowStart) continue;
+    const sessionStart = joined < windowStart ? windowStart : joined;
+    const sessionEnd = left > now ? now : left;
+    if (sessionEnd <= sessionStart) continue;
+
+    for (const bucket of buckets) {
+      const overlapMs = Math.min(sessionEnd.getTime(), bucket.end.getTime()) - Math.max(sessionStart.getTime(), bucket.start.getTime());
+      if (overlapMs <= 0) continue;
+      bucket.usersSet.add(session.discord_id);
+      bucket.minutes += overlapMs / 60000;
+    }
+  }
+
+  return buckets.map((bucket) => ({
+    hour: bucket.hour,
+    users: bucket.usersSet.size,
+    minutes: Math.round(bucket.minutes)
+  }));
+}
+
+function parseDate(value) {
+  if (!value) return null;
+  const text = String(value);
+  const date = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(text) ? text : `${text.replace(' ', 'T')}Z`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function renderDailyAdminHtml({ today, finance, events, campaign, backup, guildHealth }) {
+  const flowMax = Math.max(1, ...guildHealth.hourlyFlow.map((row) => row.users));
+  const cards = [
+    ['Entraram 24h', guildHealth.memberEvents.joins.length],
+    ['Sairam 24h', guildHealth.memberEvents.leaves.length],
+    ['30m+ em voz', guildHealth.voiceOver30.length],
+    ['Pendentes cadastro/voz baixa', guildHealth.unregisteredLowVoice.length],
+    ['Eventos criados 24h', events.created],
+    ['Eventos aprovados 24h', events.approved],
+    ['Entrou saldo 24h', formatSilver(finance.inflow)],
+    ['Saiu saldo 24h', formatSilver(Math.abs(finance.outflow))]
+  ];
+
+  return baseHtml(`Relatorio ADM ${today}`, `
+    <style>
+      .cards { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:10px; margin:18px 0; }
+      .card { background:#1f2937; border:1px solid #374151; border-radius:8px; padding:12px; }
+      .card span { display:block; color:#9ca3af; font-size:12px; }
+      .card strong { display:block; margin-top:4px; font-size:22px; }
+      .bars { display:grid; gap:8px; margin:12px 0 22px; }
+      .bar-row { display:grid; grid-template-columns:54px 1fr 90px; gap:8px; align-items:center; }
+      .bar-track { height:18px; background:#111827; border:1px solid #374151; border-radius:999px; overflow:hidden; }
+      .bar-fill { height:100%; background:#38bdf8; border-radius:999px; }
+      .section-note { color:#9ca3af; margin:-4px 0 10px; }
+      @media (max-width: 860px) { .cards { grid-template-columns:repeat(2, minmax(0, 1fr)); } .bar-row { grid-template-columns:44px 1fr 70px; } }
+      @media (max-width: 560px) { .cards { grid-template-columns:1fr; } }
+    </style>
+    <h1>Relatorio ADM diario</h1>
+    <p class="muted">Janela principal: ultimas 24 horas. Horarios de fluxo em UTC. Gerado em ${escapeHtml(new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }))}.</p>
+    <div class="cards">
+      ${cards.map(([label, value]) => `<div class="card"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join('')}
+    </div>
+
+    <section>
+      <h2>Fluxo por horario UTC <span>${guildHealth.peakHour ? `pico ${guildHealth.peakHour.hour}:00` : 'sem dados'}</span></h2>
+      <p class="section-note">Conta pessoas unicas ativas em call dentro de cada hora, considerando sessoes que atravessam horarios.</p>
+      <div class="bars">
+        ${guildHealth.hourlyFlow.map((row) => `
+          <div class="bar-row">
+            <strong>${escapeHtml(row.hour)}:00</strong>
+            <div class="bar-track"><div class="bar-fill" style="width:${Math.max(2, Math.round((row.users / flowMax) * 100))}%"></div></div>
+            <span>${row.users} / ${row.minutes}m</span>
+          </div>
+        `).join('')}
+      </div>
+    </section>
+
+    <section>
+      <h2>Pessoas com 30m+ em voz nas ultimas 24h <span>${guildHealth.voiceOver30.length}</span></h2>
+      ${htmlTable(guildHealth.voiceOver30.map((row) => ({
+        discord_id: row.discord_id,
+        discord_name: row.discord_name || '',
+        albion_name: row.albion_name || '',
+        status: row.registration_status || '',
+        sessoes: row.sessions,
+        tempo: durationText(row.seconds),
+        ultima_voz: shortDate(row.last_voice_at)
+      })), ['discord_id', 'discord_name', 'albion_name', 'status', 'sessoes', 'tempo', 'ultima_voz'])}
+    </section>
+
+    <section>
+      <h2>Entraram no servidor <span>${guildHealth.memberEvents.joins.length}</span></h2>
+      ${htmlTable(guildHealth.memberEvents.joins.map(memberEventRow), ['discord_id', 'discord_name', 'display_name', 'albion_name', 'status', 'quando'])}
+    </section>
+
+    <section>
+      <h2>Sairam do servidor <span>${guildHealth.memberEvents.leaves.length}</span></h2>
+      ${htmlTable(guildHealth.memberEvents.leaves.map(memberEventRow), ['discord_id', 'discord_name', 'display_name', 'albion_name', 'status', 'quando'])}
+    </section>
+
+    <section>
+      <h2>Quase nunca entram e nao se registraram <span>${guildHealth.unregisteredLowVoice.length}</span></h2>
+      <p class="section-note">Status unregistered/pending e menos de 30 minutos em voz nos ultimos 30 dias.</p>
+      ${htmlTable(guildHealth.unregisteredLowVoice.map((row) => ({
+        discord_id: row.discord_id,
+        discord_name: row.discord_name || '',
+        albion_name: row.albion_name || '',
+        status: row.registration_status || '',
+        voz_30d: durationText(row.seconds_30d),
+        ultima_voz: shortDate(row.last_voice_at),
+        entrou_no_banco: shortDate(row.created_at)
+      })), ['discord_id', 'discord_name', 'albion_name', 'status', 'voz_30d', 'ultima_voz', 'entrou_no_banco'])}
+    </section>
+
+    <section>
+      <h2>Backup e meta</h2>
+      ${htmlTable([
+        {
+          item: 'Backup',
+          valor: backup.ok ? 'OK' : 'ATENCAO',
+          detalhe: backup.latest ? `${backup.latest.name} (${bytesText(backup.latest.size)})` : 'Nenhum backup encontrado'
+        },
+        {
+          item: 'Meta 900m',
+          valor: campaign ? `${formatSilver(campaign.raised)} / ${formatSilver(campaign.goal)}` : 'sem meta aberta',
+          detalhe: campaign ? `${campaign.percent.toFixed(1)}%, ${campaign.contributors} contribuidores, ${campaign.pending} pendentes` : ''
+        }
+      ], ['item', 'valor', 'detalhe'])}
+    </section>
+  `);
+}
+
+function memberEventRow(row) {
+  return {
+    discord_id: row.discord_id,
+    discord_name: row.discord_name || '',
+    display_name: row.display_name || '',
+    albion_name: row.albion_name || '',
+    status: row.registration_status || '',
+    quando: shortDate(row.created_at)
   };
 }
 

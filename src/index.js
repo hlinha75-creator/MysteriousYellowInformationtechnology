@@ -78,6 +78,7 @@ client.on('error', (error) => {
 });
 
 client.on('guildMemberAdd', registration.handleGuildMemberAdd);
+client.on('guildMemberRemove', registration.handleGuildMemberRemove);
 client.on('voiceStateUpdate', voice.handleVoiceStateUpdate);
 client.on('interactionCreate', handleInteraction);
 client.on('messageCreate', (message) => {

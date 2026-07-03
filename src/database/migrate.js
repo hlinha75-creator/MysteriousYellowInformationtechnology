@@ -827,6 +827,30 @@ const migrations = [
           ON albion_stats_ocr_submissions (target_discord_id, created_at);
       `);
     }
+  },
+  {
+    version: 27,
+    name: 'guild_member_events',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS guild_member_events (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          event_type TEXT NOT NULL,
+          discord_id TEXT NOT NULL,
+          discord_name TEXT,
+          display_name TEXT,
+          albion_name TEXT,
+          registration_status TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_guild_member_events_type_created_at
+          ON guild_member_events (event_type, created_at);
+
+        CREATE INDEX IF NOT EXISTS idx_guild_member_events_discord_id_created_at
+          ON guild_member_events (discord_id, created_at);
+      `);
+    }
   }
 ];
 

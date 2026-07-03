@@ -12,7 +12,22 @@ async function handleGuildMemberAdd(member) {
     discordName: member.user.tag,
     registrationStatus: 'unregistered'
   });
+  repo.logGuildMemberEvent({
+    eventType: 'join',
+    discordId: member.id,
+    discordName: member.user.tag,
+    displayName: member.displayName
+  });
   await member.roles.add(ids.roles.noTag).catch((error) => console.error('Falha ao adicionar Sem Tag:', error));
+}
+
+async function handleGuildMemberRemove(member) {
+  repo.logGuildMemberEvent({
+    eventType: 'leave',
+    discordId: member.id,
+    discordName: member.user?.tag || member.displayName || member.id,
+    displayName: member.displayName
+  });
 }
 
 async function submitRegistration({ interaction, albionName }) {
@@ -316,6 +331,7 @@ module.exports = {
   applyPendingGuildRegistrationPreview,
   approveRegistration,
   handleGuildMemberAdd,
+  handleGuildMemberRemove,
   pendingGuildApplyAttachment,
   pendingGuildPreviewAttachment,
   pendingGuildPreviewText,

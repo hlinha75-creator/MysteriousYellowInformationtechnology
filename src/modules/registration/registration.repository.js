@@ -55,11 +55,31 @@ function updateRegistration({ id, status, reviewedBy, note }) {
     .run(status, reviewedBy, note || null, id);
 }
 
+function logGuildMemberEvent({ eventType, discordId, discordName, displayName }) {
+  const user = getUser(discordId) || {};
+  return getDatabase()
+    .prepare(`
+      INSERT INTO guild_member_events
+        (event_type, discord_id, discord_name, display_name, albion_name, registration_status)
+      VALUES
+        (@eventType, @discordId, @discordName, @displayName, @albionName, @registrationStatus)
+    `)
+    .run({
+      eventType,
+      discordId,
+      discordName: discordName || user.discord_name || null,
+      displayName: displayName || null,
+      albionName: user.albion_name || null,
+      registrationStatus: user.registration_status || null
+    });
+}
+
 module.exports = {
   createRegistration,
   getRegistration,
   getUser,
   listPendingRegistrations,
+  logGuildMemberEvent,
   updateRegistration,
   upsertUser
 };
