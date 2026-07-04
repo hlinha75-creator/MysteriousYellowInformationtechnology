@@ -6,6 +6,7 @@ const {
 } = require('discord.js');
 const ids = require('../../config/ids');
 const { getDatabase } = require('../../database/connection');
+const analytics = require('../analytics/analytics.service');
 const operations = require('../operations/operations.service');
 const staffTutorial = require('../tutorials/staffTutorial.service');
 
@@ -84,6 +85,11 @@ const panels = [
     type: 'staff_tutorial',
     channelId: ids.channels.staffTutorial,
     dynamic: staffTutorial.panelPayload
+  },
+  {
+    type: 'channel_usage',
+    channelId: ids.channels.pveCareer,
+    dynamic: analytics.channelUsagePanelPayload
   }
 ];
 

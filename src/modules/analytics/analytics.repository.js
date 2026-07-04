@@ -120,11 +120,56 @@ function summarizeVoiceHours(days = 30) {
     .all(`-${days} days`);
 }
 
+function textChannelStats(days = 30) {
+  return getDatabase()
+    .prepare(`
+      SELECT
+        channel_id AS channelId,
+        COALESCE(NULLIF(channel_name, ''), channel_id, 'Sem canal') AS channelName,
+        COUNT(*) AS activeEvents,
+        SUM(CASE WHEN event_type = 'message' THEN 1 ELSE 0 END) AS messages,
+        SUM(CASE WHEN event_type <> 'message' THEN 1 ELSE 0 END) AS interactions,
+        COUNT(DISTINCT user_id) AS uniqueUsers,
+        MAX(created_at) AS lastUsedAt
+      FROM server_usage_events
+      WHERE created_at >= datetime('now', ?)
+        AND channel_id IS NOT NULL
+        AND channel_id <> ''
+      GROUP BY channel_id, channel_name
+    `)
+    .all(`-${days} days`);
+}
+
+function voiceChannelStats(days = 30) {
+  return getDatabase()
+    .prepare(`
+      SELECT
+        channel_id AS channelId,
+        COALESCE(NULLIF(channel_name, ''), channel_id, 'Sem canal') AS channelName,
+        COALESCE(NULLIF(category_name, ''), 'Sem categoria') AS categoryName,
+        COUNT(*) AS sessions,
+        COUNT(DISTINCT discord_id) AS uniqueUsers,
+        SUM(
+          CASE
+            WHEN left_at IS NULL THEN CAST((julianday('now') - julianday(joined_at)) * 86400 AS INTEGER)
+            ELSE seconds
+          END
+        ) AS totalSeconds,
+        MAX(COALESCE(left_at, joined_at)) AS lastUsedAt
+      FROM voice_sessions
+      WHERE joined_at >= datetime('now', ?)
+      GROUP BY channel_id, channel_name, category_name
+    `)
+    .all(`-${days} days`);
+}
+
 module.exports = {
   recordEvent,
   summarizeChannels,
   summarizeUsage,
   summarizeVoiceChannels,
   summarizeVoiceHours,
-  summarizeVoiceMembers
+  summarizeVoiceMembers,
+  textChannelStats,
+  voiceChannelStats
 };

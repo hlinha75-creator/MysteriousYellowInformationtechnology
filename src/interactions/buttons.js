@@ -13,6 +13,7 @@ const deposit = require('../modules/deposit/deposit.service');
 const inactiveEvents = require('../modules/members/inactiveEvents.service');
 const inactiveGuests = require('../modules/members/inactiveGuests.service');
 const operations = require('../modules/operations/operations.service');
+const analytics = require('../modules/analytics/analytics.service');
 const staffTutorial = require('../modules/tutorials/staffTutorial.service');
 const campaigns = require('../modules/campaigns/campaigns.service');
 const { formatSilver } = require('../utils/silver');
@@ -170,6 +171,17 @@ async function handleButton(interaction) {
       await interaction.message.edit(statsOcr.reviewPayload(submission)).catch(() => {});
       return interaction.reply({ content: 'Leitura OCR marcada como ruim. Nenhum cargo foi alterado.', flags: MessageFlags.Ephemeral });
     }
+  }
+
+  if (scope === 'analytics' && action === 'channel_usage') {
+    if (!can(interaction.member, 'importCsv')) {
+      return interaction.reply({ content: 'Sem permissao para gerar relatorio de uso dos canais.', flags: MessageFlags.Ephemeral });
+    }
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    return interaction.editReply(await analytics.channelUsageReportPayload({
+      guild: interaction.guild,
+      days: Number(id || 30)
+    }));
   }
 
   if (scope === 'campaign' && ['donate_event', 'keep_event'].includes(action)) {

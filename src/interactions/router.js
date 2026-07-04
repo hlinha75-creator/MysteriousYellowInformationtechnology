@@ -3,10 +3,12 @@ const { handleButton } = require('./buttons');
 const { handleModal } = require('./modals');
 const { handleSelect } = require('./selects');
 const events = require('../modules/events/events.service');
+const analytics = require('../modules/analytics/analytics.service');
 const { MessageFlags } = require('discord.js');
 
 async function handleInteraction(interaction) {
   try {
+    analytics.trackInteraction(interaction);
     if (interaction.isChatInputCommand()) return await handleCommand(interaction);
     if (interaction.isButton()) return await handleButton(interaction);
     if (interaction.isStringSelectMenu() || interaction.isUserSelectMenu() || interaction.isChannelSelectMenu()) return await handleSelect(interaction);
