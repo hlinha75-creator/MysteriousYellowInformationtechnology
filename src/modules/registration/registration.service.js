@@ -1,8 +1,9 @@
-const { AttachmentBuilder } = require('discord.js');
+const { AttachmentBuilder, EmbedBuilder } = require('discord.js');
 const ids = require('../../config/ids');
 const audit = require('../audit/audit.repository');
 const repo = require('./registration.repository');
 const { parseCsv, toCsv } = require('../../utils/csv');
+const { safeSend } = require('../../utils/discord');
 
 const guildVerificationPreviews = new Map();
 
@@ -28,6 +29,41 @@ async function handleGuildMemberRemove(member) {
     discordName: member.user?.tag || member.displayName || member.id,
     displayName: member.displayName
   });
+  await postMemberLeftLog(member).catch((error) => console.error('Falha ao registrar saida de membro:', error));
+}
+
+async function postMemberLeftLog(member) {
+  const user = repo.getUser(member.id) || {};
+  const roles = member.roles?.cache
+    ? [...member.roles.cache.values()]
+      .filter((role) => role.id !== member.guild.id)
+      .sort((a, b) => b.position - a.position)
+      .map((role) => role.name)
+    : [];
+
+  await safeSend(member.client, ids.channels.memberExit, {
+    embeds: [
+      new EmbedBuilder()
+        .setTitle('Saida do servidor')
+        .setDescription(`<@${member.id}> saiu do Discord.`)
+        .addFields(
+          { name: 'Discord', value: `${member.user?.tag || member.displayName || 'desconhecido'}\nID: ${member.id}`, inline: true },
+          { name: 'Apelido', value: member.displayName || '-', inline: true },
+          { name: 'Albion', value: user.albion_name || '-', inline: true },
+          { name: 'Status cadastro', value: user.registration_status || '-', inline: true },
+          { name: 'Cargos anteriores', value: fieldText(roles.length ? roles.slice(0, 20).join(', ') : '-'), inline: false }
+        )
+        .setColor(0xe53e3e)
+        .setTimestamp(new Date())
+    ],
+    allowedMentions: { parse: [] }
+  });
+}
+
+function fieldText(value, maxLength = 1024) {
+  const text = String(value || '-').trim() || '-';
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength - 20)}\n... texto cortado`;
 }
 
 async function submitRegistration({ interaction, albionName }) {

@@ -1094,7 +1094,6 @@ function reviewEmbed(eventId) {
   repo.refreshParticipantSeconds(eventId);
   const allParticipants = repo.listParticipants(eventId);
   const participants = allParticipants.filter((participant) => !participant.is_spectator);
-  const spectators = allParticipants.filter((participant) => participant.is_spectator);
   const lines = participants.map((participant) => {
     const seconds = participant.manual_seconds ?? participant.calculated_seconds ?? 0;
     return `${raidParticipantLabel(participant)} | ${roleLabel(participant.role)} | ${formatDuration(seconds)} | ${formatSilver(participant.payout_amount)}`;
@@ -1106,39 +1105,10 @@ function reviewEmbed(eventId) {
     .addFields(
       { name: 'Loot liquido', value: formatSilver(review?.net_loot || 0), inline: true },
       { name: 'Evidencias', value: embedFieldValue(review?.evidence_notes || 'Anexe/cole DPS meter, fama total e CSV do loot logger no canal de revisao.'), inline: false },
-      { name: 'Resumo rapido', value: embedFieldValue(reviewSummaryText({ event, review, participants, spectators })), inline: false },
       ...embedLinesFields('Participantes', lines, 'Nenhum participante com tempo contabilizado.')
     )
     .setColor(0xd69e2e)
     .setTimestamp(new Date());
-}
-
-function reviewSummaryText({ event, review, participants, spectators }) {
-  const durationSeconds = event?.started_at
-    ? Math.max(0, Math.floor((Date.parse(event.ended_at || new Date().toISOString()) - Date.parse(event.started_at)) / 1000))
-    : 0;
-  const totalPayout = participants.reduce((sum, participant) => sum + Number(participant.payout_amount || 0), 0);
-  const zeroMinutes = participants.filter((participant) => Number(participant.manual_seconds ?? participant.calculated_seconds ?? 0) <= 0);
-  const topTime = participants
-    .map((participant) => ({
-      discordId: participant.discord_id,
-      role: participant.role,
-      seconds: Number(participant.manual_seconds ?? participant.calculated_seconds ?? 0),
-      payout: Number(participant.payout_amount || 0)
-    }))
-    .sort((a, b) => b.seconds - a.seconds)
-    .slice(0, 5);
-
-  return [
-    `Duracao: ${formatDuration(durationSeconds)}`,
-    `Participantes no split: ${participants.length}`,
-    `Espectadores/auxiliares: ${spectators.length}`,
-    `Distribuido: ${formatSilver(totalPayout)} de ${formatSilver(review?.net_loot || 0)}`,
-    zeroMinutes.length ? `Com 0min: ${zeroMinutes.length} (${zeroMinutes.slice(0, 5).map((participant) => `<@${participant.discord_id}>`).join(', ')}${zeroMinutes.length > 5 ? '...' : ''})` : 'Com 0min: nenhum',
-    '',
-    'Top tempo:',
-    ...topTime.map((row, index) => `${index + 1}. <@${row.discordId}> | ${roleLabel(row.role)} | ${formatDuration(row.seconds)} | ${formatSilver(row.payout)}`)
-  ].filter(Boolean).join('\n');
 }
 
 function embedFieldValue(value, maxLength = 1024) {

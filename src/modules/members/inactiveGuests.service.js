@@ -156,6 +156,38 @@ async function postArchiveLog(client, result) {
     }).catch(() => {});
   }
   await postPublicNotice(client, result, { fromRole: 'Convidado', toRole: 'Sem Tag' }).catch(() => {});
+  await postMemberExitLog(client, result).catch(() => {});
+}
+
+async function postMemberExitLog(client, result) {
+  const changed = result.results.filter((row) => row.result === 'convidado_para_sem_tag');
+  if (!changed.length) return;
+  const channel = await client.channels.fetch(ids.channels.memberExit).catch(() => null);
+  if (!channel?.isTextBased()) return;
+
+  const lines = changed.slice(0, 25).map((row, index) => (
+    `${index + 1}. <@${row.discord_id}> - ${row.albion_name || row.discord_name || row.discord_id} - ${row.reason}`
+  ));
+  const hidden = changed.length - lines.length;
+  if (hidden > 0) lines.push(`... e mais ${hidden}`);
+
+  await channel.send({
+    content: `<@&${ids.roles.noTag}> atualizado por inatividade de convidados.`,
+    embeds: [
+      new EmbedBuilder()
+        .setTitle('Movidos para Sem Tag por inatividade')
+        .setDescription([
+          `Total movido para <@&${ids.roles.noTag}>: ${changed.length}`,
+          `Acao aplicada por: <@${result.actorId}>`,
+          '',
+          lines.join('\n')
+        ].join('\n'))
+        .setColor(0xd69e2e)
+        .setTimestamp(new Date())
+    ],
+    files: [applyAttachment(result)],
+    allowedMentions: { roles: [], users: [result.actorId, ...changed.map((row) => row.discord_id)] }
+  });
 }
 
 async function postPublicNotice(client, result, { fromRole, toRole }) {
