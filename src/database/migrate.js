@@ -1,6 +1,19 @@
 const { getDatabase, transaction } = require('./connection');
 const { backupDatabase } = require('./backup');
 
+const defaultAccountLinks = [
+  {
+    primaryDiscordId: '1276439186513203234',
+    linkedDiscordId: '1276439186513203234',
+    label: 'Tmaiusculo'
+  },
+  {
+    primaryDiscordId: '1276439186513203234',
+    linkedDiscordId: '1436716667894759475',
+    label: 'Tmaiusculo'
+  }
+];
+
 const migrations = [
   {
     version: 1,
@@ -892,8 +905,85 @@ const migrations = [
           ON albion_fame_totals (crafting_fame DESC);
       `);
     }
+  },
+  {
+    version: 29,
+    name: 'linked_discord_accounts',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS linked_discord_accounts (
+          linked_discord_id TEXT PRIMARY KEY,
+          primary_discord_id TEXT NOT NULL,
+          label TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_linked_discord_accounts_primary
+          ON linked_discord_accounts (primary_discord_id);
+      `);
+
+      const linkStmt = db.prepare(`
+        INSERT INTO linked_discord_accounts (linked_discord_id, primary_discord_id, label)
+        VALUES (@linkedDiscordId, @primaryDiscordId, @label)
+        ON CONFLICT(linked_discord_id) DO UPDATE SET
+          primary_discord_id = excluded.primary_discord_id,
+          label = excluded.label,
+          updated_at = CURRENT_TIMESTAMP
+      `);
+
+      for (const link of defaultAccountLinks) {
+        linkStmt.run(link);
+      }
+
+      for (const link of defaultAccountLinks.filter((item) => item.linkedDiscordId !== item.primaryDiscordId)) {
+        const secondaryBalance = db.prepare('SELECT balance FROM balances WHERE discord_id = ?').get(link.linkedDiscordId);
+        if (secondaryBalance) {
+          db.prepare(`
+            INSERT INTO balances (discord_id, balance, updated_at)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(discord_id) DO UPDATE SET
+              balance = balance + excluded.balance,
+              updated_at = CURRENT_TIMESTAMP
+          `).run(link.primaryDiscordId, Number(secondaryBalance.balance || 0));
+          db.prepare('DELETE FROM balances WHERE discord_id = ?').run(link.linkedDiscordId);
+        }
+
+        db.prepare('UPDATE balance_transactions SET user_id = ? WHERE user_id = ?').run(link.primaryDiscordId, link.linkedDiscordId);
+        db.prepare('UPDATE withdraw_requests SET user_id = ? WHERE user_id = ?').run(link.primaryDiscordId, link.linkedDiscordId);
+        db.prepare('UPDATE payment_requests SET user_id = ? WHERE user_id = ?').run(link.primaryDiscordId, link.linkedDiscordId);
+        mergeCampaignEventPayouts(db, link.primaryDiscordId, link.linkedDiscordId);
+        db.prepare('UPDATE campaign_event_payouts SET user_id = ? WHERE user_id = ?').run(link.primaryDiscordId, link.linkedDiscordId);
+        db.prepare('UPDATE campaign_contributions SET user_id = ? WHERE user_id = ?').run(link.primaryDiscordId, link.linkedDiscordId);
+      }
+    }
   }
 ];
+
+function mergeCampaignEventPayouts(db, primaryDiscordId, linkedDiscordId) {
+  const conflicts = db.prepare(`
+    SELECT
+      linked.id AS linked_id,
+      primary_row.id AS primary_id,
+      linked.amount AS linked_amount
+    FROM campaign_event_payouts linked
+    JOIN campaign_event_payouts primary_row
+      ON primary_row.campaign_id = linked.campaign_id
+     AND primary_row.event_id = linked.event_id
+     AND primary_row.user_id = ?
+    WHERE linked.user_id = ?
+  `).all(primaryDiscordId, linkedDiscordId);
+
+  for (const row of conflicts) {
+    db.prepare(`
+      UPDATE campaign_event_payouts
+      SET amount = amount + ?,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(Number(row.linked_amount || 0), row.primary_id);
+    db.prepare('DELETE FROM campaign_event_payouts WHERE id = ?').run(row.linked_id);
+  }
+}
 
 function getAppliedVersions(db) {
   db.exec('CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)');

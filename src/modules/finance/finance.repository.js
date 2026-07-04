@@ -1,11 +1,14 @@
 const { getDatabase } = require('../../database/connection');
+const accountLinks = require('../accounts/accountLinks.service');
 
 function getBalance(userId) {
+  userId = accountLinks.resolvePrimaryUserId(userId);
   const row = getDatabase().prepare('SELECT balance FROM balances WHERE discord_id = ?').get(userId);
   return row?.balance || 0;
 }
 
 function ensureBalance(userId) {
+  userId = accountLinks.resolvePrimaryUserId(userId);
   getDatabase()
     .prepare('INSERT OR IGNORE INTO balances (discord_id, balance) VALUES (?, 0)')
     .run(userId);
@@ -13,6 +16,7 @@ function ensureBalance(userId) {
 }
 
 function setBalance({ userId, amount }) {
+  userId = accountLinks.resolvePrimaryUserId(userId);
   getDatabase()
     .prepare(`
       INSERT INTO balances (discord_id, balance, updated_at)
@@ -23,6 +27,7 @@ function setBalance({ userId, amount }) {
 }
 
 function insertTransaction({ type, userId, amount, beforeBalance, afterBalance, reason, referenceType, referenceId, createdBy }) {
+  userId = accountLinks.resolvePrimaryUserId(userId);
   return getDatabase()
     .prepare(`
       INSERT INTO balance_transactions
@@ -49,9 +54,14 @@ function listBalances() {
       SELECT b.discord_id, u.discord_name, u.albion_name, b.balance, b.updated_at AS last_updated
       FROM balances b
       LEFT JOIN users u ON u.discord_id = b.discord_id
+      LEFT JOIN linked_discord_accounts l
+        ON l.linked_discord_id = b.discord_id
+       AND l.primary_discord_id <> l.linked_discord_id
+      WHERE l.linked_discord_id IS NULL
       ORDER BY COALESCE(u.albion_name, u.discord_name, b.discord_id) COLLATE NOCASE
     `)
-    .all();
+    .all()
+    .map(enrichLinkedBalanceRow);
 }
 
 function listAllBalances() {
@@ -68,6 +78,10 @@ function listAllBalances() {
           COALESCE(u.albion_name, u.discord_name, u.discord_id) AS sort_name
         FROM users u
         LEFT JOIN balances b ON b.discord_id = u.discord_id
+        LEFT JOIN linked_discord_accounts l
+          ON l.linked_discord_id = u.discord_id
+         AND l.primary_discord_id <> l.linked_discord_id
+        WHERE l.linked_discord_id IS NULL
         UNION
         SELECT
           b.discord_id,
@@ -78,11 +92,16 @@ function listAllBalances() {
           b.discord_id AS sort_name
         FROM balances b
         LEFT JOIN users u ON u.discord_id = b.discord_id
+        LEFT JOIN linked_discord_accounts l
+          ON l.linked_discord_id = b.discord_id
+         AND l.primary_discord_id <> l.linked_discord_id
         WHERE u.discord_id IS NULL
+          AND l.linked_discord_id IS NULL
       )
       ORDER BY sort_name COLLATE NOCASE
     `)
-    .all();
+    .all()
+    .map(enrichLinkedBalanceRow);
 }
 
 function listTransactions(limit = 1000) {
@@ -92,6 +111,7 @@ function listTransactions(limit = 1000) {
 }
 
 function createWithdrawRequest({ userId, amount, note }) {
+  userId = accountLinks.resolvePrimaryUserId(userId);
   return getDatabase()
     .prepare('INSERT INTO withdraw_requests (user_id, amount, note) VALUES (?, ?, ?)')
     .run(userId, amount, note || null);
@@ -110,6 +130,7 @@ function getWithdrawRequest(id) {
 }
 
 function createPaymentRequest({ userId, amount, service, description, evidence }) {
+  userId = accountLinks.resolvePrimaryUserId(userId);
   return getDatabase()
     .prepare(`
       INSERT INTO payment_requests (user_id, amount, service, description, evidence)
@@ -126,6 +147,24 @@ function updatePaymentRequestStatus({ id, status, actorId }) {
 
 function getPaymentRequest(id) {
   return getDatabase().prepare('SELECT * FROM payment_requests WHERE id = ?').get(id);
+}
+
+function enrichLinkedBalanceRow(row) {
+  if (row.discord_name && row.albion_name) return row;
+  const linkedIds = accountLinks.linkedUserIds(row.discord_id);
+  if (linkedIds.length <= 1) return row;
+  const users = getDatabase()
+    .prepare(`SELECT discord_id, discord_name, albion_name FROM users WHERE discord_id IN (${accountLinks.placeholders(linkedIds)})`)
+    .all(...linkedIds);
+  const best = users.find((user) => user.discord_id === row.discord_id && user.albion_name)
+    || users.find((user) => user.albion_name)
+    || users.find((user) => user.discord_id === row.discord_id && user.discord_name)
+    || users.find((user) => user.discord_name);
+  return {
+    ...row,
+    discord_name: row.discord_name || best?.discord_name || null,
+    albion_name: row.albion_name || best?.albion_name || null
+  };
 }
 
 module.exports = {

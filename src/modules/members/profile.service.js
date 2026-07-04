@@ -4,6 +4,8 @@ const { getDatabase } = require('../../database/connection');
 const { formatSilver } = require('../../utils/silver');
 const { safeSend } = require('../../utils/discord');
 const albionFame = require('../albion/fame.service');
+const accountLinks = require('../accounts/accountLinks.service');
+const financeRepo = require('../finance/finance.repository');
 
 const careerKeys = [
   ['classe_tank', 'Tank'],
@@ -14,21 +16,22 @@ const careerKeys = [
 ];
 
 async function memberProfilePayload(userId, guild = null) {
-  const db = getDatabase();
-  const user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(userId);
-  const member = guild ? await guild.members.fetch(userId).catch(() => null) : null;
-  const displayName = member?.displayName || user?.discord_name || userId;
-  const guildMember = Boolean(member?.roles?.cache?.has(ids.roles.member) || user?.registration_status === 'member');
-  const finance = financeStats(userId);
-  const eventStats = eventParticipationStats(userId);
-  const voice = voiceStats(userId);
-  const career = careerStats(userId);
+  const link = accountLinks.linkInfo(userId);
+  const users = usersForIds(link.linkedIds);
+  const user = bestUser(users, link.primaryId);
+  const member = guild ? await bestGuildMember(guild, link.linkedIds, link.primaryId) : null;
+  const displayName = link.label || member?.displayName || user?.discord_name || link.primaryId || userId;
+  const guildMember = Boolean((await anyGuildMemberHasRole(guild, link.linkedIds, ids.roles.member)) || user?.registration_status === 'member');
+  const finance = financeStats(link);
+  const eventStats = eventParticipationStats(link.linkedIds);
+  const voice = voiceStats(link.linkedIds);
+  const career = careerStats(link.linkedIds);
   const fame = albionFame.getFameByAlbionName(user?.albion_name);
   const latestFame = albionFame.latestImport();
 
   const embed = new EmbedBuilder()
     .setTitle('Meu Perfil NOTAG')
-    .setDescription(`<@${userId}>`)
+    .setDescription(profileDescription(link))
     .addFields(
       {
         name: 'Cadastro',
@@ -100,7 +103,7 @@ async function memberProfilePayload(userId, guild = null) {
         new ButtonBuilder().setCustomId('profile:request_fame_update').setLabel('Solicitar ADM atualize').setStyle(ButtonStyle.Secondary)
       )
     ],
-    allowedMentions: { users: [userId] }
+    allowedMentions: { users: link.linkedIds }
   };
 }
 
@@ -113,22 +116,30 @@ async function rankHtmlPayload(guild = null) {
 }
 
 async function requestFameUpdate(interaction) {
-  const db = getDatabase();
-  const user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(interaction.user.id);
+  const link = accountLinks.linkInfo(interaction.user.id);
+  const user = bestUser(usersForIds(link.linkedIds), link.primaryId);
   await safeSend(interaction.client, ids.channels.pveCareer, {
     content: [
-      `Pedido de atualizacao de fama Albion: <@${interaction.user.id}>`,
+      `Pedido de atualizacao de fama Albion: <@${link.primaryId}>`,
       `Discord: ${interaction.member?.displayName || interaction.user.username}`,
       `Albion: ${user?.albion_name || 'nao cadastrado'}`,
+      link.isLinked ? `Contas vinculadas: ${link.linkedIds.map((id) => `<@${id}>`).join(' ')}` : null,
       'Atualize quando enviar/importar a planilha de fama total.'
-    ].join('\n'),
-    allowedMentions: { users: [interaction.user.id] }
+    ].filter(Boolean).join('\n'),
+    allowedMentions: { users: link.linkedIds }
   });
 }
 
 async function rankRows(guild = null) {
   const db = getDatabase();
   const users = db.prepare('SELECT * FROM users ORDER BY COALESCE(albion_name, discord_name, discord_id) COLLATE NOCASE').all();
+  const userGroups = new Map();
+  for (const user of users) {
+    const primaryId = accountLinks.resolvePrimaryUserId(user.discord_id);
+    if (!userGroups.has(primaryId)) userGroups.set(primaryId, []);
+    userGroups.get(primaryId).push(user);
+  }
+
   const fameOnly = albionFame.listFameTotals()
     .filter((row) => !row.discord_id)
     .map((row) => ({
@@ -140,19 +151,22 @@ async function rankRows(guild = null) {
     }));
 
   const rows = [];
-  for (const user of users) {
-    const finance = financeStats(user.discord_id);
-    const voice = voiceStats(user.discord_id);
-    const events = eventParticipationStats(user.discord_id);
-    const career = careerStats(user.discord_id);
+  for (const [primaryId, groupUsers] of userGroups.entries()) {
+    const linkedIds = accountLinks.linkedUserIds(primaryId);
+    const user = bestUser(groupUsers, primaryId);
+    const finance = financeStats({ primaryId, linkedIds });
+    const voice = voiceStats(linkedIds);
+    const events = eventParticipationStats(linkedIds);
+    const career = careerStats(linkedIds);
     const fame = albionFame.getFameByAlbionName(user.albion_name);
-    const member = guild?.members?.cache?.get(user.discord_id);
+    const member = await bestGuildMember(guild, linkedIds, primaryId);
+    const guildMember = Boolean((await anyGuildMemberHasRole(guild, linkedIds, ids.roles.member)) || user.registration_status === 'member');
     rows.push({
-      discord_id: user.discord_id,
+      discord_id: primaryId,
       discord_name: user.discord_name || member?.displayName || '',
       albion_name: user.albion_name || '',
       registration_status: user.registration_status || '',
-      guild_member: member?.roles?.cache?.has(ids.roles.member) || user.registration_status === 'member' ? 'sim' : 'nao',
+      guild_member: guildMember ? 'sim' : 'nao',
       balance: finance.balance,
       earned: finance.earned,
       withdrawn: finance.withdrawn,
@@ -203,16 +217,19 @@ async function rankRows(guild = null) {
   return rows.sort((a, b) => Number(b.event_seconds || 0) - Number(a.event_seconds || 0) || String(a.albion_name || a.discord_name).localeCompare(String(b.albion_name || b.discord_name), 'pt-BR'));
 }
 
-function financeStats(userId) {
+function financeStats(link) {
   const db = getDatabase();
-  const balance = db.prepare('SELECT COALESCE(balance, 0) AS balance FROM balances WHERE discord_id = ?').get(userId)?.balance || 0;
+  const idsToCheck = accountLinks.unique([link.primaryId, ...(link.linkedIds || [])]);
+  if (!idsToCheck.length) return { balance: 0, earned: 0, withdrawn: 0 };
+  const ph = accountLinks.placeholders(idsToCheck);
+  const balance = financeRepo.getBalance(link.primaryId);
   const row = db.prepare(`
     SELECT
       COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) AS earned,
       COALESCE(SUM(CASE WHEN amount < 0 AND type = 'withdraw_paid' THEN ABS(amount) ELSE 0 END), 0) AS withdrawn
     FROM balance_transactions
-    WHERE user_id = ?
-  `).get(userId);
+    WHERE user_id IN (${ph})
+  `).get(...idsToCheck);
   return {
     balance,
     earned: Number(row?.earned || 0),
@@ -220,27 +237,24 @@ function financeStats(userId) {
   };
 }
 
-function voiceStats(userId) {
+function voiceStats(userIds) {
   const db = getDatabase();
+  const idsToCheck = accountLinks.unique(userIds);
+  if (!idsToCheck.length) return { seconds: 0, rank: null };
+  const ph = accountLinks.placeholders(idsToCheck);
   const seconds = Number(db.prepare(`
     SELECT COALESCE(SUM(seconds), 0) AS seconds
     FROM voice_sessions
-    WHERE discord_id = ?
-  `).get(userId)?.seconds || 0);
-  const rank = seconds > 0 ? Number(db.prepare(`
-    WITH totals AS (
-      SELECT discord_id, COALESCE(SUM(seconds), 0) AS total_seconds
-      FROM voice_sessions
-      GROUP BY discord_id
-    )
-    SELECT COUNT(*) + 1 AS rank
-    FROM totals
-    WHERE total_seconds > ?
-  `).get(seconds)?.rank || 1) : null;
+    WHERE discord_id IN (${ph})
+  `).get(...idsToCheck)?.seconds || 0);
+  const rank = seconds > 0 ? voiceRank(seconds) : null;
   return { seconds, rank };
 }
 
-function eventParticipationStats(userId) {
+function eventParticipationStats(userIds) {
+  const idsToCheck = accountLinks.unique(userIds);
+  if (!idsToCheck.length) return { raid: 0, dg: 0, roaming: 0, hce: 0, hunt: 0, total: 0 };
+  const ph = accountLinks.placeholders(idsToCheck);
   const rows = getDatabase().prepare(`
     SELECT
       e.title,
@@ -248,9 +262,9 @@ function eventParticipationStats(userId) {
       COALESCE(ep.manual_seconds, ep.calculated_seconds, 0) AS seconds
     FROM event_participants ep
     JOIN events e ON e.id = ep.event_id
-    WHERE ep.discord_id = ?
+    WHERE ep.discord_id IN (${ph})
       AND COALESCE(ep.is_spectator, 0) = 0
-  `).all(userId);
+  `).all(...idsToCheck);
 
   const totals = { raid: 0, dg: 0, roaming: 0, hce: 0, hunt: 0, total: 0 };
   for (const row of rows) {
@@ -271,17 +285,25 @@ function classifyEvent(row) {
   return 'dg';
 }
 
-function careerStats(userId) {
+function careerStats(userIds) {
+  const idsToCheck = accountLinks.unique(userIds);
+  if (!idsToCheck.length) {
+    return {
+      pointsByKey: Object.fromEntries(careerKeys.map(([key]) => [key, 0])),
+      rankByKey: Object.fromEntries(careerKeys.map(([key]) => [key, null]))
+    };
+  }
+  const ph = accountLinks.placeholders(idsToCheck);
   const rows = getDatabase().prepare(`
     SELECT weapon_key, points
     FROM raid_avalon_weapon_career
-    WHERE discord_id = ?
+    WHERE discord_id IN (${ph})
       AND weapon_key LIKE 'classe_%'
-  `).all(userId);
+  `).all(...idsToCheck);
   const pointsByKey = Object.fromEntries(careerKeys.map(([key]) => [key, 0]));
   const rankByKey = {};
   for (const row of rows) {
-    pointsByKey[row.weapon_key] = Number(row.points || 0);
+    pointsByKey[row.weapon_key] = (pointsByKey[row.weapon_key] || 0) + Number(row.points || 0);
   }
   for (const [key] of careerKeys) {
     const points = pointsByKey[key] || 0;
@@ -291,12 +313,17 @@ function careerStats(userId) {
 }
 
 function careerRank(key, points) {
-  return Number(getDatabase().prepare(`
-    SELECT COUNT(*) + 1 AS rank
+  const totals = new Map();
+  const rows = getDatabase().prepare(`
+    SELECT discord_id, points
     FROM raid_avalon_weapon_career
     WHERE weapon_key = ?
-      AND points > ?
-  `).get(key, points)?.rank || 1);
+  `).all(key);
+  for (const row of rows) {
+    const primaryId = accountLinks.resolvePrimaryUserId(row.discord_id);
+    totals.set(primaryId, (totals.get(primaryId) || 0) + Number(row.points || 0));
+  }
+  return [...totals.values()].filter((total) => total > points).length + 1;
 }
 
 function careerLine(career, key, label) {
@@ -339,6 +366,65 @@ function normalizeText(value) {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase();
+}
+
+function usersForIds(userIds) {
+  const idsToCheck = accountLinks.unique(userIds);
+  if (!idsToCheck.length) return [];
+  return getDatabase()
+    .prepare(`SELECT * FROM users WHERE discord_id IN (${accountLinks.placeholders(idsToCheck)})`)
+    .all(...idsToCheck);
+}
+
+function bestUser(users, primaryId) {
+  return users.find((user) => user.discord_id === primaryId && user.albion_name)
+    || users.find((user) => user.albion_name)
+    || users.find((user) => user.discord_id === primaryId)
+    || users[0]
+    || { discord_id: primaryId, discord_name: primaryId, albion_name: null, registration_status: 'unregistered' };
+}
+
+async function bestGuildMember(guild, userIds, primaryId) {
+  if (!guild) return null;
+  const primary = await guild.members.fetch(primaryId).catch(() => null);
+  if (primary) return primary;
+  for (const userId of accountLinks.unique(userIds).filter((id) => id !== primaryId)) {
+    const member = await guild.members.fetch(userId).catch(() => null);
+    if (member) return member;
+  }
+  return null;
+}
+
+async function anyGuildMemberHasRole(guild, userIds, roleId) {
+  if (!guild || !roleId) return false;
+  for (const userId of accountLinks.unique(userIds)) {
+    const member = guild.members.cache.get(userId) || await guild.members.fetch(userId).catch(() => null);
+    if (member?.roles?.cache?.has(roleId)) return true;
+  }
+  return false;
+}
+
+function profileDescription(link) {
+  const lines = [`Conta principal: <@${link.primaryId}>`];
+  const linked = link.linkedIds.filter((id) => id !== link.primaryId);
+  if (linked.length) lines.push(`Conta vinculada: ${linked.map((id) => `<@${id}>`).join(' ')}`);
+  return lines.join('\n');
+}
+
+function voiceRank(seconds) {
+  const rows = getDatabase()
+    .prepare(`
+      SELECT discord_id, COALESCE(SUM(seconds), 0) AS seconds
+      FROM voice_sessions
+      GROUP BY discord_id
+    `)
+    .all();
+  const totals = new Map();
+  for (const row of rows) {
+    const primaryId = accountLinks.resolvePrimaryUserId(row.discord_id);
+    totals.set(primaryId, (totals.get(primaryId) || 0) + Number(row.seconds || 0));
+  }
+  return [...totals.values()].filter((total) => total > seconds).length + 1;
 }
 
 module.exports = {

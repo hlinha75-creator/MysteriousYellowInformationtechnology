@@ -1,4 +1,5 @@
 const { getDatabase } = require('../../database/connection');
+const accountLinks = require('../accounts/accountLinks.service');
 
 function getActiveCampaign() {
   return getDatabase()
@@ -48,6 +49,7 @@ function getCampaignTotals(campaignId) {
 }
 
 function createEventPayoutDecision({ campaignId, eventId, userId, amount, expiresAt, createdBy }) {
+  userId = accountLinks.resolvePrimaryUserId(userId);
   getDatabase()
     .prepare(`
       INSERT OR IGNORE INTO campaign_event_payouts
@@ -115,6 +117,7 @@ function setDecisionDmMessage({ id, messageId }) {
 }
 
 function insertContribution({ campaignId, userId, amount, sourceType, sourceId, createdBy, approvedBy, note }) {
+  userId = accountLinks.resolvePrimaryUserId(userId);
   return getDatabase()
     .prepare(`
       INSERT INTO campaign_contributions

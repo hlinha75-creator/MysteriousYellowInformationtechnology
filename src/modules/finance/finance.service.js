@@ -3,11 +3,14 @@ const { backupDatabase } = require('../../database/backup');
 const audit = require('../audit/audit.repository');
 const repo = require('./finance.repository');
 const { formatSilver } = require('../../utils/silver');
+const accountLinks = require('../accounts/accountLinks.service');
 
 const withdrawDrafts = new Map();
 const paymentRequestDrafts = new Map();
 
 function applyBalanceTransaction({ type, userId, amount, reason, referenceType, referenceId, createdBy }) {
+  const originalUserId = userId;
+  userId = accountLinks.resolvePrimaryUserId(userId);
   repo.ensureBalance(userId);
   const beforeBalance = repo.getBalance(userId);
   const afterBalance = beforeBalance + amount;
@@ -30,9 +33,9 @@ function applyBalanceTransaction({ type, userId, amount, reason, referenceType, 
     beforeValue: beforeBalance,
     afterValue: afterBalance,
     reason,
-    metadata: { amount, referenceType, referenceId }
+    metadata: { amount, referenceType, referenceId, originalUserId }
   });
-  return { type, userId, amount, reason, referenceType, referenceId, createdBy, beforeBalance, afterBalance };
+  return { type, userId, originalUserId, amount, reason, referenceType, referenceId, createdBy, beforeBalance, afterBalance };
 }
 
 const applyManyTransactions = transaction((items) => {

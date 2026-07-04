@@ -62,6 +62,22 @@ Bot:
 
 O dono e o owner do servidor Discord.
 
+## Contas Vinculadas
+
+Alguns membros podem ter mais de uma conta Discord representando o mesmo jogador Albion.
+
+Tmaiusculo:
+- conta principal: `1276439186513203234`;
+- conta vinculada/secundaria: `1436716667894759475`;
+- label publico: `Tmaiusculo`.
+
+Regras:
+- saldo, saque, pedido de pagamento, transacoes financeiras e contribuicoes de campanha usam sempre a conta principal;
+- perfil do membro e rank geral somam voz, eventos e carreira PvE das contas vinculadas;
+- a conta secundaria nao deve aparecer como saldo separado em exportacoes/listas financeiras;
+- ao migrar banco antigo, saldo e historico financeiro da secundaria devem ser absorvidos pela principal;
+- presenca em voz e participacao de evento podem continuar registradas no Discord ID real que entrou na call.
+
 ## Canais
 
 - Criar evento: `1481397653316178022`
