@@ -9,7 +9,6 @@ Principais tecnologias:
 - `discord.js`: conexao com Discord, comandos, botoes, modais e eventos.
 - `better-sqlite3`: banco SQLite local.
 - `dotenv`: variaveis de ambiente.
-- `tesseract.js`: OCR de prints/stats Albion.
 
 ## Entrada Principal
 
@@ -106,7 +105,7 @@ Cada modulo concentra uma area de negocio.
 
 | Modulo | Responsabilidade |
 | --- | --- |
-| `albion` | sincronizacao Albion, imports semanais, OCR de stats |
+| `albion` | sincronizacao Albion e imports semanais |
 | `analytics` | tracking de uso e relatorios/dashboard |
 | `auctions` | leiloes, lances, fechamento |
 | `audit` | logs de auditoria |

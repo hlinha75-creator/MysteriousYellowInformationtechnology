@@ -145,14 +145,26 @@ Fluxo seguro:
 
 ### `/sincronizar_albion`
 
-Sincroniza Discord x Albion, atualiza nicks no banco e resolve registros pendentes.
+Sincroniza dados manuais do Albion.
 
-Permissao interna: `approveRegistration`.
+Permissoes internas:
+
+- `tipo:membros`: `approveRegistration`.
+- `tipo:fama_total`: `importCsv`.
 
 Uso:
 
 ```text
-/sincronizar_albion arquivo:<csv-ou-tsv>
+/sincronizar_albion arquivo:<csv-ou-tsv> tipo:membros
+/sincronizar_albion arquivo:<csv-ou-tsv> tipo:fama_total
+```
+
+`tipo:membros` atualiza Discord x Albion, nicks no banco e registros pendentes.
+
+`tipo:fama_total` atualiza os dados manuais usados no perfil do membro. Aceita colunas como:
+
+```text
+Character Name,Total Fame,PvE,PvP,Coleta,Craft
 ```
 
 O bot mostra previa antes de aplicar.
@@ -348,13 +360,6 @@ Botoes:
 Botao:
 
 - **Baixar tutorial HTML**
-
-### Painel OCR Stats
-
-Botoes:
-
-- **Como usar**
-- revisao de OCR quando existir submissao pendente.
 
 ## Permissoes Internas
 

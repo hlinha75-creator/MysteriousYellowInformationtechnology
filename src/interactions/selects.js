@@ -2,7 +2,7 @@ const { ActionRowBuilder, MessageFlags, ModalBuilder, TextInputBuilder, TextInpu
 const events = require('../modules/events/events.service');
 const eventsRepo = require('../modules/events/events.repository');
 const deposit = require('../modules/deposit/deposit.service');
-const operations = require('../modules/operations/operations.service');
+const memberProfile = require('../modules/members/profile.service');
 const { can } = require('../config/permissions');
 
 async function handleSelect(interaction) {
@@ -161,7 +161,7 @@ async function handleSelect(interaction) {
       return interaction.reply({ content: 'Sem permissao para ver perfil de membro.', flags: MessageFlags.Ephemeral });
     }
     const discordId = interaction.values[0];
-    return interaction.reply({ ...operations.memberProfilePayload(discordId), flags: MessageFlags.Ephemeral });
+    return interaction.reply({ ...(await memberProfile.memberProfilePayload(discordId, interaction.guild)), flags: MessageFlags.Ephemeral });
   }
 
   if (scope === 'deposit_select') {

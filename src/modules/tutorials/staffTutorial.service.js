@@ -133,7 +133,7 @@ function renderHtml() {
           <li><code>/sincronizar_albion arquivo</code> atualiza vinculo Discord x Albion.</li>
           <li>Ele tambem resolve registros pendentes encontrados na lista da guild.</li>
           <li>Nomes ambiguos ou conflitantes sao ignorados para evitar erro.</li>
-          <li>Rank PvE semanal, logs detalhados e OCR foram pausados para manter o bot simples.</li>
+          <li>Rank PvE semanal e logs detalhados foram pausados para manter o bot simples. OCR de imagem foi removido.</li>
         </ul>
       </section>
 

@@ -13,9 +13,10 @@ const deposit = require('../modules/deposit/deposit.service');
 const inactiveEvents = require('../modules/members/inactiveEvents.service');
 const inactiveGuests = require('../modules/members/inactiveGuests.service');
 const operations = require('../modules/operations/operations.service');
-const analytics = require('../modules/analytics/analytics.service');
 const staffTutorial = require('../modules/tutorials/staffTutorial.service');
 const campaigns = require('../modules/campaigns/campaigns.service');
+const memberProfile = require('../modules/members/profile.service');
+const albionFame = require('../modules/albion/fame.service');
 const { formatSilver } = require('../utils/silver');
 const registration = require('../modules/registration/registration.service');
 const { safeSend } = require('../utils/discord');
@@ -26,8 +27,7 @@ const pausedButtonScopes = new Set([
   'member_list',
   'member_panel',
   'member_panel_staff',
-  'poll',
-  'stats_ocr'
+  'poll'
 ]);
 
 const pausedButtonIds = new Set([
@@ -145,45 +145,6 @@ async function handleButton(interaction) {
     return pausedFeatureReply(interaction);
   }
 
-  if (scope === 'stats_ocr') {
-    if (!can(interaction.member, 'approveRegistration') && !can(interaction.member, 'importCsv')) {
-      return interaction.reply({ content: 'Sem permissao para usar OCR de stats.', flags: MessageFlags.Ephemeral });
-    }
-    if (action === 'how_to') {
-      return interaction.reply({ content: statsOcr.howToText(), flags: MessageFlags.Ephemeral });
-    }
-    if (action === 'apply' || action === 'force_member' || action === 'force_guest') {
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      const forcedRole = action === 'force_member' ? 'member' : action === 'force_guest' ? 'guest' : null;
-      const submission = await statsOcr.applySubmission({
-        guild: interaction.guild,
-        submissionId: Number(id),
-        actorId: interaction.user.id,
-        forcedRole
-      });
-      await interaction.message.edit(statsOcr.reviewPayload(submission)).catch(() => {});
-      return interaction.editReply({
-        content: `Cadastro atualizado: <@${submission.target_discord_id}> ficou como ${submission.applied_role === 'member' ? 'Membro' : 'Convidado'}.`
-      });
-    }
-    if (action === 'reject') {
-      const submission = statsOcr.rejectSubmission({ submissionId: Number(id), actorId: interaction.user.id });
-      await interaction.message.edit(statsOcr.reviewPayload(submission)).catch(() => {});
-      return interaction.reply({ content: 'Leitura OCR marcada como ruim. Nenhum cargo foi alterado.', flags: MessageFlags.Ephemeral });
-    }
-  }
-
-  if (scope === 'analytics' && action === 'channel_usage') {
-    if (!can(interaction.member, 'importCsv')) {
-      return interaction.reply({ content: 'Sem permissao para gerar relatorio de uso dos canais.', flags: MessageFlags.Ephemeral });
-    }
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    return interaction.editReply(await analytics.channelUsageReportPayload({
-      guild: interaction.guild,
-      days: Number(id || 30)
-    }));
-  }
-
   if (scope === 'campaign' && ['donate_event', 'keep_event'].includes(action)) {
     await interaction.deferReply(interaction.guild ? { flags: MessageFlags.Ephemeral } : {});
     const result = await campaigns.resolveEventPayoutChoice({
@@ -276,6 +237,17 @@ async function handleButton(interaction) {
     return showModal(interaction, 'registration:submit', 'Registro Albion', [
       textInput('albionName', 'Nome do personagem no Albion')
     ]);
+  }
+
+  if (interaction.customId === 'panel:member_profile') {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    return interaction.editReply(await memberProfile.memberProfilePayload(interaction.user.id, interaction.guild));
+  }
+
+  if (interaction.customId === 'profile:request_fame_update') {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    await memberProfile.requestFameUpdate(interaction);
+    return interaction.editReply({ content: 'Pedido enviado para a ADM atualizar seus dados Albion na proxima rotina manual.' });
   }
 
   if (interaction.customId === 'panel:create_auction') {
@@ -1069,6 +1041,14 @@ async function handleButton(interaction) {
     return interaction.reply({ ...operations.presenceReportPayload(30), flags: MessageFlags.Ephemeral });
   }
 
+  if (interaction.customId === 'admin:member_rank_html') {
+    if (!can(interaction.member, 'approveRegistration') && !can(interaction.member, 'approvePayment') && !can(interaction.member, 'importCsv')) {
+      return interaction.reply({ content: 'Sem permissao para gerar rank geral.', flags: MessageFlags.Ephemeral });
+    }
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    return interaction.editReply(await memberProfile.rankHtmlPayload(interaction.guild));
+  }
+
   if (interaction.customId === 'admin:member_profile') {
     if (!can(interaction.member, 'approveRegistration') && !can(interaction.member, 'approvePayment')) {
       return interaction.reply({ content: 'Sem permissao para ver perfil de membro.', flags: MessageFlags.Ephemeral });
@@ -1207,6 +1187,28 @@ async function handleButton(interaction) {
       return interaction.reply({ content: 'Verificacao de convidados inativos cancelada. Nenhum cargo foi alterado.', flags: MessageFlags.Ephemeral });
     }
   }
+
+  if (scope === 'albion_fame') {
+    if (!can(interaction.member, 'importCsv')) {
+      return interaction.reply({ content: 'Voce nao tem permissao para importar fama Albion.', flags: MessageFlags.Ephemeral });
+    }
+
+    if (action === 'confirm') {
+      const preview = albionFame.takePreview(id);
+      const result = albionFame.applyPreview(preview);
+      return interaction.update({
+        content: `Fama total Albion salva. Jogadores: ${result.rowsCount}.`,
+        embeds: [],
+        components: []
+      });
+    }
+
+    if (action === 'cancel') {
+      albionFame.cancelPreview(id);
+      return interaction.update({ content: 'Importacao de fama Albion cancelada.', embeds: [], components: [] });
+    }
+  }
+
   if (scope === 'albion_sync') {
     if (!can(interaction.member, 'approveRegistration')) {
       return interaction.reply({ content: 'Voce nao tem permissao para sincronizar Albion.', flags: MessageFlags.Ephemeral });

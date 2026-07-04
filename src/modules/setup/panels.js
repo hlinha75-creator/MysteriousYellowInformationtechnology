@@ -6,7 +6,6 @@ const {
 } = require('discord.js');
 const ids = require('../../config/ids');
 const { getDatabase } = require('../../database/connection');
-const analytics = require('../analytics/analytics.service');
 const operations = require('../operations/operations.service');
 const staffTutorial = require('../tutorials/staffTutorial.service');
 
@@ -43,7 +42,8 @@ const panels = [
     embed: new EmbedBuilder().setTitle('Registro').setDescription('Clique para registrar seu nick do Albion e liberar acesso inicial.').setColor(0x38a169),
     components: [
       new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('panel:registration').setLabel('Registrar Nick').setStyle(ButtonStyle.Primary)
+        new ButtonBuilder().setCustomId('panel:registration').setLabel('Registrar Nick').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('panel:member_profile').setLabel('Meu perfil').setStyle(ButtonStyle.Secondary)
       )
     ]
   },
@@ -85,11 +85,6 @@ const panels = [
     type: 'staff_tutorial',
     channelId: ids.channels.staffTutorial,
     dynamic: staffTutorial.panelPayload
-  },
-  {
-    type: 'channel_usage',
-    channelId: ids.channels.pveCareer,
-    dynamic: analytics.channelUsagePanelPayload
   }
 ];
 
@@ -97,7 +92,8 @@ const disabledPanelChannelIds = [
   ids.channels.memberList,
   ids.channels.memberPanel,
   ids.channels.notagChat,
-  ids.channels.statsOcr
+  '1521169204059836607',
+  ids.channels.pveCareer
 ].filter(Boolean);
 
 async function upsertSetupPanels(client) {

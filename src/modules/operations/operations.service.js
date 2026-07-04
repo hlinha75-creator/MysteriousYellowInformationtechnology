@@ -111,7 +111,8 @@ function adminMenuPayload(menu) {
       rows: [[
         button('admin:verify_pending_registrations', 'Sincronizar Albion', ButtonStyle.Primary),
         button('inactive_guests:preview', 'Inativos convidados'),
-        button('guild:export_members_html', 'Discord x Albion')
+        button('guild:export_members_html', 'Discord x Albion'),
+        button('admin:member_rank_html', 'Rank geral HTML', ButtonStyle.Primary)
       ]]
     },
     files: {
@@ -121,7 +122,8 @@ function adminMenuPayload(menu) {
         button('csv:export_balances', 'Exportar saldos'),
         button('csv:export_transactions', 'Logs financeiros'),
         button('csv:export_audit', 'Auditoria'),
-        button('guild:export_members_html', 'Discord x Albion')
+        button('guild:export_members_html', 'Discord x Albion'),
+        button('admin:member_rank_html', 'Rank geral HTML', ButtonStyle.Primary)
       ], [
         button('admin:pending_html', 'Fila HTML', ButtonStyle.Primary),
         button('admin:presence_report', 'Presenca HTML'),
@@ -391,90 +393,6 @@ function presenceReportPayload(days = 30) {
     ],
     allowedMentions: { parse: [] }
   };
-}
-
-function memberProfilePayload(userId) {
-  const db = getDatabase();
-  const user = db.prepare('SELECT * FROM users WHERE discord_id = ?').get(userId);
-  const balance = db.prepare('SELECT COALESCE(balance, 0) AS balance FROM balances WHERE discord_id = ?').get(userId);
-  const finance = db.prepare(`
-    SELECT
-      COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) AS earned,
-      COALESCE(SUM(CASE WHEN amount < 0 THEN amount ELSE 0 END), 0) AS spent,
-      COUNT(*) AS transactions
-    FROM balance_transactions
-    WHERE user_id = ?
-  `).get(userId);
-  const events = db.prepare(`
-    SELECT
-      COUNT(DISTINCT ep.event_id) AS events,
-      COALESCE(SUM(COALESCE(ep.manual_seconds, ep.calculated_seconds, 0)), 0) AS event_seconds,
-      COALESCE(SUM(ep.payout_amount), 0) AS payout,
-      MAX(e.started_at) AS last_event_at
-    FROM event_participants ep
-    LEFT JOIN events e ON e.id = ep.event_id
-    WHERE ep.discord_id = ?
-      AND COALESCE(ep.is_spectator, 0) = 0
-  `).get(userId);
-  const voice = db.prepare(`
-    SELECT COUNT(*) AS sessions, COALESCE(SUM(seconds), 0) AS seconds, MAX(COALESCE(left_at, joined_at)) AS last_voice_at
-    FROM voice_sessions
-    WHERE discord_id = ?
-  `).get(userId);
-  const career = db.prepare(`
-    SELECT
-      CASE weapon_key
-        WHEN 'classe_tank' THEN 'Tank'
-        WHEN 'classe_healer' THEN 'Healer'
-        WHEN 'classe_support' THEN 'Suporte'
-        WHEN 'classe_dps' THEN 'DPS'
-        WHEN 'classe_caller' THEN 'Caller'
-        ELSE weapon_name
-      END AS weapon_name,
-      points
-    FROM raid_avalon_weapon_career
-    WHERE discord_id = ?
-      AND weapon_key LIKE 'classe_%'
-    ORDER BY
-      CASE weapon_key
-        WHEN 'classe_tank' THEN 1
-        WHEN 'classe_healer' THEN 2
-        WHEN 'classe_support' THEN 3
-        WHEN 'classe_dps' THEN 4
-        WHEN 'classe_caller' THEN 5
-        ELSE 99
-      END
-    LIMIT 8
-  `).all(userId);
-
-  const embed = new EmbedBuilder()
-    .setTitle('Perfil do membro')
-    .setDescription(`<@${userId}>`)
-    .addFields(
-      { name: 'Cadastro', value: [
-        `Discord ID: ${userId}`,
-        `Discord: ${user?.discord_name || '-'}`,
-        `Albion: ${user?.albion_name || '-'}`,
-        `Status: ${user?.registration_status || 'sem registro'}`
-      ].join('\n'), inline: false },
-      { name: 'Financeiro', value: [
-        `Saldo atual: ${formatSilver(balance?.balance || 0)}`,
-        `Recebido total: ${formatSilver(finance?.earned || 0)}`,
-        `Saidas total: ${formatSilver(Math.abs(finance?.spent || 0))}`,
-        `Transacoes: ${finance?.transactions || 0}`
-      ].join('\n'), inline: true },
-      { name: 'Eventos e voz', value: [
-        `Eventos: ${events?.events || 0}`,
-        `Tempo eventos: ${durationText(events?.event_seconds || 0)}`,
-        `Tempo voz geral: ${durationText(voice?.seconds || 0)}`,
-        `Ultima call: ${shortDate(voice?.last_voice_at)}`
-      ].join('\n'), inline: true },
-      { name: 'Carreira PvE', value: career.length ? career.map((row) => `${row.weapon_name}: ${row.points}`).join('\n') : 'Sem pontos registrados.', inline: false }
-    )
-    .setColor(0x4f46e5)
-    .setTimestamp(new Date());
-
-  return { embeds: [embed], allowedMentions: { users: [userId] } };
 }
 
 async function postWeeklyAlbionReminderIfNeeded(client) {
@@ -1175,7 +1093,6 @@ module.exports = {
   adminMenuPayload,
   adminPanelPayload,
   backupTestPayload,
-  memberProfilePayload,
   pendingQueuePayload,
   pendingQueueHtmlPayload,
   postDailyAdminReportIfNeeded,

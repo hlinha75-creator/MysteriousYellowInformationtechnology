@@ -146,13 +146,12 @@ Uso:
 - `albion_imports`
 - `albion_pve_rankings`
 - `albion_guild_logs`
-- `albion_stats_ocr_submissions`
+- `albion_stats_ocr_submissions` legado, sem uso pelo bot atual
 
 Uso:
 
 - rank PvE semanal;
 - logs gerais da guild;
-- OCR de stats;
 - suporte a recrutamento/performance.
 
 ### Raid Avalon E Carreira

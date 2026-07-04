@@ -23,7 +23,6 @@ module.exports = {
     guildBalances: '1481251411726438435',
     adminPanel: '1486152824067719258',
     staff: '1481330015303106570',
-    statsOcr: '1521169204059836607',
     archive: '1499357332231163924',
     register: '1492707388552253525',
     registrationRequests: '1482334949540626462',

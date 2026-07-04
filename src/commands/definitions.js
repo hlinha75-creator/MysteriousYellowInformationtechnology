@@ -39,11 +39,18 @@ const commands = [
     .addAttachmentOption((option) => option.setName('arquivo').setDescription('CSV de saldos').setRequired(true)),
   new SlashCommandBuilder()
     .setName('sincronizar_albion')
-    .setDescription('Sincroniza Discord x Albion, atualiza nicks no banco e resolve registros pendentes.')
+    .setDescription('Sincroniza dados manuais do Albion.')
     .addAttachmentOption((option) => option
       .setName('arquivo')
-      .setDescription('CSV/TSV exportado do Albion com a coluna Character Name.')
-      .setRequired(true)),
+      .setDescription('CSV/TSV exportado do Albion.')
+      .setRequired(true))
+    .addStringOption((option) => option
+      .setName('tipo')
+      .setDescription('Tipo de sincronizacao')
+      .addChoices(
+        { name: 'Membros da guild', value: 'membros' },
+        { name: 'Fama total', value: 'fama_total' }
+      )),
   new SlashCommandBuilder()
     .setName('inativos')
     .setDescription('Gera previa de inatividade para eventos ou convidados.')

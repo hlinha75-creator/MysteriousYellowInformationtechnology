@@ -23,6 +23,7 @@ const auctions = require('../modules/auctions/auctions.service');
 const objectives = require('../modules/objectives/objectives.service');
 const dailyReport = require('../modules/reports/dailyReport.service');
 const albionWeekly = require('../modules/albion/weekly.service');
+const albionFame = require('../modules/albion/fame.service');
 const memberList = require('../modules/members/memberList.service');
 const inactiveEvents = require('../modules/members/inactiveEvents.service');
 const inactiveGuests = require('../modules/members/inactiveGuests.service');
@@ -214,8 +215,10 @@ async function handleCommand(interaction) {
   }
 
   if (interaction.commandName === 'sincronizar_albion') {
-    if (!can(interaction.member, 'approveRegistration')) {
-      return interaction.reply({ content: 'Voce nao tem permissao para sincronizar Albion.', flags: MessageFlags.Ephemeral });
+    const syncType = interaction.options.getString('tipo') || 'membros';
+    const requiredPermission = syncType === 'fama_total' ? 'importCsv' : 'approveRegistration';
+    if (!can(interaction.member, requiredPermission)) {
+      return interaction.reply({ content: 'Voce nao tem permissao para sincronizar esse tipo de dado Albion.', flags: MessageFlags.Ephemeral });
     }
 
     const attachment = interaction.options.getAttachment('arquivo');
@@ -227,6 +230,20 @@ async function handleCommand(interaction) {
     const response = await fetch(attachment.url);
     if (!response.ok) throw new Error('Nao consegui baixar o arquivo anexado.');
     const text = await response.text();
+
+    if (syncType === 'fama_total') {
+      const preview = albionFame.previewFameTotals(text, {
+        sourceName: attachment.name,
+        actorId: interaction.user.id
+      });
+      const previewId = albionFame.savePreview(preview);
+      return interaction.editReply({
+        content: albionFame.previewText(preview),
+        files: [albionFame.previewAttachment(preview)],
+        components: albionFame.confirmComponents(previewId)
+      });
+    }
+
     const { id, preview } = await albionVerification.previewAlbionSync(interaction.guild, text, interaction.user.id);
     return interaction.editReply({
       content: albionVerification.syncPreviewText(preview),

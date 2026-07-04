@@ -13,7 +13,6 @@ const guildVerification = require('./modules/albion/guildVerification.service');
 const balanceBackup = require('./modules/csv/balanceBackup.service');
 const operations = require('./modules/operations/operations.service');
 const campaigns = require('./modules/campaigns/campaigns.service');
-const analytics = require('./modules/analytics/analytics.service');
 const { handleInteraction } = require('./interactions/router');
 
 migrate();
@@ -84,7 +83,6 @@ client.on('guildMemberRemove', registration.handleGuildMemberRemove);
 client.on('voiceStateUpdate', voice.handleVoiceStateUpdate);
 client.on('interactionCreate', handleInteraction);
 client.on('messageCreate', (message) => {
-  analytics.trackMessage(message);
   guildVerification.handleDirectNickReply(message).catch((error) => console.error('Falha ao tratar resposta de nick por DM:', error));
 });
 

@@ -851,6 +851,47 @@ const migrations = [
           ON guild_member_events (discord_id, created_at);
       `);
     }
+  },
+  {
+    version: 28,
+    name: 'albion_fame_totals',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS albion_fame_imports (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          source_name TEXT,
+          rows_count INTEGER NOT NULL DEFAULT 0,
+          summary_json TEXT,
+          imported_by TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS albion_fame_totals (
+          albion_key TEXT PRIMARY KEY,
+          albion_name TEXT NOT NULL,
+          total_fame INTEGER NOT NULL DEFAULT 0,
+          pve_fame INTEGER NOT NULL DEFAULT 0,
+          pvp_fame INTEGER NOT NULL DEFAULT 0,
+          gathering_fame INTEGER NOT NULL DEFAULT 0,
+          crafting_fame INTEGER NOT NULL DEFAULT 0,
+          import_id INTEGER,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (import_id) REFERENCES albion_fame_imports(id) ON DELETE SET NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_albion_fame_totals_pve
+          ON albion_fame_totals (pve_fame DESC);
+
+        CREATE INDEX IF NOT EXISTS idx_albion_fame_totals_pvp
+          ON albion_fame_totals (pvp_fame DESC);
+
+        CREATE INDEX IF NOT EXISTS idx_albion_fame_totals_gathering
+          ON albion_fame_totals (gathering_fame DESC);
+
+        CREATE INDEX IF NOT EXISTS idx_albion_fame_totals_crafting
+          ON albion_fame_totals (crafting_fame DESC);
+      `);
+    }
   }
 ];
 
