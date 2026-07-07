@@ -121,7 +121,9 @@ const publicEventActions = new Set([
   'confirm_start',
   'finish',
   'confirm_finish',
-  'cancel'
+  'cancel',
+  'confirm_cancel',
+  'abort_cancel'
 ]);
 
 function isInteractiveEvent(event) {
@@ -566,6 +568,20 @@ async function handleButton(interaction) {
     if (action === 'abort_finish') {
       return interaction.reply({ content: 'Finalizacao cancelada.', flags: MessageFlags.Ephemeral });
     }
+    if (action === 'confirm_cancel') {
+      if (extra !== interaction.user.id) {
+        return interaction.reply({ content: 'Essa confirmacao nao foi criada para voce.', flags: MessageFlags.Ephemeral });
+      }
+      if (!canForceStartFinish(interaction.member)) {
+        return interaction.reply({ content: 'Somente Staff/ADM podem confirmar cancelamento de evento de outro criador.', flags: MessageFlags.Ephemeral });
+      }
+      return showModal(interaction, `event:cancel_modal:${eventId}`, 'Cancelar Evento', [
+        textInput('reason', 'Motivo do cancelamento')
+      ]);
+    }
+    if (action === 'abort_cancel') {
+      return interaction.reply({ content: 'Cancelamento abortado.', flags: MessageFlags.Ephemeral });
+    }
     if (action === 'approve') {
       if (!can(interaction.member, 'approvePayment')) {
         return interaction.reply({ content: 'Voce nao tem permissao para aprovar pagamento.', flags: MessageFlags.Ephemeral });
@@ -628,6 +644,21 @@ async function handleButton(interaction) {
       return interaction.editReply({ content: `Evento devolvido para o criador revisar.${reviewChannel ? ` Canal: <#${reviewChannel.id}>` : ''}` });
     }
     if (action === 'cancel') {
+      if (event.creator_id !== interaction.user.id) {
+        if (!canForceStartFinish(interaction.member)) {
+          return interaction.reply({ content: 'Somente o criador do evento pode cancelar. Staff/ADM podem cancelar com confirmacao.', flags: MessageFlags.Ephemeral });
+        }
+        return interaction.reply({
+          content: 'Voce esta ciente que esse evento nao foi criado por voce e que vai cancelar o evento do criador, neh?',
+          components: [
+            new ActionRowBuilder().addComponents(
+              new ButtonBuilder().setCustomId(`event:confirm_cancel:${eventId}:${interaction.user.id}`).setLabel('Sim, cancelar').setStyle(ButtonStyle.Danger),
+              new ButtonBuilder().setCustomId(`event:abort_cancel:${eventId}:${interaction.user.id}`).setLabel('Voltar').setStyle(ButtonStyle.Secondary)
+            )
+          ],
+          flags: MessageFlags.Ephemeral
+        });
+      }
       return showModal(interaction, `event:cancel_modal:${eventId}`, 'Cancelar Evento', [
         textInput('reason', 'Motivo do cancelamento')
       ]);

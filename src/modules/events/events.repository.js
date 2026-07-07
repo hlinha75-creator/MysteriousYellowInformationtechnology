@@ -83,14 +83,20 @@ function updateEvent(id, patch) {
   return getEvent(id);
 }
 
-function upsertParticipant({ eventId, discordId, role, isSpectator = 0 }) {
+function upsertParticipant({ eventId, discordId, role, isSpectator = 0, joinedAt = new Date().toISOString() }) {
   return getDatabase()
     .prepare(`
-      INSERT INTO event_participants (event_id, discord_id, role, is_spectator)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT(event_id, discord_id) DO UPDATE SET role = excluded.role, is_spectator = excluded.is_spectator
+      INSERT INTO event_participants (event_id, discord_id, role, is_spectator, joined_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(event_id, discord_id) DO UPDATE SET
+        role = excluded.role,
+        is_spectator = excluded.is_spectator,
+        joined_at = CASE
+          WHEN event_participants.is_spectator = 1 AND excluded.is_spectator = 0 THEN excluded.joined_at
+          ELSE event_participants.joined_at
+        END
     `)
-    .run(eventId, discordId, role, isSpectator ? 1 : 0);
+    .run(eventId, discordId, role, isSpectator ? 1 : 0, joinedAt);
 }
 
 function removeParticipant({ eventId, discordId }) {
@@ -134,19 +140,34 @@ function refreshParticipantSeconds(eventId) {
   const event = getEvent(eventId);
   if (!event?.started_at) return;
 
-  const eventStart = Date.parse(event.started_at);
-  const eventEnd = Date.parse(event.ended_at || new Date().toISOString());
+  const eventStart = parseTimestamp(event.started_at);
+  const eventEnd = parseTimestamp(event.ended_at || new Date().toISOString());
   const participants = listParticipants(eventId).filter((participant) => !participant.is_spectator);
-  const sessions = db
+  const eventSessions = db
     .prepare('SELECT * FROM event_voice_sessions WHERE event_id = ? ORDER BY discord_id, joined_at')
     .all(eventId);
+  const generalVoiceSessions = event.voice_channel_id
+    ? db
+      .prepare(`
+        SELECT discord_id, joined_at, left_at
+        FROM voice_sessions
+        WHERE channel_id = ?
+        ORDER BY discord_id, joined_at
+      `)
+      .all(event.voice_channel_id)
+    : [];
+  const sessions = [...eventSessions, ...generalVoiceSessions];
 
   for (const participant of participants) {
+    const participantJoinedAt = parseTimestamp(participant.joined_at);
+    const participantStart = Number.isFinite(participantJoinedAt)
+      ? Math.max(eventStart, participantJoinedAt)
+      : eventStart;
     const intervals = sessions
       .filter((session) => session.discord_id === participant.discord_id)
       .map((session) => {
-        const start = Math.max(eventStart, Date.parse(session.joined_at));
-        const end = Math.min(eventEnd, Date.parse(session.left_at || new Date().toISOString()));
+        const start = Math.max(participantStart, parseTimestamp(session.joined_at));
+        const end = Math.min(eventEnd, parseTimestamp(session.left_at || new Date().toISOString()));
         return { start, end };
       })
       .filter((interval) => Number.isFinite(interval.start) && Number.isFinite(interval.end) && interval.end > interval.start)
@@ -169,6 +190,15 @@ function refreshParticipantSeconds(eventId) {
     db.prepare('UPDATE event_participants SET calculated_seconds = ? WHERE event_id = ? AND discord_id = ?')
       .run(Math.floor(total / 1000), eventId, participant.discord_id);
   }
+}
+
+function parseTimestamp(value) {
+  if (!value) return Number.NaN;
+  const text = String(value);
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(text)) {
+    return Date.parse(`${text.replace(' ', 'T')}Z`);
+  }
+  return Date.parse(text);
 }
 
 function setParticipantReview({ eventId, discordId, role, manualSeconds }) {

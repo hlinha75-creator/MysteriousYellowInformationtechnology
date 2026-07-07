@@ -15,6 +15,7 @@ const repo = require('./events.repository');
 const { calculateNetLoot, calculatePayouts } = require('./lootCalculator');
 const { formatSilver } = require('../../utils/silver');
 const { backupDatabase } = require('../../database/backup');
+const { safeSend } = require('../../utils/discord');
 
 const roleConfigs = {
   tank: { label: 'Tank', slots: 'tank_slots', style: ButtonStyle.Primary },
@@ -561,12 +562,21 @@ async function joinEvent(interaction, eventId, role) {
   if (!canJoinEventRole(event, interaction.user.id, role)) {
     throw new Error(`Nao ha vaga livre para ${roleButtonLabel(role)} neste evento.`);
   }
+  const previous = repo.getParticipant({ eventId, discordId: interaction.user.id });
   repo.upsertParticipant({ eventId, discordId: interaction.user.id, role, isSpectator: 0 });
   await addEventRoleToMember(interaction.guild, event, interaction.user.id).catch(() => {});
-  audit.createAuditLog({ type: 'event_joined', actorId: interaction.user.id, targetId: String(eventId), afterValue: role });
+  let voiceResult = null;
   if (event.status === 'running') {
-    await ensureParticipantVoiceSession(interaction, event);
+    voiceResult = await ensureParticipantVoiceSession(interaction, event);
   }
+  audit.createAuditLog({
+    type: previous?.is_spectator ? 'event_spectator_promoted' : 'event_joined',
+    actorId: interaction.user.id,
+    targetId: String(eventId),
+    beforeValue: previous ? JSON.stringify({ role: previous.role, isSpectator: previous.is_spectator }) : null,
+    afterValue: role,
+    metadata: { voiceResult }
+  });
   await refreshEventMessage(interaction.client, eventId);
 }
 
@@ -597,6 +607,7 @@ async function joinRaidAvalonRole(interaction, { eventId, role, weapon, itemPowe
   if (!isKeepingOwnSlot && !isRaidWeaponUnlocked(normalizedWeapon, raidDpsCount(repo.listParticipants(eventId)))) {
     throw new Error(`${normalizedWeapon} libera com ${raidWeaponRequiredDps(normalizedWeapon)} DPS inscritos.`);
   }
+  const previous = repo.getParticipant({ eventId, discordId: interaction.user.id });
   repo.upsertParticipant({ eventId, discordId: interaction.user.id, role, isSpectator: 0 });
   await addEventRoleToMember(interaction.guild, event, interaction.user.id).catch(() => {});
   repo.upsertRaidAvalonParticipant({
@@ -607,15 +618,18 @@ async function joinRaidAvalonRole(interaction, { eventId, role, weapon, itemPowe
     itemPower,
     helperRole: null
   });
+  let voiceResult = null;
+  if (event.status === 'running') {
+    voiceResult = await ensureParticipantVoiceSession(interaction, event);
+  }
   audit.createAuditLog({
-    type: 'raid_avalon_joined',
+    type: previous?.is_spectator ? 'raid_avalon_spectator_promoted' : 'raid_avalon_joined',
     actorId: interaction.user.id,
     targetId: String(eventId),
-    afterValue: JSON.stringify({ role, weapon: normalizedWeapon, itemPower })
+    beforeValue: previous ? JSON.stringify({ role: previous.role, isSpectator: previous.is_spectator }) : null,
+    afterValue: JSON.stringify({ role, weapon: normalizedWeapon, itemPower }),
+    metadata: { voiceResult }
   });
-  if (event.status === 'running') {
-    await ensureParticipantVoiceSession(interaction, event);
-  }
   await refreshEventMessage(interaction.client, eventId);
   return normalizedWeapon;
 }
@@ -625,9 +639,21 @@ async function joinRaidAvalonHelper(interaction, eventId, helperRole) {
   if (!event || !['created', 'running'].includes(event.status)) throw new Error('Evento nao esta aberto.');
   if (!repo.getRaidAvalonEventMeta(eventId)) throw new Error('Esse evento nao e uma Raid Avalon Full.');
   if (!raidAvalonHelpers[helperRole]) throw new Error('Funcao auxiliar invalida.');
+  const previous = repo.getParticipant({ eventId, discordId: interaction.user.id });
+  const now = new Date().toISOString();
+  if (event.status === 'running' && previous && !previous.is_spectator) {
+    closeParticipantOpenSession(eventId, interaction.user.id, now);
+    repo.refreshParticipantSeconds(eventId);
+  }
   repo.upsertParticipant({ eventId, discordId: interaction.user.id, role: helperRole, isSpectator: 1 });
   repo.upsertRaidAvalonParticipant({ eventId, discordId: interaction.user.id, helperRole });
-  audit.createAuditLog({ type: 'raid_avalon_helper_joined', actorId: interaction.user.id, targetId: String(eventId), afterValue: helperRole });
+  audit.createAuditLog({
+    type: 'raid_avalon_helper_joined',
+    actorId: interaction.user.id,
+    targetId: String(eventId),
+    beforeValue: previous ? JSON.stringify({ role: previous.role, isSpectator: previous.is_spectator }) : null,
+    afterValue: helperRole
+  });
   if (event.status === 'running') {
     await moveMemberToEventVoice(interaction, event);
   }
@@ -655,9 +681,20 @@ async function pauseParticipation(interaction, eventId) {
 async function spectateEvent(interaction, eventId) {
   const event = repo.getEvent(eventId);
   if (!event || !['created', 'running'].includes(event.status)) throw new Error('Evento nao esta aberto.');
+  const previous = repo.getParticipant({ eventId, discordId: interaction.user.id });
+  const now = new Date().toISOString();
+  if (event.status === 'running' && previous && !previous.is_spectator) {
+    closeParticipantOpenSession(eventId, interaction.user.id, now);
+    repo.refreshParticipantSeconds(eventId);
+  }
   repo.upsertParticipant({ eventId, discordId: interaction.user.id, role: 'spectator', isSpectator: 1 });
   await addEventRoleToMember(interaction.guild, event, interaction.user.id).catch(() => {});
-  audit.createAuditLog({ type: 'event_spectator', actorId: interaction.user.id, targetId: String(eventId) });
+  audit.createAuditLog({
+    type: 'event_spectator',
+    actorId: interaction.user.id,
+    targetId: String(eventId),
+    beforeValue: previous ? JSON.stringify({ role: previous.role, isSpectator: previous.is_spectator }) : null
+  });
   if (event.status === 'running') await moveMemberToEventVoice(interaction, event);
   await refreshEventMessage(interaction.client, eventId);
 }
@@ -781,12 +818,34 @@ async function finishEvent(interaction, eventId) {
 async function cancelEvent(interaction, eventId, reason) {
   const event = repo.getEvent(eventId);
   if (!event) throw new Error('Evento nao encontrado.');
-  repo.updateEvent(eventId, { status: 'cancelled', cancel_reason: reason });
+  const cancelReason = String(reason || '').trim() || 'Sem motivo informado';
+  repo.updateEvent(eventId, { status: 'cancelled', cancel_reason: cancelReason });
   const voice = event.voice_channel_id ? await interaction.guild.channels.fetch(event.voice_channel_id).catch(() => null) : null;
-  await voice?.delete(`Evento cancelado: ${reason}`).catch(() => {});
+  await voice?.delete(`Evento cancelado: ${cancelReason}`).catch(() => {});
   await deleteWarningMessage(interaction.client, event).catch(() => {});
   await removeWarningRole(interaction.guild, event).catch(() => {});
-  audit.createAuditLog({ type: 'event_cancelled', actorId: interaction.user.id, targetId: String(eventId), reason });
+  audit.createAuditLog({
+    type: 'event_cancelled',
+    actorId: interaction.user.id,
+    targetId: String(eventId),
+    reason: cancelReason,
+    metadata: {
+      eventCode: event.event_code,
+      title: event.title,
+      creatorId: event.creator_id,
+      previousStatus: event.status
+    }
+  });
+  await safeSend(interaction.client, ids.channels.bankLogs, {
+    content: [
+      `Evento cancelado: ${event.event_code} | ${event.title}`,
+      `Criador: <@${event.creator_id}>`,
+      `Cancelado por: <@${interaction.user.id}>`,
+      `Status anterior: ${event.status}`,
+      `Motivo: ${cancelReason}`
+    ].join('\n'),
+    allowedMentions: { users: [event.creator_id, interaction.user.id] }
+  });
   await deleteEventMessage(interaction.client, eventId);
 }
 
