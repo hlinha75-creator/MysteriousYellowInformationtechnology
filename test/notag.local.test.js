@@ -1,0 +1,383 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const test = require('node:test');
+
+const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'notag-bot-test-'));
+const tempDbPath = path.join(tempRoot, 'notag-test.sqlite');
+const realDbPath = path.resolve(__dirname, '..', 'data', 'notag.sqlite');
+
+process.env.NODE_ENV = 'test';
+process.env.DATABASE_PATH = tempDbPath;
+assert.notEqual(path.resolve(process.env.DATABASE_PATH), realDbPath, 'testes locais nao podem usar o banco real');
+
+const { getDatabase } = require('../src/database/connection');
+const { migrate } = require('../src/database/migrate');
+const events = require('../src/modules/events/events.service');
+const eventsRepo = require('../src/modules/events/events.repository');
+const finance = require('../src/modules/finance/finance.service');
+const financeRepo = require('../src/modules/finance/finance.repository');
+const deposit = require('../src/modules/deposit/deposit.service');
+
+migrate();
+
+test.after(() => {
+  getDatabase().close();
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+test.beforeEach(() => {
+  resetDatabase();
+});
+
+test('fluxo local cobre evento, voz, loot split, aprovacao, ledger, saque e deposito', async () => {
+  const harness = createDiscordHarness();
+  const creator = '1001';
+  const participantA = '2001';
+  const participantB = '2002';
+  const spectatorOnly = '2003';
+  const staff = '9001';
+
+  harness.addMember(participantA, { inVoice: true });
+  harness.addMember(participantB, { inVoice: true });
+  harness.addMember(spectatorOnly, { inVoice: true });
+
+  const event = await events.createEventFromFields(harness.interaction(creator), {
+    creatorId: creator,
+    title: 'FastContent Local',
+    description: 'Teste automatizado',
+    location: 'Bridgewatch',
+    scheduledTime: '10:00',
+    tankSlots: 1,
+    healerSlots: 1,
+    supportSlots: 0,
+    dpsSlots: 0,
+    postChannelId: 'test-events'
+  });
+
+  assert.equal(event.event_code, 'EVT-000001');
+  assert.equal(event.status, 'created');
+  assert.equal(harness.sentMessages.length, 1);
+
+  await events.joinEvent(harness.interaction(participantA), event.id, 'tank');
+  await events.spectateEvent(harness.interaction(participantB), event.id);
+  await events.spectateEvent(harness.interaction(spectatorOnly), event.id);
+
+  assertParticipant(event.id, participantA, { role: 'tank', isSpectator: 0 });
+  assertParticipant(event.id, participantB, { role: 'spectator', isSpectator: 1 });
+  assertParticipant(event.id, spectatorOnly, { role: 'spectator', isSpectator: 1 });
+
+  const voice = await events.startEvent(harness.interaction(creator), event.id);
+  assert.equal(voice.id, 'event-voice-1');
+  assert.equal(eventsRepo.getEvent(event.id).status, 'running');
+
+  const promotedRole = await events.autoJoinRunningEvent(harness.interaction(participantB), event.id);
+  assert.equal(promotedRole, 'healer');
+  assertParticipant(event.id, participantB, { role: 'healer', isSpectator: 0 });
+
+  seedDeterministicVoiceTime(event.id, eventsRepo.getEvent(event.id), {
+    participantA,
+    participantB,
+    spectatorOnly
+  });
+
+  const review = events.saveLootReview({
+    eventId: event.id,
+    lootTotal: 9000,
+    repair: 0,
+    silverBags: 0,
+    taxPercent: 0,
+    evidenceNotes: 'teste local'
+  });
+  assert.deepEqual(review, { netLoot: 9000 });
+
+  const afterReview = eventsRepo.listParticipants(event.id);
+  assert.equal(afterReview.find((item) => item.discord_id === participantA).calculated_seconds, 2700);
+  assert.equal(afterReview.find((item) => item.discord_id === participantB).calculated_seconds, 1800);
+  assert.equal(afterReview.find((item) => item.discord_id === spectatorOnly).calculated_seconds, 0);
+  assert.equal(afterReview.find((item) => item.discord_id === participantA).payout_amount, 5400);
+  assert.equal(afterReview.find((item) => item.discord_id === participantB).payout_amount, 3600);
+
+  events.submitEventToFinance({ eventId: event.id, actorId: creator });
+  assert.equal(eventsRepo.getEvent(event.id).status, 'pending_payment');
+
+  const approval = events.approveEventPayment({ eventId: event.id, actorId: staff });
+  assert.equal(approval.transactions.length, 2);
+  assert.equal(eventsRepo.getEvent(event.id).status, 'approved');
+  assert.equal(financeRepo.getBalance(participantA), 5400);
+  assert.equal(financeRepo.getBalance(participantB), 3600);
+  assertLedgerRows([
+    { type: 'event_payout', user_id: participantA, amount: 5400, after_balance: 5400 },
+    { type: 'event_payout', user_id: participantB, amount: 3600, after_balance: 3600 }
+  ]);
+
+  const withdraw = finance.requestWithdraw({ userId: participantA, amount: 1000, note: 'saque local' });
+  finance.approveWithdraw({ requestId: withdraw.lastInsertRowid, actorId: staff });
+  const paidWithdraw = finance.payWithdraw({ requestId: withdraw.lastInsertRowid, actorId: staff });
+  assert.equal(paidWithdraw.amount, -1000);
+  assert.equal(financeRepo.getBalance(participantA), 4400);
+  assertLedgerRows([
+    { type: 'withdraw_paid', user_id: participantA, amount: -1000, before_balance: 5400, after_balance: 4400 }
+  ]);
+
+  const draft = deposit.createDraft({
+    actorId: staff,
+    lootTotal: 3000,
+    repair: 0,
+    silverBags: 0,
+    taxPercent: 0
+  });
+  deposit.addParticipants({ draftId: draft.id, userIds: [participantA, participantB] });
+  const quickDeposit = await deposit.confirmDraft({ draftId: draft.id, actorId: staff, client: harness.client });
+  assert.equal(quickDeposit.amount, 1500);
+  assert.deepEqual(quickDeposit.participants, [participantA, participantB]);
+  assert.equal(financeRepo.getBalance(participantA), 5900);
+  assert.equal(financeRepo.getBalance(participantB), 5100);
+  assertLedgerRows([
+    { type: 'quick_deposit', user_id: participantA, amount: 1500, before_balance: 4400, after_balance: 5900 },
+    { type: 'quick_deposit', user_id: participantB, amount: 1500, before_balance: 3600, after_balance: 5100 }
+  ]);
+});
+
+test('deposito rapido bloqueia confirmacao sem participantes', async () => {
+  const harness = createDiscordHarness();
+  const draft = deposit.createDraft({
+    actorId: '9001',
+    lootTotal: 1000,
+    repair: 0,
+    silverBags: 0,
+    taxPercent: 0
+  });
+
+  await assert.rejects(
+    () => deposit.confirmDraft({ draftId: draft.id, actorId: '9001', client: harness.client }),
+    /Selecione pelo menos um participante/
+  );
+  assert.equal(financeRepo.listTransactions().length, 0);
+});
+
+function seedDeterministicVoiceTime(eventId, event, ids) {
+  const db = getDatabase();
+  const startedAt = '2026-07-08T10:00:00.000Z';
+  const endedAt = '2026-07-08T11:00:00.000Z';
+
+  eventsRepo.updateEvent(eventId, { started_at: startedAt, ended_at: endedAt });
+  db.prepare('UPDATE event_participants SET joined_at = ? WHERE event_id = ? AND discord_id = ?')
+    .run(startedAt, eventId, ids.participantA);
+  db.prepare('UPDATE event_participants SET joined_at = ? WHERE event_id = ? AND discord_id = ?')
+    .run('2026-07-08T10:30:00.000Z', eventId, ids.participantB);
+  db.prepare('UPDATE event_participants SET joined_at = ? WHERE event_id = ? AND discord_id = ?')
+    .run(startedAt, eventId, ids.spectatorOnly);
+
+  db.prepare('DELETE FROM event_voice_sessions WHERE event_id = ?').run(eventId);
+  db.prepare('DELETE FROM voice_sessions WHERE channel_id = ?').run(event.voice_channel_id);
+
+  eventsRepo.startVoiceSession({
+    eventId,
+    discordId: ids.participantA,
+    joinedAt: '2026-07-08T09:50:00.000Z'
+  });
+  eventsRepo.closeOpenVoiceSession({
+    eventId,
+    discordId: ids.participantA,
+    leftAt: '2026-07-08T10:20:00.000Z',
+    seconds: 1800
+  });
+  insertGeneralVoiceSession({
+    discordId: ids.participantA,
+    channelId: event.voice_channel_id,
+    joinedAt: '2026-07-08T10:15:00.000Z',
+    leftAt: '2026-07-08T10:45:00.000Z'
+  });
+  insertGeneralVoiceSession({
+    discordId: ids.participantB,
+    channelId: event.voice_channel_id,
+    joinedAt: '2026-07-08T10:00:00.000Z',
+    leftAt: '2026-07-08T11:10:00.000Z'
+  });
+  insertGeneralVoiceSession({
+    discordId: ids.spectatorOnly,
+    channelId: event.voice_channel_id,
+    joinedAt: '2026-07-08T10:00:00.000Z',
+    leftAt: '2026-07-08T11:00:00.000Z'
+  });
+}
+
+function insertGeneralVoiceSession({ discordId, channelId, joinedAt, leftAt }) {
+  const seconds = Math.floor((Date.parse(leftAt) - Date.parse(joinedAt)) / 1000);
+  getDatabase()
+    .prepare(`
+      INSERT INTO voice_sessions
+        (discord_id, discord_name, channel_id, channel_name, joined_at, left_at, seconds)
+      VALUES
+        (?, ?, ?, ?, ?, ?, ?)
+    `)
+    .run(discordId, `User ${discordId}`, channelId, 'Evento local', joinedAt, leftAt, seconds);
+}
+
+function assertParticipant(eventId, discordId, expected) {
+  const participant = eventsRepo.getParticipant({ eventId, discordId });
+  assert.ok(participant, `participante ${discordId} deveria existir`);
+  assert.equal(participant.role, expected.role);
+  assert.equal(participant.is_spectator, expected.isSpectator);
+}
+
+function assertLedgerRows(expectedRows) {
+  const transactions = financeRepo.listTransactions(100);
+  for (const expected of expectedRows) {
+    assert.ok(
+      transactions.some((row) => Object.entries(expected).every(([key, value]) => row[key] === value)),
+      `ledger deveria conter ${JSON.stringify(expected)}`
+    );
+  }
+}
+
+function resetDatabase() {
+  const db = getDatabase();
+  const tables = db
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name <> 'schema_migrations'")
+    .all()
+    .map((row) => row.name);
+
+  db.exec('PRAGMA foreign_keys = OFF');
+  for (const table of tables) {
+    db.prepare(`DELETE FROM "${table}"`).run();
+  }
+  db.prepare('DELETE FROM sqlite_sequence').run();
+  db.exec('PRAGMA foreign_keys = ON');
+}
+
+function createDiscordHarness() {
+  const messages = new Map();
+  const channels = new Map();
+  const members = new Map();
+  const sentMessages = [];
+  let messageSeq = 0;
+  let voiceSeq = 0;
+
+  function createTextChannel(id) {
+    const channel = {
+      id,
+      isTextBased: () => true,
+      messages: {
+        fetch: async (messageId) => messages.get(messageId) || null
+      },
+      send: async (payload) => {
+        const message = {
+          id: `message-${++messageSeq}`,
+          channel,
+          payload,
+          edit: async (nextPayload) => {
+            message.payload = nextPayload;
+            return message;
+          },
+          delete: async () => {
+            messages.delete(message.id);
+          }
+        };
+        messages.set(message.id, message);
+        sentMessages.push({ channelId: id, payload });
+        return message;
+      }
+    };
+    channels.set(id, channel);
+    return channel;
+  }
+
+  createTextChannel('test-events');
+
+  const guild = {
+    roles: {
+      everyone: { id: 'everyone' },
+      cache: new Map(),
+      fetch: async () => guild.roles.cache,
+      create: async ({ name }) => {
+        const role = { id: `role-${guild.roles.cache.size + 1}`, name, delete: async () => {} };
+        guild.roles.cache.set(role.id, role);
+        return role;
+      }
+    },
+    members: {
+      fetch: async (id) => members.get(id) || null
+    },
+    channels: {
+      create: async ({ type }) => {
+        const voice = {
+          id: `event-voice-${++voiceSeq}`,
+          type,
+          members: new Map(),
+          delete: async () => {}
+        };
+        channels.set(voice.id, voice);
+        return voice;
+      },
+      fetch: async (id) => {
+        if (!channels.has(id)) createTextChannel(id);
+        return channels.get(id);
+      }
+    }
+  };
+
+  const client = {
+    channels: {
+      fetch: async (id) => {
+        if (!channels.has(id)) createTextChannel(id);
+        return channels.get(id);
+      }
+    },
+    users: {
+      fetch: async (id) => ({
+        id,
+        send: async (payload) => ({ id: `dm-${id}-${++messageSeq}`, payload })
+      })
+    },
+    guilds: {
+      fetch: async () => guild
+    },
+    user: { id: 'bot' }
+  };
+
+  function addMember(id, { inVoice = false } = {}) {
+    const member = {
+      id,
+      user: { id, username: `User ${id}`, globalName: `User ${id}` },
+      displayName: `User ${id}`,
+      roles: {
+        cache: new Map(),
+        add: async (role) => {
+          member.roles.cache.set(typeof role === 'string' ? role : role.id, role);
+        }
+      },
+      voice: {
+        channel: inVoice ? { id: 'lobby-voice' } : null,
+        channelId: inVoice ? 'lobby-voice' : null,
+        setChannel: async (channelOrId) => {
+          const channelId = typeof channelOrId === 'string' ? channelOrId : channelOrId.id;
+          member.voice.channelId = channelId;
+          member.voice.channel = channels.get(channelId) || { id: channelId };
+          return member;
+        }
+      }
+    };
+    members.set(id, member);
+    return member;
+  }
+
+  function interaction(userId) {
+    if (!members.has(userId)) addMember(userId);
+    return {
+      user: { id: userId },
+      client,
+      guild
+    };
+  }
+
+  return {
+    addMember,
+    client,
+    guild,
+    interaction,
+    sentMessages
+  };
+}
