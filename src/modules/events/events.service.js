@@ -15,7 +15,7 @@ const repo = require('./events.repository');
 const { calculateNetLoot, calculatePayouts } = require('./lootCalculator');
 const { formatSilver } = require('../../utils/silver');
 const { backupDatabase } = require('../../database/backup');
-const { safeSend } = require('../../utils/discord');
+const { normalizeAllowedMentions, safeSend } = require('../../utils/discord');
 
 const roleConfigs = {
   tank: { label: 'Tank', slots: 'tank_slots', style: ButtonStyle.Primary },
@@ -844,7 +844,7 @@ async function cancelEvent(interaction, eventId, reason) {
       `Status anterior: ${event.status}`,
       `Motivo: ${cancelReason}`
     ].join('\n'),
-    allowedMentions: { users: [event.creator_id, interaction.user.id] }
+    allowedMentions: normalizeAllowedMentions({ users: [event.creator_id, interaction.user.id] })
   });
   await deleteEventMessage(interaction.client, eventId);
 }
@@ -942,10 +942,11 @@ async function postDpsMeterSummary(client, eventId) {
   if (!channel) return null;
   const participants = repo.listParticipants(eventId).filter((participant) => !participant.is_spectator);
   const mentions = participants.map((participant) => `<@${participant.discord_id}>`).join(' ');
+  const mentionUserIds = [...new Set(participants.map((participant) => String(participant.discord_id)).filter(Boolean))];
   const message = await channel.send({
     content: mentions || undefined,
     embeds: [dpsMeterEmbed(eventId)],
-    allowedMentions: { users: participants.map((participant) => participant.discord_id) }
+    allowedMentions: { users: mentionUserIds }
   });
   repo.updateReviewMetadata(eventId, { dps_message_id: message.id });
   return message;
