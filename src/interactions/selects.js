@@ -11,24 +11,6 @@ async function handleSelect(interaction) {
     return pausedFeatureReply(interaction);
   }
 
-  if (scope === 'faq_tutorial' && action === 'select') {
-    return faq.handleTutorialSelect(interaction);
-  }
-
-  if (scope === 'auction_channel_select') {
-    if (!can(interaction.member, 'createAuction')) {
-      return interaction.reply({ content: 'Voce precisa ser membro para criar leilao.', flags: MessageFlags.Ephemeral });
-    }
-    const channelId = interaction.values[0];
-    return showModal(interaction, `auction:create:${channelId}:${id}`, 'Criar Leilao', [
-      input('itemName', 'Item'),
-      input('startingBid', 'Lance inicial', '', 'Ex: 10m'),
-      input('minIncrement', 'Incremento minimo', '', 'Ex: 500k'),
-      input('duration', 'Tempo limite', '', 'Padrao: 24h. Ex: 12h, 2d, 90min', false),
-      input('pickupInfo', 'Retirada: local e responsavel', '', 'Ex: Bau da ilha da guild. Pegar com @Lucas', false).setStyle(TextInputStyle.Paragraph)
-    ]);
-  }
-
   if (scope === 'event' && action === 'join') {
     const role = interaction.values[0];
     try {
@@ -57,14 +39,6 @@ async function handleSelect(interaction) {
     return showModal(interaction, `event:raid_join:${id}:${role}:${weaponKey}`, `Raid Full - ${weapon}`, [
       input('itemPower', 'IP da arma', '', 'Ex: 1500')
     ]);
-  }
-
-  if (scope === 'poll' && action === 'vote') {
-    const selected = await polls.vote({ interaction, pollId: Number(id), options: interaction.values });
-    return interaction.reply({
-      content: selected.length ? `Seu voto agora: ${selected.join(', ')}.` : 'Seu voto foi limpo.',
-      flags: MessageFlags.Ephemeral
-    });
   }
 
   if (scope === 'event_review_select') {

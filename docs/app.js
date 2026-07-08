@@ -84,8 +84,6 @@ const commands = [
   ['slash', '/setup', 'Atualiza paineis fixos do bot.', 'staff adm treasurer'],
   ['slash', '/saldo', 'Consulta seu saldo ou, para staff/tesouraria, saldo de outro membro.', 'member staff treasurer'],
   ['slash', '/registro', 'Abre registro de nick Albion.', 'member'],
-  ['slash', '/enquete', 'Cria enquete e permite gerar evento pelo resultado.', 'member staff caller'],
-  ['slash', '/leilao', 'Cria ou atualiza leilao de item.', 'member staff treasurer'],
   ['slash', '/objetivo', 'Avisa objetivo temporario no chat Notag.', 'member staff caller'],
   ['slash', '/exportar', 'Exporta saldos, financeiro, voz, auditoria, Albion e membros.', 'staff treasurer'],
   ['slash', '/importar', 'Importa CSV de saldos com previa e confirmacao.', 'staff treasurer'],
@@ -96,18 +94,16 @@ const commands = [
   ['slash', '/renomear_canais', 'Mostra ou aplica padronizacao de canais.', 'staff adm'],
   ['slash', '/auditar_canais', 'Lista canais e marca os conhecidos pelo bot.', 'staff adm'],
   ['painel', 'Criar Evento', 'Botoes Criar Evento e Raid Full.', 'caller staff recruiter'],
-  ['painel', 'Saldo', 'Consultar, sacar, pedir pagamento e criar leilao.', 'member staff treasurer'],
+  ['painel', 'Saldo', 'Consultar, sacar e pedir pagamento.', 'member staff treasurer'],
   ['painel', 'ADM', 'Pendencias, financeiro, Albion, eventos, membros, arquivos e tutorial.', 'staff adm treasurer'],
   ['painel', 'Deposito', 'Deposito manual ou por lista.', 'staff treasurer'],
   ['painel', 'Lista de membros', 'Atualizar, exportar CSV e filtrar membros.', 'staff recruiter'],
-  ['painel', 'Painel do membro', 'Pontos, builds, historico, pergunta, denuncia e sugestao.', 'member']
+  ['painel', 'Painel do membro', 'Perfil e historico basico.', 'member']
 ];
 
 const permissions = [
   ['createEvent', ['caller', 'staff', 'adm', 'recruiter'], 'Criar evento normal ou Raid Full.'],
-  ['createAuction', ['member', 'caller', 'staff', 'adm', 'recruiter', 'treasurer'], 'Criar leilao.'],
   ['createObjective', ['member', 'caller', 'staff', 'adm', 'recruiter', 'treasurer'], 'Avisar objetivo.'],
-  ['createPoll', ['member', 'caller', 'staff', 'adm', 'recruiter', 'treasurer'], 'Criar enquete.'],
   ['approvePayment', ['staff', 'adm', 'treasurer'], 'Aprovar pagamento, setup e rotinas sensiveis.'],
   ['importCsv', ['staff', 'adm', 'treasurer'], 'Importar/exportar CSV e relatorios.'],
   ['withdrawBalance', ['staff', 'adm', 'treasurer'], 'Consultar outro saldo e retirar saldo.'],
@@ -125,11 +121,10 @@ const ops = [
 ];
 
 const openQuestions = [
-  'Confirmar quais funcionalidades antigas devem continuar aparecendo para a staff.',
+  'Funcionalidades antigas removidas: dashboard, leiloes, enquetes, FAQ, OCR e jogo de frutas.',
   'Confirmar se existem variaveis secretas alem de .env.example.',
   'Confirmar se o bot tem permissao administrativa completa no Discord.',
   'Definir politica oficial de backup e restore em producao.',
-  'Confirmar se o dashboard deve ter autenticacao caso saia do uso local.',
   'Mapear todos os arquivos que contem dados reais da guild.'
 ];
 

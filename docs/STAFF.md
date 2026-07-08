@@ -11,7 +11,7 @@ O bot trabalha com estes grupos:
 - `treasurer`: foco em saldos, pagamentos, CSVs e financeiro.
 - `caller`: cria e gerencia eventos.
 - `recruiter`: ajuda em registro, membros e eventos.
-- `member`: usa funcoes basicas como saldo, eventos, leiloes e enquetes permitidas.
+- `member`: usa funcoes basicas como saldo, eventos e registro.
 - `guest`: acesso inicial apos registro, antes da aprovacao como membro.
 - `noTag`: cargo usado quando alguem deixa de ser convidado ativo.
 

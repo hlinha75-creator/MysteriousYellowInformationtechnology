@@ -1,4 +1,4 @@
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType, MessageFlags, ModalBuilder, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder } = require('discord.js');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ModalBuilder, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder } = require('discord.js');
 const { can, hasRole, isOwner } = require('../config/permissions');
 const ids = require('../config/ids');
 const eventsRepo = require('../modules/events/events.repository');
@@ -252,89 +252,6 @@ async function handleButton(interaction) {
     return interaction.editReply({ content: 'Pedido enviado para a ADM atualizar seus dados Albion na proxima rotina manual.' });
   }
 
-  if (interaction.customId === 'panel:create_auction') {
-    if (!can(interaction.member, 'createAuction')) {
-      return interaction.reply({ content: 'Voce precisa ser membro para criar leilao.', flags: MessageFlags.Ephemeral });
-    }
-    const draft = auctions.createDraft({});
-    return interaction.reply({
-      content: 'Escolha em qual canal de texto o leilao sera postado:',
-      components: [auctionChannelSelect(draft.id)],
-      flags: MessageFlags.Ephemeral
-    });
-  }
-
-  if (scope === 'auction') {
-    const auctionId = Number(id);
-    const auction = auctionsRepo.getAuction(auctionId);
-    if (!auction) return interaction.reply({ content: 'Leilao nao encontrado.', flags: MessageFlags.Ephemeral });
-
-    if (action === 'bid') {
-      if (auction.status !== 'open') {
-        return interaction.reply({ content: 'Este leilao ja foi encerrado.', flags: MessageFlags.Ephemeral });
-      }
-      if (auctions.isExpired(auction)) {
-        const closed = auctions.closeAuction({ auctionId, actorId: interaction.client.user?.id || 'system' });
-        await auctions.refreshAuctionMessage(interaction.client, closed);
-        if (closed.current_winner_id) await auctions.notifyWinner(interaction.client, closed);
-        return interaction.reply({ content: 'Este leilao acabou de encerrar pelo tempo limite.', flags: MessageFlags.Ephemeral });
-      }
-      return showModal(interaction, `auction:bid_modal:${auctionId}`, `Lance Leilao #${auctionId}`, [
-        textInput('amount', 'Valor do lance', true, 'Ex: 12m')
-      ]);
-    }
-
-    if (action === 'close') {
-      if (auction.created_by !== interaction.user.id && !can(interaction.member, 'approvePayment')) {
-        return interaction.reply({ content: 'Somente o criador ou staff/tesouraria pode encerrar este leilao.', flags: MessageFlags.Ephemeral });
-      }
-      const closed = auctions.closeAuction({ auctionId, actorId: interaction.user.id });
-      await auctions.refreshAuctionMessage(interaction.client, closed);
-      const winner = closed.current_winner_id
-        ? `Vencedor: <@${closed.current_winner_id}> por ${formatSilver(closed.current_bid)}.${closed.pickup_info ? `\nRetirada: ${closed.pickup_info}` : ''}`
-        : 'Leilao encerrado sem lances.';
-      if (closed.current_winner_id) {
-        await auctions.notifyWinner(interaction.client, closed);
-      }
-      return interaction.reply({ content: winner, flags: MessageFlags.Ephemeral });
-    }
-  }
-
-  if (scope === 'poll') {
-    const pollId = Number(id);
-
-    if (action === 'view_names') {
-      return interaction.reply({
-        embeds: [polls.pollNamesEmbed(pollId)],
-        flags: MessageFlags.Ephemeral
-      });
-    }
-
-    if (action === 'close') {
-      const poll = await polls.closePoll({ interaction, pollId });
-      return interaction.reply({
-        content: `Enquete #${poll.id} fechada. Quer criar um evento no horario mais votado?`,
-        components: polls.closeDecisionComponents(poll.id),
-        flags: MessageFlags.Ephemeral
-      });
-    }
-
-    if (action === 'create_event') {
-      const event = await polls.createEventFromPoll({ interaction, pollId });
-      return interaction.update({
-        content: `Evento ${event.event_code} criado pelo resultado da enquete.`,
-        components: []
-      });
-    }
-
-    if (action === 'no_event') {
-      return interaction.update({
-        content: 'Enquete encerrada sem criar evento.',
-        components: []
-      });
-    }
-  }
-
   if (scope === 'member_list') {
     if (!can(interaction.member, 'approveRegistration') && !can(interaction.member, 'importCsv')) {
       return interaction.reply({ content: 'Sem permissao para usar a lista de membros.', flags: MessageFlags.Ephemeral });
@@ -359,53 +276,6 @@ async function handleButton(interaction) {
       return interaction.editReply({
         embeds: [await memberList.filteredEmbed(interaction.guild, id)]
       });
-    }
-  }
-
-  if (scope === 'member_panel') {
-    if (action === 'points_normal') {
-      return interaction.reply({ embeds: [memberPanel.pointsEmbed(interaction.user.id, 'normal')], flags: MessageFlags.Ephemeral });
-    }
-
-    if (action === 'points_season') {
-      return interaction.reply({ embeds: [memberPanel.pointsEmbed(interaction.user.id, 'season')], flags: MessageFlags.Ephemeral });
-    }
-
-    if (action === 'builds') {
-      return interaction.reply({ embeds: [memberPanel.buildsEmbed()], flags: MessageFlags.Ephemeral });
-    }
-
-    if (action === 'history') {
-      return interaction.reply({ embeds: [memberPanel.historyEmbed(interaction.user.id)], flags: MessageFlags.Ephemeral });
-    }
-
-    if (action === 'channels') {
-      return interaction.reply({ embeds: [memberPanel.channelsEmbed()], flags: MessageFlags.Ephemeral });
-    }
-
-    if (action === 'ask_staff') {
-      return showModal(interaction, 'member_panel:ask_staff_modal', 'Perguntar para staff', [
-        textInput('text', 'Sua pergunta', true, 'Escreva sua pergunta para a staff', TextInputStyle.Paragraph)
-      ]);
-    }
-
-    if (action === 'report') {
-      return showModal(interaction, 'member_panel:report_modal', 'Denuncia anonima', [
-        textInput('text', 'Denuncia', true, 'Explique a denuncia. Seu nome nao sera enviado.', TextInputStyle.Paragraph)
-      ]);
-    }
-
-    if (action === 'suggestion') {
-      return showModal(interaction, 'member_panel:suggestion_modal', 'Sugestao', [
-        textInput('text', 'Sugestao', true, 'Escreva sua sugestao', TextInputStyle.Paragraph),
-        textInput('anonymous', 'Anonima? sim ou nao', false, 'Padrao: nao')
-      ]);
-    }
-
-    if (action === 'chat_bot') {
-      return showModal(interaction, 'member_panel:chat_modal', 'Conversar com o bot', [
-        textInput('text', 'Mensagem', true, 'Ex: como vejo meu saldo?', TextInputStyle.Paragraph)
-      ]);
     }
   }
 
@@ -1480,17 +1350,6 @@ function adminMemberProfileUserSelect() {
       .setPlaceholder('Buscar membro para abrir perfil')
       .setMinValues(1)
       .setMaxValues(1)
-  );
-}
-
-function auctionChannelSelect(draftId) {
-  return new ActionRowBuilder().addComponents(
-    new ChannelSelectMenuBuilder()
-      .setCustomId(`auction_channel_select:create:${draftId}`)
-      .setPlaceholder('Selecionar canal do leilao')
-      .setMinValues(1)
-      .setMaxValues(1)
-      .addChannelTypes(ChannelType.GuildText)
   );
 }
 

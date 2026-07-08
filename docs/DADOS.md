@@ -128,18 +128,9 @@ Uso:
 - inatividade;
 - performance/atividade.
 
-### Enquetes E Leiloes
+### Recursos Removidos
 
-- `polls`
-- `poll_votes`
-- `auctions`
-- `auction_bids`
-
-Uso:
-
-- votacao de horarios/opcoes;
-- criacao de evento por enquete;
-- leiloes de itens.
+Tabelas antigas de enquetes, leiloes, frutas e OCR podem existir em bancos ja migrados, mas o runtime atual nao usa esses recursos.
 
 ### Albion
 

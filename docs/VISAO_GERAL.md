@@ -40,12 +40,10 @@ Por isso, ele nao e um bot generico para qualquer servidor sem ajustes. Para usa
 - Gerar listas de membros, convidados, pendentes e sem tag.
 - Verificar inatividade por eventos e por convidados.
 - Importar rank PvE e logs semanais do Albion.
-- Criar enquetes e transformar resultado em evento.
-- Criar leiloes.
 - Criar objetivos temporarios no chat.
 - Gerar relatorio diario de membros Albion e voz Discord.
 - Manter painel ADM com pendencias e rotinas.
-- Gerar dashboard/HTMLs auxiliares.
+- Gerar HTMLs auxiliares sob demanda.
 
 ## Fluxo Mais Importante
 
@@ -67,7 +65,7 @@ O fluxo mais importante do projeto e:
 
 Alguns detalhes nao estavam 100% lembrados no momento desta documentacao:
 
-- Quais funcionalidades antigas devem ser removidas ou escondidas.
+- Funcionalidades antigas removidas: dashboard, leiloes, enquetes, FAQ, OCR e jogo de frutas.
 - Se existem variaveis secretas alem de `.env.example`.
 - Se o bot tem permissao administrativa completa no Discord.
 - Se existe rotina oficial de backup alem dos backups automaticos e manuais.

@@ -2,8 +2,6 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  ChannelSelectMenuBuilder,
-  ChannelType,
   MessageFlags,
   ModalBuilder,
   TextInputBuilder,
@@ -18,8 +16,6 @@ const albionVerification = require('../modules/albion/guildVerification.service'
 const ids = require('../config/ids');
 const { formatRenameResults, renameConfiguredChannels } = require('../modules/setup/channelRenamer');
 const { auditAttachment, auditGuildChannels, formatAuditSummary } = require('../modules/setup/channelAudit');
-const polls = require('../modules/polls/polls.service');
-const auctions = require('../modules/auctions/auctions.service');
 const objectives = require('../modules/objectives/objectives.service');
 const dailyReport = require('../modules/reports/dailyReport.service');
 const albionWeekly = require('../modules/albion/weekly.service');
@@ -31,8 +27,6 @@ const inactiveGuests = require('../modules/members/inactiveGuests.service');
 const pausedCommands = new Set([
   'albion',
   'auditar_canais',
-  'enquete',
-  'leilao',
   'list',
   'objetivo',
   'relatorio_diario',
@@ -80,51 +74,6 @@ async function handleCommand(interaction) {
     return interaction.showModal(modal('registration:submit', 'Registro Albion', [
       input('albionName', 'Nome do personagem no Albion')
     ]));
-  }
-
-  if (interaction.commandName === 'enquete') {
-    if (!can(interaction.member, 'createPoll')) {
-      return interaction.reply({ content: 'Voce nao tem permissao para criar enquete.', flags: MessageFlags.Ephemeral });
-    }
-    return interaction.showModal(modal('poll:create', 'Criar Enquete', [
-      input('question', 'Pergunta', TextInputStyle.Short, false)
-        .setPlaceholder(polls.defaultQuestion),
-      input('options', 'Opcoes separadas por virgula', TextInputStyle.Paragraph, false)
-        .setPlaceholder(polls.defaultOptions.join(', '))
-    ]));
-  }
-
-  if (interaction.commandName === 'leilao') {
-    if (!can(interaction.member, 'createAuction')) {
-      return interaction.reply({ content: 'Voce precisa ser membro para criar leilao.', flags: MessageFlags.Ephemeral });
-    }
-    const image = interaction.options.getAttachment('imagem');
-    const auctionId = interaction.options.getInteger('codigo');
-    if (image && !auctions.isImageAttachment(image)) {
-      return interaction.reply({ content: 'O anexo precisa ser uma imagem.', flags: MessageFlags.Ephemeral });
-    }
-
-    if (auctionId) {
-      if (!image) {
-        return interaction.reply({ content: 'Anexe uma imagem para atualizar este leilao.', flags: MessageFlags.Ephemeral });
-      }
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      const auction = await auctions.updateAuctionImage({
-        client: interaction.client,
-        auctionId,
-        imageUrl: image.url,
-        actorId: interaction.user.id,
-        member: interaction.member
-      });
-      return interaction.editReply({ content: `Imagem do leilao #${auction.id} atualizada.` });
-    }
-
-    const draft = auctions.createDraft({ imageUrl: image?.url });
-    return interaction.reply({
-      content: 'Escolha em qual canal de texto o leilao sera postado:',
-      components: [auctionChannelSelect(draft.id)],
-      flags: MessageFlags.Ephemeral
-    });
   }
 
   if (interaction.commandName === 'objetivo') {
@@ -389,14 +338,3 @@ module.exports = {
   input,
   modal
 };
-
-function auctionChannelSelect(draftId) {
-  return new ActionRowBuilder().addComponents(
-    new ChannelSelectMenuBuilder()
-      .setCustomId(`auction_channel_select:create:${draftId}`)
-      .setPlaceholder('Selecionar canal do leilao')
-      .setMinValues(1)
-      .setMaxValues(1)
-      .addChannelTypes(ChannelType.GuildText)
-  );
-}

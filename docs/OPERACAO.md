@@ -42,7 +42,6 @@ RAID_AVALON_CHANNEL_ID=
 RAID_AVALON_MESSAGE_ID=
 DATABASE_PATH=./data/notag.sqlite
 NODE_ENV=production
-DASHBOARD_PORT=3000
 ```
 
 ## Variaveis
@@ -57,7 +56,6 @@ DASHBOARD_PORT=3000
 | `RAID_AVALON_MESSAGE_ID` | Mensagem especifica de Raid Avalon. A confirmar uso atual. |
 | `DATABASE_PATH` | Caminho do banco SQLite. Padrao: `./data/notag.sqlite`. |
 | `NODE_ENV` | Ambiente: `development` ou `production`. |
-| `DASHBOARD_PORT` | Porta do dashboard local. Padrao no exemplo: `3000`. |
 
 ## Rodar Localmente
 
@@ -134,23 +132,12 @@ Quando fica online, o bot agenda:
 
 - atualizar mensagens de eventos em andamento a cada 60s;
 - verificar avisos de inicio de evento a cada 30s;
-- atualizar leiloes abertos a cada 60s;
 - processar escolhas vencidas da campanha a cada 10 min;
 - atualizar progresso da campanha a cada 10 min;
 - limpar canais de revisao expirados a cada 1h;
 - postar backup diario de saldos se necessario a cada 1h;
 - postar lembrete semanal Albion se necessario;
 - postar previa mensal de inatividade se necessario.
-
-## Dashboard
-
-Ha arquivos estaticos e scripts em `dashboard/`, alem de servidor em `src/server/dashboard.server.js`.
-
-Hoje o uso informado e local. Se for publicar em producao, confirmar:
-
-- se a porta `DASHBOARD_PORT=3000` esta liberada;
-- se o dashboard expõe dados reais;
-- se precisa de senha/autenticacao.
 
 ## Discloud
 

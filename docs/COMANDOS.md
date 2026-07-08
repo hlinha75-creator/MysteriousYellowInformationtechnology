@@ -56,38 +56,6 @@ Abre formulario de registro de nick Albion.
 
 Mesmo fluxo do botao **Registrar Nick**.
 
-### `/enquete`
-
-Cria uma enquete no canal configurado para ping/main.
-
-Permissao interna: `createPoll`.
-
-O bot abre formulario com:
-
-- pergunta;
-- opcoes separadas por virgula.
-
-Depois, a staff pode fechar a enquete e criar evento com o horario mais votado.
-
-### `/leilao`
-
-Cria leilao de item.
-
-Permissao interna: `createAuction`.
-
-Opcoes:
-
-- `codigo`: codigo de leilao existente para trocar imagem.
-- `imagem`: imagem do item.
-
-Fluxo:
-
-1. Rodar `/leilao`.
-2. Selecionar canal.
-3. Informar item, lance inicial, incremento minimo, tempo limite e local de retirada.
-4. Membros dao lance pelo botao.
-5. Criador ou staff/tesouraria encerra.
-
 ### `/objetivo`
 
 Avisa objetivo temporario no chat Notag.
@@ -283,7 +251,6 @@ Botoes:
 - **Consultar**
 - **Sacar**
 - **Pedir pagamento**
-- **Criar leilao**
 
 Canal configurado: `ids.channels.consultBalance`.
 
@@ -307,8 +274,7 @@ Mostra fila de pendencias:
 - pedidos de pagamento;
 - backups com erro;
 - registros pendentes;
-- DMs pendentes de verificacao;
-- enquetes abertas.
+- DMs pendentes de verificacao.
 
 ### Painel Deposito
 

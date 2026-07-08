@@ -15,6 +15,19 @@ Prioridade do projeto:
 - comandos slash apenas para setup e manutencao;
 - se ficar complexo demais, preferir refazer simples em vez de evoluir sem controle.
 
+## Recursos Removidos
+
+Para simplificar o bot, nao manter nem recriar sem decisao explicita:
+- dashboard web/local antigo;
+- leiloes;
+- enquetes manuais;
+- enquete diaria Black For-Fun;
+- jogo de frutas/estrelinhas/sorteio;
+- OCR de prints;
+- FAQ/conversa automatica por palavras-chave.
+
+Tabelas antigas desses recursos podem existir em bancos ja migrados, mas o runtime do bot nao deve expor comandos, botoes, handlers ou modulos para eles.
+
 ## Stack
 
 - Node.js
@@ -142,15 +155,6 @@ Assumir/gerenciar evento:
 - adm;
 - owner.
 
-Criar enquete:
-- membro;
-- caller;
-- staff;
-- adm;
-- recrutador;
-- tesoureiro;
-- owner.
-
 Iniciar/finalizar evento:
 - criador do evento diretamente;
 - staff/adm/owner apenas com confirmacao quando nao for o criador.
@@ -201,7 +205,6 @@ Painel do membro:
 - pergunta para staff, denuncia anonima e sugestao vao para `1516030220073963520`;
 - staff pode responder pergunta pelo botao e o bot envia DM ao membro;
 - historico mostra eventos participados, horas em evento/voz, saldo acumulado positivo e saldo atual;
-- conversar com bot responde palavras-chave simples ou envia pergunta para staff atualizar FAQ;
 - Ver/Ocultar por enquanto mostra atalhos importantes sem alterar permissoes automaticamente.
 
 Privacidade de mensagens por cargo:
@@ -299,51 +302,11 @@ Ao cancelar:
 
 Staff/ADM/owner podem cancelar evento de outro criador com confirmacao, igual iniciar/finalizar.
 
-## Enquetes
+## Tutoriais
 
-Enquetes sao criadas por `/enquete`.
-
-Quem pode criar:
-- membro ou superior.
-
-Fluxo:
-- criador abre modal;
-- se deixar vazio, pergunta padrao: `Voce quer Raid Avalon hoje? Que horas?`;
-- se deixar vazio, opcoes padrao: `17h, 18h, 19h, 20h, 21h, 22h, 23h`;
-- bot posta no canal ping-main;
-- bot menciona os cargos configurados de membro e superiores;
-- membros votam usando String Select Menu com multiplas escolhas;
-- cada membro pode votar em varios horarios;
-- se votar novamente, substitui o voto anterior;
-- placar atualiza na embed;
-- placar deve mostrar quantidade e quem votou em cada horario;
-- fechamento e manual;
-- somente o criador fecha;
-- ao fechar, bot pergunta ao criador se deseja criar evento;
-- se criar evento, usar horario mais votado;
-- em empate, usar a primeira opcao empatada na ordem da enquete.
-
-Votos de enquete ficam no SQLite.
-
-## FAQ e Tutoriais
-
-O bot pode responder mensagens simples quando alguem chama:
-- `botnotag`;
-- `notag bot`;
-- `oi bot`;
-- `bot tutorial`.
-
-FAQ:
-- Membro e Convidado podem perguntar sobre saldo, saque, evento e registro;
-- Staff, ADM, Caller e Recrutador podem perguntar tambem sobre deposito, CSV e backup;
-- respostas sao por palavras-chave simples;
-- sem IA externa por enquanto;
-- novas respostas devem ficar em `src/modules/faq/faq.service.js`.
+FAQ/conversa automatica foi removido para simplificar o bot.
 
 Tutoriais:
-- `bot tutorial` mostra um menu de tutoriais;
-- `bot tutorial completo` tenta mandar o tutorial completo no privado;
-- o menu e publico, mas a resposta do item escolhido e efemera;
 - permitido para Staff, ADM, Caller, Recrutador e owner.
 
 Tutoriais atuais:
@@ -498,50 +461,6 @@ Fluxo:
 Se tentar confirmar sem participantes:
 - bloquear e avisar.
 
-## Jogo de Frutas NOTAG
-
-O jogo de frutas e separado do financeiro e nao altera saldo de prata.
-
-Quando um evento e enviado para o financeiro depois da revisao:
-- o bot calcula o tempo valido dos participantes;
-- espectador nao conta;
-- 25 minutos ja contam como 1 bloco de 30 minutos;
-- abaixo de 25 minutos nao ganha fruta;
-- acima disso, arredondar para o bloco de 30 minutos mais proximo;
-- cada bloco gera 1 fruta;
-- o evento so pode gerar frutas uma vez.
-
-Frutas:
-- Banana de prata: 70%, vale 1 ponto;
-- Maca de ouro: 25%, vale 3 pontos;
-- Uva esmeralda roxa: 5%, vale 10 pontos.
-
-As frutas sao automaticamente dadas ao bot NOTAG:
-- membro nao precisa clicar em nada;
-- nao mandar DM;
-- postar resumo no chat NOTAG.
-
-Estrelinhas:
-- a cada 10 pontos, ganha 1 estrelinha;
-- pontos usados viram estrelinha e a sobra continua;
-- exemplo: tinha 9 pontos, ganhou 3, vira 1 estrelinha e sobra 2 pontos;
-- estrela aparece na lista/ranking;
-- no apelido do Discord aparece apenas o numero de estrelas no final;
-- exemplo: `Tmaiusculo 1`;
-- se ja tiver numero no final, substituir;
-- guardar o nome base no banco para nao baguncar apelidos;
-- se o bot nao conseguir renomear por hierarquia, registrar mesmo assim e avisar no resumo quando possivel.
-
-Ranking e sorteio:
-- todo dia as 18:00 no horario Albion/server;
-- postar no chat NOTAG;
-- ranking top 20 acumulado;
-- sorteio diario junto com ranking;
-- participa quem ja ganhou pelo menos 1 fruta alguma vez;
-- chance igual para todos;
-- pode repetir vencedor em dias diferentes;
-- premio e bau numero 1 a 14.
-
 ## Painel ADM
 
 Retirar saldo:
@@ -629,9 +548,9 @@ Preferir codigo dividido por modulos:
 Nao criar dashboard web agora.
 
 Dashboard/API:
-- servidor HTTP do dashboard fica desligado no `src/index.js` para economizar RAM no Discloud;
-- nao iniciar porta 3000 em producao enquanto a prioridade for manter o bot simples;
-- arquivos antigos de dashboard podem permanecer no repositorio, mas nao devem rodar automaticamente.
+- dashboard web antigo removido;
+- nao recriar dashboard web/API agora;
+- manter relatorios HTML pontuais gerados sob demanda por comandos/botoes quando forem uteis para operacao.
 
 Interface de eventos:
 - evento aberto deve ser compacto e mais horizontal;
@@ -641,8 +560,7 @@ Interface de eventos:
 - inscricao em evento aberto usa botoes por funcao em vez de menu select;
 - Discord nao tem botao amarelo nativo, entao Suporte usa emoji amarelo em botao cinza;
 - ao iniciar evento, a sala de voz usa o titulo do evento como nome.
-- simulador HTML usa imagens locais em `dashboard/assets/event-icons`;
-- para usar as mesmas imagens no bot real do Discord em botoes/textos, enviar como emojis personalizados do servidor e cadastrar os IDs no codigo.
+- para usar imagens no bot real do Discord em botoes/textos, enviar como emojis personalizados do servidor e cadastrar os IDs no codigo.
 - Raid Avalon Full usa botoes por funcao: Tank, Healer, Suporte, DPS;
 - ao clicar numa funcao, abre menu com slots especificos livres daquela funcao;
 - slots de Raid Avalon: Tank Martelo/Incubus/Quebra Reinos, Healer Hallow/Fallen/Raiz, Suporte SC/Danacao/Enig, DPS Aguia/Uivo Frio/Furabruma/Repetidor 1-8;
@@ -666,16 +584,6 @@ Painel do membro / Builds:
 - Repetidor preenchido com img `https://prnt.sc/j8TM6Ug0Qsve` e detalhes `https://albionfreemarket.com/builds/details/6a3418bb65245f624c119f56`;
 - demais builds ficam como `img pendente` e `detalhes pendente` para preencher depois.
 - botoes de evento sem parametro extra usam sufixo no custom_id (`:main` ou `:raid`) para evitar erro Discord `COMPONENT_CUSTOM_ID_DUPLICATED`.
-
-Enquete diaria Black For-Fun:
-- todo dia as 10:00 UTC o bot cria enquete no canal membro `1481363760110243910`;
-- pergunta disponibilidade entre 10h e 03h para content black "for fun";
-- membros podem escolher varios horarios;
-- ao passar de 10 votantes, menciona staff/caller/adm uma vez;
-- ao chegar em 20 votantes, cria evento normal `Black For-Fun` no horario mais votado;
-- composicao do evento automatico: Tank 2, Healer 2, Suporte 1, DPS 15;
-- interessados no horario vencedor sao adicionados no evento automaticamente;
-- 15 minutos antes do horario mais votado o bot inicia o evento e move quem estiver em voz.
 
 Tag temporaria de evento:
 - todo evento criado ganha cargo temporario mencionavel com nome `DDMMasHHh`;

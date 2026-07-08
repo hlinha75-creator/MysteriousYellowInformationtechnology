@@ -64,11 +64,17 @@ button {
   margin-bottom: 22px;
 }
 
-.brand img,
-.hero-board img {
+.brand-mark,
+.board-icon {
   width: 48px;
   height: 48px;
-  object-fit: contain;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #eef6f5;
+  color: var(--accent);
+  font-weight: 900;
 }
 
 .brand strong {
@@ -147,7 +153,6 @@ label,
   border-radius: 8px;
   background:
     linear-gradient(90deg, rgba(255,255,255,0.96), rgba(255,255,255,0.82)),
-    url("../dashboard/assets/event-icons/Fallen.webp") right 32px center / 220px no-repeat,
     #eef6f5;
   padding: 34px;
   box-shadow: var(--shadow);
@@ -234,6 +239,10 @@ h1 {
 .board-row span {
   color: var(--muted);
   font-weight: 800;
+}
+
+.board-row .board-icon {
+  color: var(--accent);
 }
 
 .utility-bar {

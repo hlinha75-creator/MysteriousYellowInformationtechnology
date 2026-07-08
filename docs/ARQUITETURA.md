@@ -45,9 +45,7 @@ src/
   database/
   interactions/
   modules/
-  server/
   utils/
-dashboard/
 data/
 resources/
 scripts/
@@ -74,7 +72,7 @@ Roteia botoes, selects e modais.
 - `router.js`: decide se interacao e comando, botao, select ou modal.
 - `buttons.js`: botoes dos paineis, eventos, financeiro, admin, CSV, registro e outros.
 - `modals.js`: formularios de evento, loot, registro, saque, pagamento, deposito etc.
-- `selects.js`: menus de selecao, como vagas, leilao, deposito e revisao.
+- `selects.js`: menus de selecao, como vagas, deposito e revisao.
 
 Regra pratica:
 
@@ -106,19 +104,15 @@ Cada modulo concentra uma area de negocio.
 | Modulo | Responsabilidade |
 | --- | --- |
 | `albion` | sincronizacao Albion e imports semanais |
-| `analytics` | tracking de uso e relatorios/dashboard |
-| `auctions` | leiloes, lances, fechamento |
 | `audit` | logs de auditoria |
 | `campaigns` | campanha 900m e decisoes de doacao |
 | `csv` | import/export CSV, HTML de saldos, backup de saldos |
 | `deposit` | deposito manual e deposito por lista |
 | `events` | eventos, vagas, voz, loot split, financeiro, carreira |
-| `faq` | respostas/tutorial via mensagens |
 | `finance` | saldos, transacoes, saques, pedidos de pagamento |
 | `members` | lista de membros, painel do membro, inatividade |
 | `objectives` | objetivos temporarios |
 | `operations` | painel ADM, lembretes, fila de pendencias |
-| `polls` | enquetes e criacao de evento por resultado |
 | `registration` | registro de nick Albion |
 | `reports` | relatorio diario |
 | `setup` | paineis fixos e auditoria/renomeacao de canais |
@@ -171,14 +165,6 @@ Painel Criar Evento
   -> finance deposita saldos
 ```
 
-## Dashboard
+## Recursos Removidos
 
-A pasta `dashboard/` contem HTML/CSS/JS e previews.
-
-O servidor relacionado fica em:
-
-```text
-src/server/dashboard.server.js
-```
-
-Uso atual informado: local.
+Dashboard, leiloes, enquetes e FAQ foram removidos para manter o bot mais simples.
