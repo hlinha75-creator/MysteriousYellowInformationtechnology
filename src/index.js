@@ -14,6 +14,7 @@ const balanceBackup = require('./modules/csv/balanceBackup.service');
 const operations = require('./modules/operations/operations.service');
 const campaigns = require('./modules/campaigns/campaigns.service');
 const { handleInteraction } = require('./interactions/router');
+const { isExpiredOrDuplicateInteraction } = require('./utils/interactions');
 
 migrate();
 backupDatabase('startup');
@@ -75,6 +76,7 @@ client.once('clientReady', () => {
 });
 
 client.on('error', (error) => {
+  if (isExpiredOrDuplicateInteraction(error)) return;
   console.error('Erro no client Discord:', error);
 });
 

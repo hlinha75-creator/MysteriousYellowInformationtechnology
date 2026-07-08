@@ -6,6 +6,7 @@ const registration = require('../modules/registration/registration.service');
 const finance = require('../modules/finance/finance.service');
 const { parseSilver, formatSilver } = require('../utils/silver');
 const { safeSend, baseEmbed } = require('../utils/discord');
+const { safeDeferReply, safeEditReply, safeReply } = require('../utils/interactions');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
 const financeRepo = require('../modules/finance/finance.repository');
 const deposit = require('../modules/deposit/deposit.service');
@@ -147,9 +148,10 @@ async function handleModal(interaction) {
 
   if (interaction.customId === 'event:create') {
     if (!can(interaction.member, 'createEvent')) {
-      return interaction.reply({ content: 'Voce nao tem permissao para criar evento.', flags: MessageFlags.Ephemeral });
+      return safeReply(interaction, { content: 'Voce nao tem permissao para criar evento.', flags: MessageFlags.Ephemeral });
     }
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const acknowledged = await safeDeferReply(interaction, { flags: MessageFlags.Ephemeral });
+    if (!acknowledged) return null;
     const title = fieldOrDefault(interaction, 'title', 'DG Grupo T8+');
     const description = fieldOrDefault(interaction, 'description', 'T8 equivalente');
     const location = fieldOrDefault(interaction, 'location', 'Pergunte na Call');
@@ -168,21 +170,22 @@ async function handleModal(interaction) {
       supportSlots: slots[2],
       dpsSlots: slots[3]
     });
-    return interaction.editReply({ content: `Evento ${event.event_code} criado.` });
+    return safeEditReply(interaction, { content: `Evento ${event.event_code} criado.` });
   }
 
   if (interaction.customId === 'event:create_raid_full') {
     if (!can(interaction.member, 'createEvent')) {
-      return interaction.reply({ content: 'Voce nao tem permissao para criar Raid Avalon Full.', flags: MessageFlags.Ephemeral });
+      return safeReply(interaction, { content: 'Voce nao tem permissao para criar Raid Avalon Full.', flags: MessageFlags.Ephemeral });
     }
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const acknowledged = await safeDeferReply(interaction, { flags: MessageFlags.Ephemeral });
+    if (!acknowledged) return null;
     const event = await events.createRaidAvalonFullFromModal(interaction, {
       scheduledTime: fieldOrDefault(interaction, 'scheduledTime', defaultAlbionTime(10)),
       location: fieldOrDefault(interaction, 'location', 'Pergunte na Call'),
       dungeonTier: fieldOrDefault(interaction, 'dungeonTier', 'Nao informado'),
       buildTier: fieldOrDefault(interaction, 'buildTier', 'Nao informado')
     });
-    return interaction.editReply({ content: `Raid Avalon Full ${event.event_code} criada com 20 vagas.` });
+    return safeEditReply(interaction, { content: `Raid Avalon Full ${event.event_code} criada com 20 vagas.` });
   }
 
   if (interaction.customId.startsWith('event:raid_join:')) {

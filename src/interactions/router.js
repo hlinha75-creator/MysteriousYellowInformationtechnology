@@ -4,6 +4,7 @@ const { handleModal } = require('./modals');
 const { handleSelect } = require('./selects');
 const events = require('../modules/events/events.service');
 const { MessageFlags } = require('discord.js');
+const { safeDeferReply, safeEditReply, safeReply } = require('../utils/interactions');
 
 async function handleInteraction(interaction) {
   try {
@@ -14,8 +15,10 @@ async function handleInteraction(interaction) {
       if (interaction.customId.startsWith('event:cancel_modal:')) {
         const eventId = Number(interaction.customId.split(':')[2]);
         const reason = interaction.fields.getTextInputValue('reason');
+        const acknowledged = await safeDeferReply(interaction, { flags: MessageFlags.Ephemeral });
+        if (!acknowledged) return null;
         await events.cancelEvent(interaction, eventId, reason);
-        return interaction.reply({ content: 'Evento cancelado.', flags: MessageFlags.Ephemeral });
+        return safeEditReply(interaction, { content: 'Evento cancelado.' });
       }
       return await handleModal(interaction);
     }
@@ -26,8 +29,7 @@ async function handleInteraction(interaction) {
       console.error('Erro em interaction:', error);
     }
     const payload = { content: `Erro: ${message}`, flags: MessageFlags.Ephemeral };
-    if (interaction.deferred || interaction.replied) return interaction.followUp(payload).catch(() => {});
-    return interaction.reply(payload).catch(() => {});
+    return safeReply(interaction, payload).catch(() => {});
   }
 }
 
