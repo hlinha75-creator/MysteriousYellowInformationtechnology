@@ -1063,6 +1063,36 @@ function syncApplyAttachment(result) {
   return syncRowsAttachment(rows, `resultado-sincronizar-albion-${result.preview.verificationId}.csv`);
 }
 
+async function postIdentificationNotice(client, result) {
+  const rows = [...result.preview.missingRows, ...result.preview.issueRows];
+  const userIds = [...new Set(rows.map((row) => String(row.discord_id || '')).filter(Boolean))];
+  if (!userIds.length) return { users: 0, messages: 0 };
+
+  const channel = await client.channels.fetch(ids.channels.register).catch(() => null);
+  if (!channel?.isTextBased()) return { users: 0, messages: 0 };
+
+  const chunks = [];
+  for (let index = 0; index < userIds.length; index += 40) chunks.push(userIds.slice(index, index + 40));
+
+  for (let index = 0; index < chunks.length; index += 1) {
+    const chunk = chunks[index];
+    const introduction = index === 0
+      ? [
+        'Atencao, pessoal! Precisamos atualizar a identificacao de voces com o personagem no Albion.',
+        '',
+        'Por favor, atualizem o apelido no servidor para o nome usado no jogo ou refacam o registro. Isso evita perder o cargo e tambem ajuda a recuperar o cargo correto.',
+        ''
+      ]
+      : [`Identificacao pendente - continuacao ${index + 1}/${chunks.length}:`, ''];
+    await channel.send({
+      content: [...introduction, chunk.map((userId) => `<@${userId}>`).join(' ')].join('\n'),
+      allowedMentions: { users: chunk }
+    });
+  }
+
+  return { users: userIds.length, messages: chunks.length };
+}
+
 function syncRowsAttachment(rows, name) {
   const columns = ['discord_id', 'discord_tag', 'discord_name', 'old_albion_name', 'albion_name', 'status', 'score', 'action', 'applied', 'result', 'motivo'];
   return htmlReportAttachment({
@@ -1118,6 +1148,7 @@ module.exports = {
   summarizeAnalysis,
   syncApplyAttachment,
   syncApplyText,
+  postIdentificationNotice,
   syncPreviewAttachment,
   syncPreviewText
 };

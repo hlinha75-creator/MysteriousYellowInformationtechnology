@@ -1122,9 +1122,15 @@ async function handleButton(interaction) {
         previewId: id,
         actorId: interaction.user.id
       });
+      const notice = await albionVerification.postIdentificationNotice(interaction.client, result);
       await interaction.message.edit({ components: [] }).catch(() => {});
       return interaction.editReply({
-        content: albionVerification.syncApplyText(result),
+        content: [
+          albionVerification.syncApplyText(result),
+          notice.users
+            ? `Aviso de identificacao publicado em <#${ids.channels.register}> para ${notice.users} pessoa(s).`
+            : 'Nenhum aviso de identificacao precisou ser publicado.'
+        ].join('\n'),
         files: [albionVerification.syncApplyAttachment(result)]
       });
     }
