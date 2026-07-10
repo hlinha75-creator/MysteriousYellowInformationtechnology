@@ -1117,12 +1117,21 @@ async function reconcileMemberRoles({ guild, result, actorId, days = 7 }) {
         if (hasGuest) await member.roles.remove(ids.roles.guest, reason);
         if (ids.roles.noTag && !hasNoTag) await member.roles.add(ids.roles.noTag, reason);
         await member.send([
+          '**Regularizacao de registro e cargos**',
           !linked
             ? 'Nao conseguimos relacionar seu nick do Discord com um personagem da lista atual da guild no Albion.'
             : `Nao encontramos entrada sua em call de voz nos ultimos ${days} dias.`,
           '',
           'Os cargos Membro/Convidado foram removidos. Acesse o canal de registro, refaca seu registro com o nick correto do Albion e entre em uma call para recuperar o cargo.',
-          `Canal de registro: <#${ids.channels.register}>`
+          `Canal de registro: <#${ids.channels.register}>`,
+          '',
+          '**Registration and role update**',
+          !linked
+            ? 'We could not link your Discord nickname to a character in the guild\'s current Albion member list.'
+            : `We could not find a voice-channel entry from you in the last ${days} days.`,
+          '',
+          'Your Member/Guest roles were removed. Please open the registration channel, register again using your correct Albion character name, and join a voice channel to recover your role.',
+          `Registration channel: <#${ids.channels.register}>`
         ].join('\n')).catch(() => {});
         const resultCode = !linked ? 'removido_sem_vinculo' : 'removido_sem_call';
         audit.createAuditLog({
@@ -1134,7 +1143,15 @@ async function reconcileMemberRoles({ guild, result, actorId, days = 7 }) {
           reason,
           metadata: { days, albionName: user?.albion_name || null }
         });
-        results.push({ discord_id: member.id, discord_name: member.displayName, albion_name: user?.albion_name || '', result: resultCode, reason: !linked ? 'Nick nao identificado' : `Sem call ha ${days} dias` });
+        results.push({
+          discord_id: member.id,
+          discord_name: member.displayName,
+          albion_name: user?.albion_name || '',
+          result: resultCode,
+          reason: !linked
+            ? 'Nick nao identificado / Nick not verified'
+            : `Sem call ha ${days} dias / No voice activity for ${days} days`
+        });
       } catch (error) {
         results.push({ discord_id: member.id, result: 'erro_remover', error: String(error.message || error) });
       }
@@ -1207,9 +1224,13 @@ async function processIdentificationNoticeQueue(client) {
     if (!channel?.isTextBased()) return { sent: 0, archived };
     const message = await channel.send({
       content: [
-        'Regularizacao de registro e cargos da guild',
+        '**Regularizacao de registro e cargos da guild**',
         '',
         'As pessoas abaixo perderam Membro/Convidado. Refacam o registro com o nick correto do Albion e entrem em uma call para recuperar o cargo:',
+        '',
+        '**Guild registration and role update**',
+        '',
+        'The people below lost their Member/Guest roles. Please register again using your correct Albion character name and join a voice channel to recover your role:',
         '',
         ...rows.map((row, index) => `${index + 1}. <@${row.discord_id}> - ${row.reason}`)
       ].join('\n'),
