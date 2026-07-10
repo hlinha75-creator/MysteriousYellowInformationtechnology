@@ -1122,13 +1122,27 @@ async function handleButton(interaction) {
         previewId: id,
         actorId: interaction.user.id
       });
-      const notice = await albionVerification.postIdentificationNotice(interaction.client, result);
+      const reconciliation = await albionVerification.reconcileMemberRoles({
+        guild: interaction.guild,
+        result,
+        actorId: interaction.user.id,
+        days: 7
+      });
+      const notice = await albionVerification.postIdentificationNotice(
+        interaction.client,
+        reconciliation,
+        result.preview.verificationId
+      );
       await interaction.message.edit({ components: [] }).catch(() => {});
       return interaction.editReply({
         content: [
           albionVerification.syncApplyText(result),
+          `Cargos removidos por nick sem vinculo: ${reconciliation.removedUnlinked}`,
+          `Cargos removidos por mais de 7 dias sem call: ${reconciliation.removedInactive}`,
+          `Promovidos/recuperados como Membro: ${reconciliation.promoted}`,
+          `Falhas ao ajustar cargos: ${reconciliation.failed}`,
           notice.users
-            ? `Aviso de identificacao publicado em <#${ids.channels.register}> para ${notice.users} pessoa(s).`
+            ? `${notice.users} aviso(s) agendado(s) em lotes de 5, a cada 10 minutos, em <#${ids.channels.inactivityNotice}>.`
             : 'Nenhum aviso de identificacao precisou ser publicado.'
         ].join('\n'),
         files: [albionVerification.syncApplyAttachment(result)]

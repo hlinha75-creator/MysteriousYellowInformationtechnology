@@ -12,11 +12,12 @@ const STATUS = {
   issue: 'PROBLEMA'
 };
 
-const PROTECTED_ROLE_NAMES = ['staff', 'adm', 'caller', 'recruiter'];
+const PROTECTED_ROLE_NAMES = ['staff', 'adm', 'caller', 'recruiter', 'treasurer'];
 const PROTECTED_PREFIXES = ['!', '.'];
 const MIN_SIMILARITY = 0.72;
 const AMBIGUOUS_DELTA = 0.06;
 const syncPreviews = new Map();
+let noticeQueueRunning = false;
 
 function db() {
   return require('../../database/connection').getDatabase();
@@ -879,6 +880,7 @@ async function previewAlbionSync(guild, text, actorId) {
     verificationId,
     guildId: guild.id,
     actorId,
+    sourceNames: names,
     sourceNamesCount: names.length,
     syncRows: rows.sync,
     missingRows: rows.missing,
@@ -1024,6 +1026,12 @@ function syncPreviewText(preview) {
     'Amostra:',
     sample,
     '',
+    'Ao confirmar, o bot tambem conciliara os cargos:',
+    '- remove Membro/Convidado de quem estiver sem vinculo valido ou sem entrar em call ha mais de 7 dias;',
+    '- adiciona Sem Tag e envia uma DM pedindo novo registro;',
+    '- concede Membro a quem estiver vinculado, constar nesta lista e tiver call nos ultimos 7 dias;',
+    '- cargos administrativos e o dono do servidor sao protegidos.',
+    '',
     'Confirme somente se os nomes parecem corretos. O CSV anexo tem a lista completa.'
   ].join('\n').slice(0, 1900);
 }
@@ -1063,34 +1071,195 @@ function syncApplyAttachment(result) {
   return syncRowsAttachment(rows, `resultado-sincronizar-albion-${result.preview.verificationId}.csv`);
 }
 
-async function postIdentificationNotice(client, result) {
-  const rows = [...result.preview.missingRows, ...result.preview.issueRows];
-  const userIds = [...new Set(rows.map((row) => String(row.discord_id || '')).filter(Boolean))];
-  if (!userIds.length) return { users: 0, messages: 0 };
+async function reconcileMemberRoles({ guild, result, actorId, days = 7 }) {
+  const members = await fetchGuildMembersWithRetry(guild);
+  const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+  const linkedUsers = new Map(db().prepare(`
+    SELECT discord_id, albion_name, registration_status
+    FROM users
+  `).all().map((row) => [String(row.discord_id), row]));
+  const activeIds = new Set(db().prepare(`
+    SELECT DISTINCT discord_id
+    FROM voice_sessions
+    WHERE joined_at >= ?
+  `).all(cutoff).map((row) => String(row.discord_id)));
+  const guildNames = new Set(result.preview.sourceNames.map(normalizedName));
+  const unresolvedIds = new Set(
+    [...result.preview.missingRows, ...result.preview.issueRows]
+      .map((row) => String(row.discord_id || ''))
+      .filter(Boolean)
+  );
+  const results = [];
 
-  const channel = await client.channels.fetch(ids.channels.register).catch(() => null);
-  if (!channel?.isTextBased()) return { users: 0, messages: 0 };
+  for (const member of members.filter((item) => !item.user.bot).values()) {
+    if (hasProtectedRole(member)) {
+      results.push({ discord_id: member.id, result: 'protegido' });
+      continue;
+    }
 
-  const chunks = [];
-  for (let index = 0; index < userIds.length; index += 40) chunks.push(userIds.slice(index, index + 40));
+    const user = linkedUsers.get(String(member.id));
+    const linked = Boolean(user?.albion_name)
+      && guildNames.has(normalizedName(user.albion_name))
+      && !unresolvedIds.has(String(member.id));
+    const active = activeIds.has(String(member.id));
+    const hasMember = member.roles.cache.has(ids.roles.member);
+    const hasGuest = member.roles.cache.has(ids.roles.guest);
+    const hasNoTag = member.roles.cache.has(ids.roles.noTag);
 
-  for (let index = 0; index < chunks.length; index += 1) {
-    const chunk = chunks[index];
-    const introduction = index === 0
-      ? [
-        'Atencao, pessoal! Precisamos atualizar a identificacao de voces com o personagem no Albion.',
-        '',
-        'Por favor, atualizem o apelido no servidor para o nome usado no jogo ou refacam o registro. Isso evita perder o cargo e tambem ajuda a recuperar o cargo correto.',
-        ''
-      ]
-      : [`Identificacao pendente - continuacao ${index + 1}/${chunks.length}:`, ''];
-    await channel.send({
-      content: [...introduction, chunk.map((userId) => `<@${userId}>`).join(' ')].join('\n'),
-      allowedMentions: { users: chunk }
-    });
+    if (!linked || !active) {
+      if (!hasMember && !hasGuest) {
+        results.push({ discord_id: member.id, result: 'sem_cargo_para_retirar', reason: !linked ? 'sem_vinculo' : 'sem_call_7_dias' });
+        continue;
+      }
+      const reason = !linked ? 'Nick Discord nao relacionado a membro atual do Albion' : `Sem entrada em call ha mais de ${days} dias`;
+      try {
+        if (hasMember) await member.roles.remove(ids.roles.member, reason);
+        if (hasGuest) await member.roles.remove(ids.roles.guest, reason);
+        if (ids.roles.noTag && !hasNoTag) await member.roles.add(ids.roles.noTag, reason);
+        await member.send([
+          !linked
+            ? 'Nao conseguimos relacionar seu nick do Discord com um personagem da lista atual da guild no Albion.'
+            : `Nao encontramos entrada sua em call de voz nos ultimos ${days} dias.`,
+          '',
+          'Os cargos Membro/Convidado foram removidos. Acesse o canal de registro, refaca seu registro com o nick correto do Albion e entre em uma call para recuperar o cargo.',
+          `Canal de registro: <#${ids.channels.register}>`
+        ].join('\n')).catch(() => {});
+        const resultCode = !linked ? 'removido_sem_vinculo' : 'removido_sem_call';
+        audit.createAuditLog({
+          type: 'albion_member_role_reconciled',
+          actorId,
+          targetId: member.id,
+          beforeValue: hasMember ? 'member' : 'guest',
+          afterValue: 'no_tag',
+          reason,
+          metadata: { days, albionName: user?.albion_name || null }
+        });
+        results.push({ discord_id: member.id, discord_name: member.displayName, albion_name: user?.albion_name || '', result: resultCode, reason: !linked ? 'Nick nao identificado' : `Sem call ha ${days} dias` });
+      } catch (error) {
+        results.push({ discord_id: member.id, result: 'erro_remover', error: String(error.message || error) });
+      }
+      continue;
+    }
+
+    if (!hasMember || hasGuest || hasNoTag) {
+      try {
+        if (!hasMember) await member.roles.add(ids.roles.member, 'Registro Albion valido e atividade recente em call');
+        if (hasGuest) await member.roles.remove(ids.roles.guest, 'Promovido para Membro');
+        if (hasNoTag) await member.roles.remove(ids.roles.noTag, 'Promovido para Membro');
+        audit.createAuditLog({
+          type: 'albion_member_role_reconciled',
+          actorId,
+          targetId: member.id,
+          beforeValue: hasGuest ? 'guest' : (hasNoTag ? 'no_tag' : 'sem_cargo'),
+          afterValue: 'member',
+          reason: 'Registro Albion valido e entrada em call nos ultimos 7 dias',
+          metadata: { days, albionName: user.albion_name }
+        });
+        results.push({ discord_id: member.id, discord_name: member.displayName, albion_name: user.albion_name, result: 'promovido_membro' });
+      } catch (error) {
+        results.push({ discord_id: member.id, result: 'erro_promover', error: String(error.message || error) });
+      }
+    } else {
+      results.push({ discord_id: member.id, result: 'membro_regular' });
+    }
   }
 
-  return { users: userIds.length, messages: chunks.length };
+  return {
+    days,
+    results,
+    removedUnlinked: results.filter((row) => row.result === 'removido_sem_vinculo').length,
+    removedInactive: results.filter((row) => row.result === 'removido_sem_call').length,
+    promoted: results.filter((row) => row.result === 'promovido_membro').length,
+    failed: results.filter((row) => row.result.startsWith('erro_')).length
+  };
+}
+
+async function postIdentificationNotice(client, reconciliation, verificationId = null) {
+  const rows = reconciliation.results.filter((row) => ['removido_sem_vinculo', 'removido_sem_call'].includes(row.result));
+  if (!rows.length) return { users: 0, messages: 0 };
+  const stmt = db().prepare(`
+    INSERT OR IGNORE INTO member_role_notice_queue (verification_id, discord_id, reason)
+    VALUES (?, ?, ?)
+  `);
+  const enqueue = transaction((items) => {
+    let inserted = 0;
+    for (const row of items) inserted += stmt.run(verificationId, row.discord_id, row.reason).changes;
+    return inserted;
+  });
+  const inserted = enqueue(rows);
+  return { users: inserted, messages: Math.ceil(inserted / 5) };
+}
+
+async function processIdentificationNoticeQueue(client) {
+  if (noticeQueueRunning) return { sent: 0, archived: 0 };
+  noticeQueueRunning = true;
+  try {
+    const archived = await archiveExpiredNoticeThreads(client);
+    const rows = db().prepare(`
+      SELECT * FROM member_role_notice_queue
+      WHERE status = 'pending'
+      ORDER BY id
+      LIMIT 5
+    `).all();
+    if (!rows.length) return { sent: 0, archived };
+
+    const channel = await client.channels.fetch(ids.channels.inactivityNotice).catch(() => null);
+    if (!channel?.isTextBased()) return { sent: 0, archived };
+    const message = await channel.send({
+      content: [
+        'Regularizacao de registro e cargos da guild',
+        '',
+        'As pessoas abaixo perderam Membro/Convidado. Refacam o registro com o nick correto do Albion e entrem em uma call para recuperar o cargo:',
+        '',
+        ...rows.map((row, index) => `${index + 1}. <@${row.discord_id}> - ${row.reason}`)
+      ].join('\n'),
+      allowedMentions: { users: rows.map((row) => row.discord_id) }
+    });
+
+    const thread = await message.startThread({
+      name: `regularizacao-${rows[0].id}-${rows.at(-1).id}`,
+      autoArchiveDuration: 4320,
+      reason: 'Topico temporario de regularizacao de membros'
+    }).catch(() => null);
+    const sentAt = sqliteDateTime(new Date());
+    const archiveAt = sqliteDateTime(new Date(Date.now() + 3 * 24 * 60 * 60 * 1000));
+    const update = db().prepare(`
+      UPDATE member_role_notice_queue
+      SET status = 'sent', message_id = ?, thread_id = ?, sent_at = ?, archive_at = ?
+      WHERE id = ?
+    `);
+    const save = transaction((items) => {
+      for (const row of items) update.run(message.id, thread?.id || null, sentAt, archiveAt, row.id);
+    });
+    save(rows);
+    return { sent: rows.length, archived, messageId: message.id, threadId: thread?.id || null };
+  } finally {
+    noticeQueueRunning = false;
+  }
+}
+
+async function archiveExpiredNoticeThreads(client) {
+  const rows = db().prepare(`
+    SELECT DISTINCT thread_id
+    FROM member_role_notice_queue
+    WHERE status = 'sent'
+      AND thread_id IS NOT NULL
+      AND archived_at IS NULL
+      AND archive_at <= CURRENT_TIMESTAMP
+  `).all();
+  let archived = 0;
+  for (const row of rows) {
+    const thread = await client.channels.fetch(row.thread_id).catch(() => null);
+    if (!thread?.setArchived) continue;
+    await thread.setArchived(true, 'Prazo de regularizacao de 3 dias encerrado').catch(() => null);
+    db().prepare(`
+      UPDATE member_role_notice_queue
+      SET archived_at = CURRENT_TIMESTAMP
+      WHERE thread_id = ?
+    `).run(row.thread_id);
+    archived += 1;
+  }
+  return archived;
 }
 
 function syncRowsAttachment(rows, name) {
@@ -1131,6 +1300,10 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function sqliteDateTime(date) {
+  return date.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '');
+}
+
 module.exports = {
   STATUS,
   actionAttachment,
@@ -1145,6 +1318,8 @@ module.exports = {
   membersHtmlAttachment,
   previewAlbionSync,
   parseGuildExport,
+  processIdentificationNoticeQueue,
+  reconcileMemberRoles,
   summarizeAnalysis,
   syncApplyAttachment,
   syncApplyText,

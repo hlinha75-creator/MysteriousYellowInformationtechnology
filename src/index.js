@@ -50,6 +50,7 @@ client.once('clientReady', () => {
   operations.postMonthlyInactivityPreviewIfNeeded(client).catch((error) => console.error('Falha ao postar previa mensal de inatividade:', error));
   campaigns.refreshActiveCampaignProgress(client).catch((error) => console.error('Falha ao atualizar progresso da campanha:', error));
   campaigns.processExpiredEventPayouts(client).catch((error) => console.error('Falha ao processar escolhas vencidas da campanha:', error));
+  guildVerification.processIdentificationNoticeQueue(client).catch((error) => console.error('Falha ao processar avisos de regularizacao:', error));
   setInterval(() => {
     events.refreshRunningEventMessages(client).catch((error) => console.error('Falha ao atualizar eventos em andamento:', error));
   }, 60000);
@@ -61,6 +62,9 @@ client.once('clientReady', () => {
   }, 10 * 60 * 1000);
   setInterval(() => {
     campaigns.refreshActiveCampaignProgress(client).catch((error) => console.error('Falha ao atualizar progresso da campanha:', error));
+  }, 10 * 60 * 1000);
+  setInterval(() => {
+    guildVerification.processIdentificationNoticeQueue(client).catch((error) => console.error('Falha ao processar avisos de regularizacao:', error));
   }, 10 * 60 * 1000);
   setInterval(() => {
     events.cleanupExpiredReviewChannels(client).catch((error) => console.error('Falha ao limpar canais de revisao:', error));

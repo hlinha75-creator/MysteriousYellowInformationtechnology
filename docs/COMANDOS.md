@@ -130,6 +130,10 @@ Uso:
 
 `tipo:membros` atualiza Discord x Albion, nicks no banco e registros pendentes.
 
+Ao confirmar `tipo:membros`, o bot tambem concilia cargos: remove Membro/Convidado de quem nao tem vinculo valido ou nao entrou em call nos ultimos 7 dias, envia DM pedindo novo registro e concede Membro a quem tem vinculo, esta na lista atual da guild e entrou em call recentemente. Staff e dono do servidor sao protegidos.
+
+Os avisos publicos de regularizacao saem em lotes de 5 membros a cada 10 minutos no canal de inatividade. Cada lote abre um topico, arquivado automaticamente depois de 3 dias.
+
 `tipo:fama_total` atualiza os dados manuais usados no perfil do membro. Aceita colunas como:
 
 ```text

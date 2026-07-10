@@ -957,6 +957,34 @@ const migrations = [
         db.prepare('UPDATE campaign_contributions SET user_id = ? WHERE user_id = ?').run(link.primaryDiscordId, link.linkedDiscordId);
       }
     }
+  },
+  {
+    version: 30,
+    name: 'member_role_notice_queue',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS member_role_notice_queue (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          verification_id INTEGER,
+          discord_id TEXT NOT NULL,
+          reason TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          message_id TEXT,
+          thread_id TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          sent_at TEXT,
+          archive_at TEXT,
+          archived_at TEXT,
+          UNIQUE(verification_id, discord_id, reason)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_member_role_notice_queue_status
+          ON member_role_notice_queue (status, id);
+
+        CREATE INDEX IF NOT EXISTS idx_member_role_notice_queue_archive
+          ON member_role_notice_queue (archived_at, archive_at);
+      `);
+    }
   }
 ];
 
