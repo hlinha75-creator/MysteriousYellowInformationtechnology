@@ -49,7 +49,8 @@ const commands = [
       .setDescription('Tipo de sincronizacao')
       .addChoices(
         { name: 'Membros da guild', value: 'membros' },
-        { name: 'Fama total', value: 'fama_total' }
+        { name: 'Fama total', value: 'fama_total' },
+        { name: 'Fama PvE', value: 'fama_pve' }
       )),
   new SlashCommandBuilder()
     .setName('inativos')

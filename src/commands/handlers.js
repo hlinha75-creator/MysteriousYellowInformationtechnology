@@ -165,7 +165,7 @@ async function handleCommand(interaction) {
 
   if (interaction.commandName === 'sincronizar_albion') {
     const syncType = interaction.options.getString('tipo') || 'membros';
-    const requiredPermission = syncType === 'fama_total' ? 'importCsv' : 'approveRegistration';
+    const requiredPermission = ['fama_total', 'fama_pve'].includes(syncType) ? 'importCsv' : 'approveRegistration';
     if (!can(interaction.member, requiredPermission)) {
       return interaction.reply({ content: 'Voce nao tem permissao para sincronizar esse tipo de dado Albion.', flags: MessageFlags.Ephemeral });
     }
@@ -180,11 +180,16 @@ async function handleCommand(interaction) {
     if (!response.ok) throw new Error('Nao consegui baixar o arquivo anexado.');
     const text = await response.text();
 
-    if (syncType === 'fama_total') {
-      const preview = albionFame.previewFameTotals(text, {
-        sourceName: attachment.name,
-        actorId: interaction.user.id
-      });
+    if (['fama_total', 'fama_pve'].includes(syncType)) {
+      const preview = syncType === 'fama_pve'
+        ? albionFame.previewPveFame(text, {
+          sourceName: attachment.name,
+          actorId: interaction.user.id
+        })
+        : albionFame.previewFameTotals(text, {
+          sourceName: attachment.name,
+          actorId: interaction.user.id
+        });
       const previewId = albionFame.savePreview(preview);
       return interaction.editReply({
         content: albionFame.previewText(preview),

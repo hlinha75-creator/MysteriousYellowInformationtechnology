@@ -125,6 +125,7 @@ Uso:
 ```text
 /sincronizar_albion arquivo:<csv-ou-tsv> tipo:membros
 /sincronizar_albion arquivo:<csv-ou-tsv> tipo:fama_total
+/sincronizar_albion arquivo:<csv-ou-tsv> tipo:fama_pve
 ```
 
 `tipo:membros` atualiza Discord x Albion, nicks no banco e registros pendentes.
@@ -134,6 +135,8 @@ Uso:
 ```text
 Character Name,Total Fame,PvE,PvP,Coleta,Craft
 ```
+
+`tipo:fama_pve` aceita o ranking `Rank, Player, Guild Role, Amount` e atualiza somente a fama PvE, preservando PvP, Coleta e Craft.
 
 O bot mostra previa antes de aplicar.
 

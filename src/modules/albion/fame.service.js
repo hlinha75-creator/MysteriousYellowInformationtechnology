@@ -53,6 +53,33 @@ function previewFameTotals(text, { sourceName = null, actorId = null } = {}) {
   };
 }
 
+function previewPveFame(text, { sourceName = null, actorId = null } = {}) {
+  const rows = parseDelimitedRows(text);
+  const byName = new Map();
+  for (const sourceRow of rows) {
+    const albionName = clean(firstByAliases(sourceRow, ['player', 'character name', 'character_name', 'nome', 'nick', 'albion', 'albion_name', 'jogador']));
+    const pveFame = parseFameNumber(firstByAliases(sourceRow, ['amount', 'pve', 'pve fame', 'fama pve', 'fame pve']));
+    const albionKey = normalizeName(albionName);
+    if (albionKey) byName.set(albionKey, { albionKey, albionName, pveFame });
+  }
+  const uniqueRows = [...byName.values()].sort((a, b) => b.pveFame - a.pveFame || a.albionName.localeCompare(b.albionName));
+  return {
+    type: 'fame_pve',
+    sourceName,
+    actorId,
+    rows: uniqueRows,
+    summary: {
+      players: uniqueRows.length,
+      totalFame: 0,
+      pveFame: uniqueRows.reduce((total, row) => total + row.pveFame, 0),
+      pvpFame: 0,
+      gatheringFame: 0,
+      craftingFame: 0,
+      top: uniqueRows.slice(0, 8)
+    }
+  };
+}
+
 const applyPreview = transaction((preview) => {
   const db = getDatabase();
   const importResult = db.prepare(`
@@ -61,7 +88,18 @@ const applyPreview = transaction((preview) => {
   `).run(preview.sourceName || null, preview.rows.length, JSON.stringify(preview.summary), preview.actorId || null);
 
   const importId = importResult.lastInsertRowid;
-  const stmt = db.prepare(`
+  const stmt = preview.type === 'fame_pve' ? db.prepare(`
+    INSERT INTO albion_fame_totals
+      (albion_key, albion_name, total_fame, pve_fame, pvp_fame, gathering_fame, crafting_fame, import_id, updated_at)
+    VALUES
+      (@albionKey, @albionName, @pveFame, @pveFame, 0, 0, 0, @importId, CURRENT_TIMESTAMP)
+    ON CONFLICT(albion_key) DO UPDATE SET
+      albion_name = excluded.albion_name,
+      total_fame = MAX(albion_fame_totals.total_fame, excluded.pve_fame),
+      pve_fame = excluded.pve_fame,
+      import_id = excluded.import_id,
+      updated_at = CURRENT_TIMESTAMP
+  `) : db.prepare(`
     INSERT INTO albion_fame_totals
       (albion_key, albion_name, total_fame, pve_fame, pvp_fame, gathering_fame, crafting_fame, import_id, updated_at)
     VALUES
@@ -82,9 +120,9 @@ const applyPreview = transaction((preview) => {
   }
 
   audit.createAuditLog({
-    type: 'albion_fame_imported',
+    type: preview.type === 'fame_pve' ? 'albion_pve_fame_imported' : 'albion_fame_imported',
     actorId: preview.actorId,
-    reason: 'Importacao manual de fama total Albion',
+    reason: preview.type === 'fame_pve' ? 'Importacao manual de fama PvE Albion' : 'Importacao manual de fama total Albion',
     metadata: {
       sourceName: preview.sourceName,
       rows: preview.rows.length,
@@ -96,6 +134,19 @@ const applyPreview = transaction((preview) => {
 });
 
 function previewText(preview) {
+  if (preview.type === 'fame_pve') {
+    return [
+      'Previa da fama PvE Albion',
+      `Arquivo: ${preview.sourceName || 'anexo'}`,
+      `Jogadores: ${preview.summary.players}`,
+      `PvE: ${formatFame(preview.summary.pveFame)}`,
+      '',
+      'Top por fama PvE:',
+      ...preview.summary.top.slice(0, 5).map((row, index) => `${index + 1}. ${row.albionName} - ${formatFame(row.pveFame)}`),
+      '',
+      'Somente PvE sera atualizado. PvP, Coleta e Craft serao preservados.'
+    ].join('\n');
+  }
   return [
     'Previa da fama total Albion',
     `Arquivo: ${preview.sourceName || 'anexo'}`,
@@ -115,6 +166,16 @@ function previewText(preview) {
 }
 
 function previewAttachment(preview) {
+  if (preview.type === 'fame_pve') {
+    return htmlReportAttachment({
+      title: 'Previa fama PvE Albion',
+      fileName: 'previa-fama-pve-albion.html',
+      csvName: 'previa-fama-pve-albion.csv',
+      rows: preview.rows.map((row) => ({ albion_name: row.albionName, pve_fame: row.pveFame })),
+      columns: ['albion_name', { key: 'pve_fame', label: 'pve_fame', align: 'right', format: formatFame }],
+      summary: [['Jogadores', preview.rows.length], ['PvE', formatFame(preview.summary.pveFame)]]
+    });
+  }
   return htmlReportAttachment({
     title: 'Previa fama total Albion',
     fileName: 'previa-fama-total-albion.html',
@@ -400,6 +461,7 @@ module.exports = {
   listFameTotals,
   previewAttachment,
   previewFameTotals,
+  previewPveFame,
   previewText,
   rankFor,
   rankRowsAttachment,
