@@ -3,7 +3,7 @@ const ids = require('../../config/ids');
 const { getDatabase } = require('../../database/connection');
 const { formatFame } = require('./fame.service');
 
-const DEFAULT_API_BASE = 'https://gameinfo.albiononline.com/api/gameinfo';
+const DEFAULT_API_BASE = 'https://gameinfo-ams.albiononline.com/api/gameinfo';
 const POST_AFTER_HOUR = 9;
 
 async function postDailyPveRankingIfNeeded(client, now = new Date()) {
