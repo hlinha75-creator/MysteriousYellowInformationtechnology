@@ -24,6 +24,7 @@ async function postDailyPveRankingIfNeeded(client, now = new Date()) {
 }
 
 async function publishPveRanking(client, now = new Date()) {
+  const dateKey = saoPauloDateKey(now);
   const names = getDatabase().prepare(`
     SELECT DISTINCT albion_name
     FROM users
