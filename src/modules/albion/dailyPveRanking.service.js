@@ -14,7 +14,17 @@ async function postDailyPveRankingIfNeeded(client, now = new Date()) {
   const db = getDatabase();
   if (db.prepare('SELECT 1 FROM operation_reminders WHERE reminder_key = ?').get(reminderKey)) return null;
 
-  const names = db.prepare(`
+  const result = await publishPveRanking(client, now);
+  db.prepare(`
+    INSERT INTO operation_reminders (reminder_key, type, message_id, channel_id)
+    VALUES (?, 'albion_pve_top5', ?, ?)
+  `).run(reminderKey, result.messageId, result.channelId);
+
+  return result;
+}
+
+async function publishPveRanking(client, now = new Date()) {
+  const names = getDatabase().prepare(`
     SELECT DISTINCT albion_name
     FROM users
     WHERE albion_name IS NOT NULL AND trim(albion_name) <> ''
@@ -32,12 +42,7 @@ async function postDailyPveRankingIfNeeded(client, now = new Date()) {
 
   const top = ranking.slice(0, 5);
   const message = await channel.send({ embeds: [pveRankingEmbed(top, dateKey)] });
-  db.prepare(`
-    INSERT INTO operation_reminders (reminder_key, type, message_id, channel_id)
-    VALUES (?, 'albion_pve_top5', ?, ?)
-  `).run(reminderKey, message.id, channel.id);
-
-  return { totalPlayers: ranking.length, top, messageId: message.id };
+  return { totalPlayers: ranking.length, top, messageId: message.id, channelId: channel.id };
 }
 
 async function fetchPveRanking(names, { fetchImpl = fetch, apiBase = process.env.ALBION_API_BASE || DEFAULT_API_BASE } = {}) {
@@ -108,4 +113,4 @@ function formatDate(dateKey) {
   return `${day}/${month}/${year}`;
 }
 
-module.exports = { extractPveFame, fetchPveRanking, postDailyPveRankingIfNeeded };
+module.exports = { extractPveFame, fetchPveRanking, postDailyPveRankingIfNeeded, publishPveRanking };

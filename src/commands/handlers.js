@@ -23,6 +23,7 @@ const albionFame = require('../modules/albion/fame.service');
 const memberList = require('../modules/members/memberList.service');
 const inactiveEvents = require('../modules/members/inactiveEvents.service');
 const inactiveGuests = require('../modules/members/inactiveGuests.service');
+const dailyPveRanking = require('../modules/albion/dailyPveRanking.service');
 
 const pausedCommands = new Set([
   'albion',
@@ -74,6 +75,17 @@ async function handleCommand(interaction) {
     return interaction.showModal(modal('registration:submit', 'Registro Albion', [
       input('albionName', 'Nome do personagem no Albion')
     ]));
+  }
+
+  if (interaction.commandName === 'publicar_top_pve') {
+    if (!can(interaction.member, 'importCsv')) {
+      return interaction.reply({ content: 'Voce nao tem permissao para publicar o Top 5 PvE.', flags: MessageFlags.Ephemeral });
+    }
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const result = await dailyPveRanking.publishPveRanking(interaction.client);
+    return interaction.editReply({
+      content: `Top 5 PvE da Europa publicado em <#${result.channelId}> com ${result.totalPlayers} jogadores consultados.`
+    });
   }
 
   if (interaction.commandName === 'objetivo') {
