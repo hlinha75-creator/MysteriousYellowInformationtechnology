@@ -19,6 +19,9 @@ const eventsRepo = require('../src/modules/events/events.repository');
 const finance = require('../src/modules/finance/finance.service');
 const financeRepo = require('../src/modules/finance/finance.repository');
 const deposit = require('../src/modules/deposit/deposit.service');
+const voice = require('../src/modules/voice/voice.service');
+const voiceRepo = require('../src/modules/voice/voice.repository');
+const dailyPveRanking = require('../src/modules/albion/dailyPveRanking.service');
 
 migrate();
 
@@ -29,6 +32,61 @@ test.after(() => {
 
 test.beforeEach(() => {
   resetDatabase();
+});
+
+test('ranking PvE consulta jogadores e ordena os cinco maiores', async () => {
+  const players = {
+    Ana: { id: '1', fame: 100 },
+    Beto: { id: '2', fame: 500 },
+    Caio: { id: '3', fame: 300 },
+    Duda: { id: '4', fame: 200 },
+    Eva: { id: '5', fame: 600 },
+    Fabio: { id: '6', fame: 400 }
+  };
+  const fetchImpl = async (url) => {
+    const parsed = new URL(url);
+    if (parsed.pathname.endsWith('/search')) {
+      const name = parsed.searchParams.get('q');
+      const player = players[name];
+      return { ok: true, json: async () => ({ players: player ? [{ Id: player.id, Name: name }] : [] }) };
+    }
+    const id = parsed.pathname.split('/').pop();
+    const [name, player] = Object.entries(players).find(([, value]) => value.id === id);
+    return { ok: true, json: async () => ({ Name: name, LifetimeStatistics: { PvE: { Total: player.fame } } }) };
+  };
+
+  const ranking = await dailyPveRanking.fetchPveRanking(Object.keys(players), { fetchImpl, apiBase: 'https://example.test/api' });
+  assert.deepEqual(ranking.slice(0, 5).map((row) => row.name), ['Eva', 'Beto', 'Fabio', 'Caio', 'Duda']);
+});
+
+test('semana de voz usa segunda a domingo no horario de Sao Paulo', () => {
+  assert.deepEqual(
+    voice.previousCompletedWeek(new Date('2026-07-11T12:00:00Z')),
+    { weekStart: '2026-06-29', weekEnd: '2026-07-05' }
+  );
+  assert.deepEqual(
+    voice.previousCompletedWeek(new Date('2026-07-13T12:00:00Z')),
+    { weekStart: '2026-07-06', weekEnd: '2026-07-12' }
+  );
+});
+
+test('jogador constante precisa de 30 minutos em seis dias e soma contas vinculadas', () => {
+  const db = getDatabase();
+  db.prepare("INSERT INTO users (discord_id, discord_name) VALUES ('primary', 'Jogador')").run();
+  db.prepare("INSERT INTO linked_discord_accounts (linked_discord_id, primary_discord_id, label) VALUES ('secondary', 'primary', 'Jogador')").run();
+  const insert = db.prepare(`INSERT INTO voice_sessions
+    (discord_id, discord_name, channel_id, joined_at, left_at, seconds)
+    VALUES (?, 'Jogador', 'voz', ?, ?, ?)`);
+
+  for (let day = 15; day <= 20; day += 1) {
+    const discordId = day === 20 ? 'secondary' : 'primary';
+    insert.run(discordId, `2026-06-${day}T15:00:00.000Z`, `2026-06-${day}T15:30:00.000Z`, 1800);
+  }
+  insert.run('primary', '2026-06-21T15:00:00.000Z', '2026-06-21T15:29:59.000Z', 1799);
+
+  assert.deepEqual(voiceRepo.listWeeklyConsistentPlayers({ weekStart: '2026-06-15', weekEnd: '2026-06-21' }), [
+    { discord_id: 'primary', name: 'Jogador', days: 6, seconds: 10800 }
+  ]);
 });
 
 test('fluxo local cobre evento, voz, loot split, aprovacao, ledger, saque e deposito', async () => {

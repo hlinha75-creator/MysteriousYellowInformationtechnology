@@ -10,6 +10,7 @@ const registration = require('./modules/registration/registration.service');
 const voice = require('./modules/voice/voice.service');
 const events = require('./modules/events/events.service');
 const guildVerification = require('./modules/albion/guildVerification.service');
+const dailyPveRanking = require('./modules/albion/dailyPveRanking.service');
 const balanceBackup = require('./modules/csv/balanceBackup.service');
 const operations = require('./modules/operations/operations.service');
 const campaigns = require('./modules/campaigns/campaigns.service');
@@ -51,6 +52,8 @@ client.once('clientReady', () => {
   campaigns.refreshActiveCampaignProgress(client).catch((error) => console.error('Falha ao atualizar progresso da campanha:', error));
   campaigns.processExpiredEventPayouts(client).catch((error) => console.error('Falha ao processar escolhas vencidas da campanha:', error));
   guildVerification.processIdentificationNoticeQueue(client).catch((error) => console.error('Falha ao processar avisos de regularizacao:', error));
+  voice.postWeeklyCoreAwardsIfNeeded(client).catch((error) => console.error('Falha ao publicar jogadores constantes:', error));
+  dailyPveRanking.postDailyPveRankingIfNeeded(client).catch((error) => console.error('Falha ao publicar Top 5 PvE:', error));
   setInterval(() => {
     events.refreshRunningEventMessages(client).catch((error) => console.error('Falha ao atualizar eventos em andamento:', error));
   }, 60000);
@@ -72,10 +75,12 @@ client.once('clientReady', () => {
   setInterval(() => {
     balanceBackup.postDailyBackupIfNeeded(client).catch((error) => console.error('Falha ao postar backup diario de saldos:', error));
     operations.postDailyAdminReportIfNeeded(client).catch((error) => console.error('Falha ao enviar relatorio diario ADM:', error));
+    dailyPveRanking.postDailyPveRankingIfNeeded(client).catch((error) => console.error('Falha ao publicar Top 5 PvE:', error));
   }, 60 * 60 * 1000);
   setInterval(() => {
     operations.postWeeklyAlbionReminderIfNeeded(client).catch((error) => console.error('Falha ao postar lembrete semanal Albion:', error));
     operations.postMonthlyInactivityPreviewIfNeeded(client).catch((error) => console.error('Falha ao postar previa mensal de inatividade:', error));
+    voice.postWeeklyCoreAwardsIfNeeded(client).catch((error) => console.error('Falha ao publicar jogadores constantes:', error));
   }, 60 * 60 * 1000);
 });
 

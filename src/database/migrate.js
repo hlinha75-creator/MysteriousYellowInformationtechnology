@@ -985,6 +985,24 @@ const migrations = [
           ON member_role_notice_queue (archived_at, archive_at);
       `);
     }
+  },
+  {
+    version: 31,
+    name: 'weekly_voice_core_awards',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS weekly_voice_core_awards (
+          week_start TEXT PRIMARY KEY,
+          week_end TEXT NOT NULL,
+          channel_id TEXT NOT NULL,
+          message_id TEXT,
+          qualified_count INTEGER NOT NULL DEFAULT 0,
+          awarded_count INTEGER NOT NULL DEFAULT 0,
+          qualified_json TEXT NOT NULL DEFAULT '[]',
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+    }
   }
 ];
 
