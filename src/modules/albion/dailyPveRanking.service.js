@@ -57,10 +57,17 @@ async function publishRanking(client, { period = 'daily', now = new Date(), save
     subtitle = `Fama total de carreira • Atualizado em ${formatDate(dateKey)}`;
   }
 
+  attachDiscordIds(rows);
+
   const channelId = rankingChannelId(dateKey);
   const channel = await client.channels.fetch(channelId);
   if (!channel?.isTextBased()) throw new Error(`Canal ou topico do ranking indisponivel: ${channelId}`);
-  const message = await channel.send({ embeds: [rankingEmbed(rows, period, subtitle)] });
+  const mentionedIds = period === 'weekly' ? rankedDiscordIds(rows) : [];
+  const message = await channel.send({
+    content: mentionedIds.length ? `🏆 Destaques da semana: ${mentionedIds.map((id) => `<@${id}>`).join(' ')}` : undefined,
+    embeds: [rankingEmbed(rows, period, subtitle)],
+    allowedMentions: period === 'weekly' ? { users: mentionedIds } : { parse: [] }
+  });
   return { totalPlayers: rows.length, messageId: message.id, channelId: channel.id, period };
 }
 
@@ -176,9 +183,34 @@ function rankingEmbed(rows, period, subtitle) {
     .setFooter({ text: subtitle }).setTimestamp();
   for (const [key, label] of CATEGORIES) {
     const top = [...rows].sort((a, b) => b[key] - a[key] || a.name.localeCompare(b.name)).slice(0, 5);
-    embed.addFields({ name: label, value: top.map((row, index) => `${medal(index)} **${row.name}** — ${formatFame(row[key])}`).join('\n') || 'Sem dados.' });
+    embed.addFields({
+      name: label,
+      value: top.map((row, index) => {
+        const mention = row.discordId ? ` (<@${row.discordId}>)` : '';
+        return `${medal(index)} **${row.name}**${mention} — ${formatFame(row[key])}`;
+      }).join('\n') || 'Sem dados.'
+    });
   }
   return embed;
+}
+
+function attachDiscordIds(rows) {
+  const members = getDatabase().prepare(`
+    SELECT discord_id, albion_name FROM users
+    WHERE discord_id IS NOT NULL AND albion_name IS NOT NULL AND registration_status = 'member'
+  `).all();
+  const byAlbion = new Map(members.map((member) => [normalizeName(member.albion_name), member.discord_id]));
+  for (const row of rows) row.discordId = byAlbion.get(row.key || normalizeName(row.name)) || null;
+  return rows;
+}
+
+function rankedDiscordIds(rows) {
+  const ids = new Set();
+  for (const [key] of CATEGORIES) {
+    [...rows].sort((a, b) => b[key] - a[key] || a.name.localeCompare(b.name)).slice(0, 5)
+      .forEach((row) => { if (row.discordId) ids.add(row.discordId); });
+  }
+  return [...ids];
 }
 
 async function postMoveNoticeIfNeeded(client, dateKey) {
