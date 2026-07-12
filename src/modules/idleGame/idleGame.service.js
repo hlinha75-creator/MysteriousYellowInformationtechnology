@@ -40,9 +40,12 @@ async function postSessionMessage(session, channel) {
   if (message) repo.setMessageId(session.id, message.id);
 }
 
-async function updateTopic(content) {
-  const topic = await client.channels.fetch(env.idleTopicId).catch(() => null);
-  if (topic?.isTextBased()) await topic.send({ content }).catch(() => null);
+async function cleanupLiveDashboards(topic) {
+  const messages = await topic.messages.fetch({ limit: 100 }).catch(() => null);
+  if (!messages) return;
+  const stale = messages.filter((message) => message.author.id === client.user.id
+    && message.embeds.some((embed) => String(embed.title || '').includes('Estacao de Foco')));
+  for (const message of stale.values()) await message.delete().catch(() => {});
 }
 
 function formatDuration(seconds) {
@@ -89,9 +92,25 @@ async function refreshDiscordDashboard(session = repo.getRunningSession(), ended
   let message = session.topic_message_id ? await topic.messages.fetch(session.topic_message_id).catch(() => null) : null;
   if (message) await message.edit(payload);
   else {
+    if (!ended) await cleanupLiveDashboards(topic);
     message = await topic.send(payload);
     repo.setTopicMessageId(session.id, message.id);
   }
+}
+
+async function archiveDiscordDashboard(session) {
+  if (!client) return;
+  const archive = await client.channels.fetch(env.idleArchiveTopicId).catch(() => null);
+  if (archive?.isTextBased()) {
+    await archive.send({ embeds: [discordDashboardEmbed(session, true)] });
+  } else {
+    console.error(`Topico de arquivo da estacao indisponivel: ${env.idleArchiveTopicId}`);
+  }
+  const liveTopic = await client.channels.fetch(env.idleTopicId).catch(() => null);
+  const liveMessage = session.topic_message_id && liveTopic?.isTextBased()
+    ? await liveTopic.messages.fetch(session.topic_message_id).catch(() => null)
+    : null;
+  if (liveMessage) await liveMessage.delete().catch(() => {});
 }
 
 async function connectTo(channel) {
@@ -190,10 +209,7 @@ async function stopSession() {
   const session = repo.getRunningSession();
   if (!session) return;
   repo.endRunningSessions(nowIso());
-  const players = repo.listParticipation(session.id);
-  const summary = players.slice(0, 10).map((p, i) => `${i + 1}. <@${p.discord_id}> — **${Math.floor(p.points)}** pontos`).join('\n') || 'Nenhum participante pontuou.';
-  await updateTopic(`🏁 **Sessao encerrada — ${session.voice_channel_name}**\n${summary}`);
-  await refreshDiscordDashboard(session, true);
+  await archiveDiscordDashboard(session);
   if (connection) connection.destroy();
   connection = null;
   activeChannel = null;
@@ -269,4 +285,4 @@ async function start(discordClient) {
   refreshTimer = setInterval(syncHost, 30_000);
 }
 
-module.exports = { start, stopSession, handleVoiceStateUpdate, handleMessage, getDashboardState, handleSpeaking, farmTick, speak, createLocalSpeech, discordDashboardEmbed, refreshDiscordDashboard };
+module.exports = { start, stopSession, handleVoiceStateUpdate, handleMessage, getDashboardState, handleSpeaking, farmTick, speak, createLocalSpeech, discordDashboardEmbed, refreshDiscordDashboard, archiveDiscordDashboard, cleanupLiveDashboards };
