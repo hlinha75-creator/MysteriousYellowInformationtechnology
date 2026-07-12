@@ -2,6 +2,7 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('
 const ids = require('../../config/ids');
 const { getDatabase, transaction } = require('../../database/connection');
 const finance = require('../finance/finance.service');
+const { renderKillCard } = require('./killCardRenderer');
 
 const DEFAULT_API_BASE = 'https://gameinfo.albiononline.com/api/gameinfo';
 const GUILD_NAME = process.env.ALBION_GUILD_NAME || 'NoTag';
@@ -235,6 +236,18 @@ function eventPayload(event, type, apiBase = DEFAULT_API_BASE) {
   return { embeds: embeds.slice(0, 10), components };
 }
 
+async function imageEventPayload(event, type, apiBase = DEFAULT_API_BASE, options = {}) {
+  const base = eventPayload(event, type, apiBase);
+  const image = await renderKillCard(event, type, options);
+  const summary = base.embeds[0].setImage('attachment://kill-card.png');
+  const participantEmbeds = base.embeds.filter((embed) => embed.data.title?.startsWith('👥'));
+  return {
+    embeds: [summary, ...participantEmbeds].slice(0, 10),
+    components: base.components,
+    files: [{ attachment: image, name: 'kill-card.png' }]
+  };
+}
+
 async function fetchPage(fetchImpl, apiBase, offset) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20000);
@@ -284,7 +297,14 @@ async function pollKillFeed(client, options = {}) {
       const channel = await client.channels.fetch(channelId);
       if (!channel?.isTextBased()) throw new Error(`Canal do killfeed indisponivel: ${channelId}`);
       const apiBase = options.apiBase || process.env.ALBION_API_BASE_URL || process.env.ALBION_API_BASE || DEFAULT_API_BASE;
-      const message = await channel.send(eventPayload(item.event, item.type, apiBase));
+      let payload;
+      try {
+        payload = await imageEventPayload(item.event, item.type, apiBase, options);
+      } catch (error) {
+        console.error(`Falha ao gerar imagem do evento Albion #${item.event.EventId}:`, error);
+        payload = eventPayload(item.event, item.type, apiBase);
+      }
+      const message = await channel.send(payload);
       save.run(item.event.EventId, item.type, item.event.TimeStamp || null, message.id);
       if (item.type === 'death') recordVengeanceDeath(db, item.event);
       if (item.type === 'kill') await processVengeance(client, channel, db, item.event);
@@ -300,6 +320,7 @@ module.exports = {
   classifyEvent,
   eventEmbed,
   eventPayload,
+  imageEventPayload,
   fetchRecentEvents,
   findVengeanceMatches,
   pollKillFeed,
