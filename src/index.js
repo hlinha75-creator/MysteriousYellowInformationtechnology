@@ -110,6 +110,7 @@ client.on('voiceStateUpdate', (oldState, newState) => {
 });
 client.on('interactionCreate', handleInteraction);
 client.on('messageCreate', (message) => {
+  idleGame.handleMessage(message);
   guildVerification.handleDirectNickReply(message).catch((error) => console.error('Falha ao tratar resposta de nick por DM:', error));
 });
 

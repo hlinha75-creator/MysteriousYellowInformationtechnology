@@ -1,4 +1,8 @@
-const { joinVoiceChannel, entersState, VoiceConnectionStatus } = require('@discordjs/voice');
+const { joinVoiceChannel, entersState, VoiceConnectionStatus, createAudioPlayer, createAudioResource, StreamType, AudioPlayerStatus } = require('@discordjs/voice');
+const { execFileSync } = require('child_process');
+const { Readable } = require('stream');
+const fs = require('fs');
+const path = require('path');
 const env = require('../../config/env');
 const eventRepo = require('../events/events.repository');
 const repo = require('./idleGame.repository');
@@ -10,10 +14,14 @@ let connection;
 let activeChannel;
 let tickTimer;
 let refreshTimer;
+const audioPlayer = createAudioPlayer();
+let lastBuchaSpeechAt = 0;
+const BUCHA_COOLDOWN_MS = 15_000;
 
 function nowIso() { return new Date().toISOString(); }
 function displayName(member) { return member?.displayName || member?.user?.globalName || member?.user?.username || member?.id; }
-function eligibleMembers(channel) { return [...channel.members.values()].filter((m) => !m.user.bot && m.id !== env.idleHostUserId); }
+function isHost(userId) { return env.idleHostUserIds.includes(userId); }
+function eligibleMembers(channel) { return [...channel.members.values()].filter((m) => !m.user.bot && !isHost(m.id)); }
 function runningEventBonus(channelId, userId) {
   const event = eventRepo.getEventByVoiceChannel(channelId);
   const participant = event && eventRepo.getParticipant({ eventId: event.id, discordId: userId });
@@ -49,11 +57,77 @@ async function connectTo(channel) {
   });
   await entersState(connection, VoiceConnectionStatus.Ready, 20_000);
   connection.receiver.speaking.on('start', handleSpeaking);
+  connection.subscribe(audioPlayer);
+}
+
+function pcmFromWav(buffer) {
+  const marker = buffer.indexOf(Buffer.from('data'));
+  if (marker < 0 || marker + 8 > buffer.length) throw new Error('Audio WAV sem bloco de dados.');
+  const size = buffer.readUInt32LE(marker + 4);
+  return buffer.subarray(marker + 8, Math.min(buffer.length, marker + 8 + size));
+}
+
+function createLocalSpeech(text) {
+  const cacheDir = path.resolve('data', 'idle-audio');
+  const audioPath = path.join(cacheDir, 'bucha-voce.wav');
+  if (!fs.existsSync(audioPath)) {
+    fs.mkdirSync(cacheDir, { recursive: true });
+    const safePath = audioPath.replace(/'/g, "''");
+    const safeText = text.replace(/'/g, "''");
+    const script = [
+      "$voice = New-Object -ComObject SAPI.SpVoice",
+      "$stream = New-Object -ComObject SAPI.SpFileStream",
+      "$format = New-Object -ComObject SAPI.SpAudioFormat",
+      '$format.Type = 39',
+      `$stream.Format = $format`,
+      `$stream.Open('${safePath}', 3, $false)`,
+      '$voice.AudioOutputStream = $stream',
+      `$voice.Speak('${safeText}') | Out-Null`,
+      '$stream.Close()'
+    ].join('; ');
+    execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true });
+  }
+  return pcmFromWav(fs.readFileSync(audioPath));
+}
+
+async function speak(text) {
+  if (!connection || !activeChannel) return false;
+  try {
+    const me = activeChannel.guild.members.me;
+    if (!me || !activeChannel.permissionsFor(me)?.has('Speak')) {
+      console.error(`O bot nao tem permissao Falar na call ${activeChannel.name}.`);
+      return false;
+    }
+    const pcm = createLocalSpeech(text);
+    if (!connection.rejoin({ selfDeaf: false, selfMute: false })) throw new Error('Nao foi possivel liberar a voz do bot.');
+    await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
+    audioPlayer.play(createAudioResource(Readable.from(pcm), { inputType: StreamType.Raw }));
+    return true;
+  } catch (error) {
+    console.error('Falha ao falar na estacao de foco:', error);
+    return false;
+  }
+}
+
+audioPlayer.on(AudioPlayerStatus.Idle, () => {
+  if (connection) connection.rejoin({ selfDeaf: false, selfMute: true });
+});
+audioPlayer.on('error', (error) => console.error('Erro no audio da estacao de foco:', error));
+
+function handleMessage(message) {
+  if (!activeChannel || message.author?.bot || message.channelId !== activeChannel.id) return false;
+  if (!String(message.content || '').toLocaleLowerCase('pt-BR').includes('bucha')) return false;
+  const now = Date.now();
+  if (now - lastBuchaSpeechAt < BUCHA_COOLDOWN_MS || audioPlayer.state.status !== AudioPlayerStatus.Idle) return false;
+  lastBuchaSpeechAt = now;
+  speak('Você são tudo bucha.');
+  return true;
 }
 
 async function startSession(channel) {
   repo.endRunningSessions(nowIso());
-  const session = repo.startSession({ guildId: channel.guild.id, channelId: channel.id, channelName: channel.name, hostId: env.idleHostUserId, startedAt: nowIso() });
+  const activeHost = [...channel.members.values()].find((member) => isHost(member.id));
+  const session = repo.startSession({ guildId: channel.guild.id, channelId: channel.id, channelName: channel.name, hostId: activeHost?.id || env.idleHostUserIds[0], startedAt: nowIso() });
   activeChannel = channel;
   for (const member of eligibleMembers(channel)) repo.joinPlayer({ sessionId: session.id, discordId: member.id, discordName: displayName(member), joinedAt: nowIso(), eventBonus: runningEventBonus(channel.id, member.id) });
   await connectTo(channel);
@@ -76,15 +150,20 @@ async function stopSession() {
 async function syncHost() {
   if (!client) return;
   const guild = client.guilds.cache.get(require('../../config/ids').guildId);
-  const host = guild?.members.cache.get(env.idleHostUserId) || await guild?.members.fetch(env.idleHostUserId).catch(() => null);
-  const channel = host?.voice?.channel;
+  let channel = env.idleHostUserIds.map((id) => guild?.members.cache.get(id)?.voice?.channel).find(Boolean);
+  if (!channel) {
+    for (const id of env.idleHostUserIds) {
+      const host = await guild?.members.fetch(id).catch(() => null);
+      if (host?.voice?.channel) { channel = host.voice.channel; break; }
+    }
+  }
   if (!channel) return stopSession();
   if (activeChannel?.id !== channel.id || !repo.getRunningSession()) await startSession(channel);
 }
 
 function handleSpeaking(userId) {
   const session = repo.getRunningSession();
-  if (!session || !activeChannel?.members.has(userId) || userId === env.idleHostUserId) return;
+  if (!session || !activeChannel?.members.has(userId) || isHost(userId)) return;
   const member = activeChannel.members.get(userId);
   if (member?.user.bot) return;
   repo.joinPlayer({ sessionId: session.id, discordId: userId, discordName: displayName(member), joinedAt: nowIso(), eventBonus: runningEventBonus(activeChannel.id, userId) });
@@ -111,11 +190,11 @@ function farmTick() {
 }
 
 async function handleVoiceStateUpdate(oldState, newState) {
-  if (newState.id === env.idleHostUserId || oldState.id === env.idleHostUserId) await syncHost();
+  if (isHost(newState.id) || isHost(oldState.id)) await syncHost();
   const session = repo.getRunningSession();
   if (!session) return;
   const userId = newState.id || oldState.id;
-  if (newState.channelId === session.voice_channel_id && !newState.member.user.bot && userId !== env.idleHostUserId) {
+  if (newState.channelId === session.voice_channel_id && !newState.member.user.bot && !isHost(userId)) {
     repo.joinPlayer({ sessionId: session.id, discordId: userId, discordName: displayName(newState.member), joinedAt: nowIso(), eventBonus: runningEventBonus(session.voice_channel_id, userId) });
   } else if (oldState.channelId === session.voice_channel_id && newState.channelId !== session.voice_channel_id) repo.leavePlayer(session.id, userId, nowIso());
 }
@@ -137,4 +216,4 @@ async function start(discordClient) {
   refreshTimer = setInterval(syncHost, 30_000);
 }
 
-module.exports = { start, stopSession, handleVoiceStateUpdate, getDashboardState, handleSpeaking, farmTick };
+module.exports = { start, stopSession, handleVoiceStateUpdate, handleMessage, getDashboardState, handleSpeaking, farmTick, speak, createLocalSpeech };
