@@ -15,6 +15,7 @@ let connection;
 let activeChannel;
 let tickTimer;
 let refreshTimer;
+let serviceStarted = false;
 const audioPlayer = createAudioPlayer();
 let lastBuchaSpeechAt = 0;
 const BUCHA_COOLDOWN_MS = 15_000;
@@ -43,8 +44,12 @@ async function postSessionMessage(session, channel) {
 async function cleanupLiveDashboards(topic) {
   const messages = await topic.messages.fetch({ limit: 100 }).catch(() => null);
   if (!messages) return;
-  const stale = messages.filter((message) => message.author.id === client.user.id
-    && message.embeds.some((embed) => String(embed.title || '').includes('Estacao de Foco')));
+  const stale = messages.filter((message) => {
+    if (message.author.id !== client.user.id) return false;
+    const isDashboard = message.embeds.some((embed) => String(embed.title || '').includes('Estacao de Foco'));
+    const isLegacySummary = /sess[aã]o encerrada/i.test(String(message.content || ''));
+    return isDashboard || isLegacySummary;
+  });
   for (const message of stale.values()) await message.delete().catch(() => {});
 }
 
@@ -248,12 +253,16 @@ function farmTick() {
   const multiplier = 1 + Math.min(1, Math.max(0, members.length - 1) * 0.1);
   const now = Date.now();
   for (const member of members) {
-    const eventBonus = runningEventBonus(activeChannel.id, member.id);
-    repo.joinPlayer({ sessionId: session.id, discordId: member.id, discordName: displayName(member), joinedAt: nowIso(), eventBonus });
-    const player = repo.listParticipation(session.id).find((p) => p.discord_id === member.id);
-    const muted = member.voice.selfMute || member.voice.serverMute;
-    const penalized = player?.penalty_until && Date.parse(player.penalty_until) > now;
-    if (muted && !penalized) repo.addFarm({ sessionId: session.id, discordId: member.id, seconds: TICK_SECONDS, points: BASE_POINTS_PER_TICK * multiplier * (eventBonus ? 1.5 : 1) });
+    try {
+      const eventBonus = runningEventBonus(activeChannel.id, member.id);
+      repo.joinPlayer({ sessionId: session.id, discordId: member.id, discordName: displayName(member), joinedAt: nowIso(), eventBonus });
+      const player = repo.listParticipation(session.id).find((p) => p.discord_id === member.id);
+      const muted = member.voice.selfMute || member.voice.serverMute;
+      const penalized = player?.penalty_until && Date.parse(player.penalty_until) > now;
+      if (muted && !penalized) repo.addFarm({ sessionId: session.id, discordId: member.id, seconds: TICK_SECONDS, points: BASE_POINTS_PER_TICK * multiplier * (eventBonus ? 1.5 : 1) });
+    } catch (error) {
+      console.error(`Falha ao farmar para ${member.id}:`, error);
+    }
   }
   refreshDiscordDashboard(session).catch((error) => console.error('Falha ao atualizar dashboard Discord:', error));
 }
@@ -280,9 +289,20 @@ function getDashboardState() {
 
 async function start(discordClient) {
   client = discordClient;
-  await syncHost();
-  tickTimer = setInterval(farmTick, TICK_SECONDS * 1000);
-  refreshTimer = setInterval(syncHost, 30_000);
+  if (serviceStarted) return;
+  serviceStarted = true;
+  tickTimer = setInterval(() => {
+    try { farmTick(); } catch (error) { console.error('Falha no ciclo de farm:', error); }
+  }, TICK_SECONDS * 1000);
+  refreshTimer = setInterval(() => {
+    syncHost().catch((error) => console.error('Falha ao sincronizar anfitriao da estacao:', error));
+  }, 30_000);
+  try {
+    await syncHost();
+    farmTick();
+  } catch (error) {
+    console.error('Primeira conexao da estacao falhou; o bot tentara novamente automaticamente:', error.message);
+  }
 }
 
 module.exports = { start, stopSession, handleVoiceStateUpdate, handleMessage, getDashboardState, handleSpeaking, farmTick, speak, createLocalSpeech, discordDashboardEmbed, refreshDiscordDashboard, archiveDiscordDashboard, cleanupLiveDashboards };
