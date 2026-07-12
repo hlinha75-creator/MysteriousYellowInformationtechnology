@@ -1003,6 +1003,29 @@ const migrations = [
         );
       `);
     }
+  },
+  {
+    version: 32,
+    name: 'albion_fame_daily_snapshots',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS albion_fame_daily_snapshots (
+          snapshot_date TEXT NOT NULL,
+          albion_key TEXT NOT NULL,
+          albion_name TEXT NOT NULL,
+          pve_fame INTEGER NOT NULL DEFAULT 0,
+          pvp_fame INTEGER NOT NULL DEFAULT 0,
+          crafting_fame INTEGER NOT NULL DEFAULT 0,
+          gathering_fame INTEGER NOT NULL DEFAULT 0,
+          total_fame INTEGER NOT NULL DEFAULT 0,
+          captured_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (snapshot_date, albion_key)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_albion_fame_snapshots_player
+          ON albion_fame_daily_snapshots (albion_key, snapshot_date);
+      `);
+    }
   }
 ];
 

@@ -54,6 +54,7 @@ client.once('clientReady', () => {
   guildVerification.processIdentificationNoticeQueue(client).catch((error) => console.error('Falha ao processar avisos de regularizacao:', error));
   voice.postWeeklyCoreAwardsIfNeeded(client).catch((error) => console.error('Falha ao publicar jogadores constantes:', error));
   dailyPveRanking.postDailyPveRankingIfNeeded(client).catch((error) => console.error('Falha ao publicar Top 5 PvE:', error));
+  dailyPveRanking.postWeeklyRankingIfNeeded(client).catch((error) => console.error('Falha ao publicar ranking semanal de fama:', error));
   setInterval(() => {
     events.refreshRunningEventMessages(client).catch((error) => console.error('Falha ao atualizar eventos em andamento:', error));
   }, 60000);
@@ -76,6 +77,7 @@ client.once('clientReady', () => {
     balanceBackup.postDailyBackupIfNeeded(client).catch((error) => console.error('Falha ao postar backup diario de saldos:', error));
     operations.postDailyAdminReportIfNeeded(client).catch((error) => console.error('Falha ao enviar relatorio diario ADM:', error));
     dailyPveRanking.postDailyPveRankingIfNeeded(client).catch((error) => console.error('Falha ao publicar Top 5 PvE:', error));
+    dailyPveRanking.postWeeklyRankingIfNeeded(client).catch((error) => console.error('Falha ao publicar ranking semanal de fama:', error));
   }, 60 * 60 * 1000);
   setInterval(() => {
     operations.postWeeklyAlbionReminderIfNeeded(client).catch((error) => console.error('Falha ao postar lembrete semanal Albion:', error));

@@ -16,9 +16,13 @@ const commands = [
     .setName('registro')
     .setDescription('Abre registro de nome em jogo.'),
   new SlashCommandBuilder()
-    .setName('publicar_top_pve')
-    .setDescription('Consulta a Europa e publica agora o Top 5 de fama PvE.')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+    .setName('publicar_rank')
+    .setDescription('Publica manualmente o ranking completo de fama Albion.')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addStringOption((option) => option.setName('periodo').setDescription('Ranking a publicar').setRequired(true).addChoices(
+      { name: 'Diário', value: 'daily' },
+      { name: 'Semanal', value: 'weekly' }
+    )),
   new SlashCommandBuilder()
     .setName('exportar')
     .setDescription('Exporta dados em HTML com botao para baixar CSV.')

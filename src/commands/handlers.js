@@ -77,14 +77,15 @@ async function handleCommand(interaction) {
     ]));
   }
 
-  if (interaction.commandName === 'publicar_top_pve') {
+  if (interaction.commandName === 'publicar_rank') {
     if (!can(interaction.member, 'importCsv')) {
-      return interaction.reply({ content: 'Voce nao tem permissao para publicar o Top 5 PvE.', flags: MessageFlags.Ephemeral });
+      return interaction.reply({ content: 'Voce nao tem permissao para publicar rankings.', flags: MessageFlags.Ephemeral });
     }
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const result = await dailyPveRanking.publishPveRanking(interaction.client);
+    const period = interaction.options.getString('periodo');
+    const result = await dailyPveRanking.publishRanking(interaction.client, { period, saveSnapshot: period === 'daily' });
     return interaction.editReply({
-      content: `Top 5 PvE da Europa publicado em <#${result.channelId}> com ${result.totalPlayers} jogadores consultados.`
+      content: `Ranking ${period === 'weekly' ? 'semanal' : 'diario'} publicado em <#${result.channelId}> com ${result.totalPlayers} jogadores.`
     });
   }
 

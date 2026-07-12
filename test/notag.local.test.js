@@ -59,6 +59,34 @@ test('ranking PvE consulta jogadores e ordena os cinco maiores', async () => {
   assert.deepEqual(ranking.slice(0, 5).map((row) => row.name), ['Eva', 'Beto', 'Fabio', 'Caio', 'Duda']);
 });
 
+test('fama Albion extrai PvE, PvP, craft, coleta e calcula total', () => {
+  const row = dailyPveRanking.extractFame({
+    Name: 'JogadorEU',
+    KillFame: 200,
+    LifetimeStatistics: {
+      PvE: { Total: 1000 },
+      Crafting: { Total: 300 },
+      Gathering: { All: { Total: 400 } }
+    }
+  });
+  assert.deepEqual(row, {
+    name: 'JogadorEU', key: 'jogadoreu', pveFame: 1000, pvpFame: 200,
+    craftingFame: 300, gatheringFame: 400, totalFame: 1900
+  });
+});
+
+test('ranking semanal calcula crescimento entre primeiro e ultimo snapshot', () => {
+  const insert = getDatabase().prepare(`INSERT INTO albion_fame_daily_snapshots
+    (snapshot_date, albion_key, albion_name, pve_fame, pvp_fame, crafting_fame, gathering_fame, total_fame)
+    VALUES (?, 'ana', 'Ana', ?, ?, ?, ?, ?)`);
+  insert.run('2026-07-06', 100, 20, 30, 40, 190);
+  insert.run('2026-07-12', 160, 35, 50, 70, 315);
+  assert.deepEqual(dailyPveRanking.weeklyGrowthRows('2026-07-06', '2026-07-12'), [{
+    name: 'Ana', key: 'ana', pveFame: 60, pvpFame: 15,
+    craftingFame: 20, gatheringFame: 30, totalFame: 125
+  }]);
+});
+
 test('semana de voz usa segunda a domingo no horario de Sao Paulo', () => {
   assert.deepEqual(
     voice.previousCompletedWeek(new Date('2026-07-11T12:00:00Z')),
