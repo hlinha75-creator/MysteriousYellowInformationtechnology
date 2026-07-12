@@ -23,8 +23,7 @@
     "better-sqlite3": "^11.9.1",
     "discord.js": "^14.15.3",
     "dotenv": "^16.4.5",
-    "libsodium-wrappers": "^0.7.16",
-    "opusscript": "^0.0.8"
+    "libsodium-wrappers": "^0.7.16"
   },
   "engines": {
     "node": ">=20.0.0"
