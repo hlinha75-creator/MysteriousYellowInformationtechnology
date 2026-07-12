@@ -145,6 +145,12 @@ test('fluxo local cobre evento, voz, loot split, aprovacao, ledger, saque e depo
   assert.equal(event.event_code, 'EVT-000001');
   assert.equal(event.status, 'created');
   assert.equal(harness.sentMessages.length, 1);
+  assert.equal(harness.sentMessages[0].payload.components.length, 2);
+
+  const eventMessage = [...harness.messages.values()][0];
+  eventMessage.payload = { embeds: eventMessage.payload.embeds, components: [] };
+  await events.refreshRunningEventMessages(harness.client);
+  assert.equal(eventMessage.payload.components.length, 2);
 
   await events.joinEvent(harness.interaction(participantA), event.id, 'tank');
   await events.spectateEvent(harness.interaction(participantB), event.id);
@@ -464,6 +470,7 @@ function createDiscordHarness() {
     client,
     guild,
     interaction,
+    messages,
     sentMessages
   };
 }

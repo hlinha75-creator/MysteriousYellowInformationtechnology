@@ -9,7 +9,6 @@ const { backupDatabase } = require('./database/backup');
 const registration = require('./modules/registration/registration.service');
 const voice = require('./modules/voice/voice.service');
 const idleGame = require('./modules/idleGame/idleGame.service');
-const { startDashboard } = require('./modules/idleGame/dashboard.service');
 const events = require('./modules/events/events.service');
 const guildVerification = require('./modules/albion/guildVerification.service');
 const dailyPveRanking = require('./modules/albion/dailyPveRanking.service');
@@ -24,7 +23,6 @@ const { isExpiredOrDuplicateInteraction } = require('./utils/interactions');
 migrate();
 backupDatabase('startup');
 startResourceMonitor();
-startDashboard();
 
 const recovered = voice.markRunningEventsForReview();
 if (recovered > 0) {

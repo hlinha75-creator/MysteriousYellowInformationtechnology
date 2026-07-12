@@ -1,0 +1,12 @@
+.git/
+.github/
+.vscode/
+.agents/
+.codex-remote-check/
+node_modules/
+.env
+data/*.sqlite
+data/*.sqlite-*
+data/backups/
+*.log
+test/

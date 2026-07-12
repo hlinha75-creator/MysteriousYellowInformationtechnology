@@ -15,6 +15,5 @@ module.exports = {
   nodeEnv: process.env.NODE_ENV || 'development',
   idleHostUserIds: (process.env.IDLE_HOST_USER_IDS || process.env.IDLE_HOST_USER_ID || '1276439186513203234,1436716667894759475')
     .split(',').map((id) => id.trim()).filter(Boolean),
-  idleTopicId: process.env.IDLE_TOPIC_ID || '1525824031784304770',
-  dashboardPort: Number(process.env.DASHBOARD_PORT || 8081)
+  idleTopicId: process.env.IDLE_TOPIC_ID || '1525824031784304770'
 };

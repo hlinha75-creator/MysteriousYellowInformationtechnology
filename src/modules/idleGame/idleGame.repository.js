@@ -11,6 +11,7 @@ function getSession(id) { return getDatabase().prepare('SELECT * FROM idle_game_
 function getRunningSession() { return getDatabase().prepare("SELECT * FROM idle_game_sessions WHERE status = 'running' ORDER BY id DESC LIMIT 1").get(); }
 function endRunningSessions(endedAt) { return getDatabase().prepare("UPDATE idle_game_sessions SET status = 'ended', ended_at = ? WHERE status = 'running'").run(endedAt); }
 function setMessageId(id, messageId) { return getDatabase().prepare('UPDATE idle_game_sessions SET discord_message_id = ? WHERE id = ?').run(messageId, id); }
+function setTopicMessageId(id, messageId) { return getDatabase().prepare('UPDATE idle_game_sessions SET topic_message_id = ? WHERE id = ?').run(messageId, id); }
 function joinPlayer({ sessionId, discordId, discordName, joinedAt, eventBonus }) {
   const db = getDatabase();
   const joined = db.prepare(`INSERT OR IGNORE INTO idle_game_participation (session_id, discord_id, discord_name, joined_at, event_bonus)
@@ -38,4 +39,4 @@ function listRecentSessions(limit=20) { return getDatabase().prepare('SELECT * F
 function leaderboard(limit=20) { return getDatabase().prepare('SELECT * FROM idle_game_players ORDER BY total_points DESC LIMIT ?').all(limit); }
 function recentSpeechCount(sessionId, discordId, since) { return getDatabase().prepare('SELECT COUNT(*) count FROM idle_game_speech_events WHERE session_id=? AND discord_id=? AND occurred_at>=?').get(sessionId, discordId, since).count; }
 
-module.exports = { startSession, getRunningSession, endRunningSessions, setMessageId, joinPlayer, leavePlayer, addFarm, addSpeech, listParticipation, listRecentSessions, leaderboard, recentSpeechCount };
+module.exports = { startSession, getSession, getRunningSession, endRunningSessions, setMessageId, setTopicMessageId, joinPlayer, leavePlayer, addFarm, addSpeech, listParticipation, listRecentSessions, leaderboard, recentSpeechCount };

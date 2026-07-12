@@ -550,7 +550,8 @@ async function fetchEventMessageChannel(client, event) {
   return null;
 }
 async function refreshRunningEventMessages(client) {
-  const events = repo.listActiveEvents();
+  // Open signups also need refreshing so a restart repairs missing controls.
+  const events = repo.listInteractiveEvents();
   for (const event of events) {
     await refreshEventMessage(client, event.id).catch((error) => console.error(`Falha ao atualizar ${event.event_code}:`, error));
   }

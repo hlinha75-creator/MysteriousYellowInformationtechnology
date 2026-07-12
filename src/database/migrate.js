@@ -1131,6 +1131,16 @@ const migrations = [
         );
       `);
     }
+  },
+  {
+    version: 36,
+    name: 'idle_discord_dashboard',
+    up(db) {
+      const columns = db.prepare('PRAGMA table_info(idle_game_sessions)').all().map((column) => column.name);
+      if (!columns.includes('topic_message_id')) {
+        db.exec('ALTER TABLE idle_game_sessions ADD COLUMN topic_message_id TEXT');
+      }
+    }
   }
 ];
 

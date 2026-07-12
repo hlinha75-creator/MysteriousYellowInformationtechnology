@@ -35,6 +35,12 @@ function listActiveEvents() {
   return getDatabase().prepare("SELECT * FROM events WHERE status = 'running'").all();
 }
 
+function listInteractiveEvents() {
+  return getDatabase()
+    .prepare("SELECT * FROM events WHERE status IN ('created', 'running')")
+    .all();
+}
+
 function listApprovedEventsForCareer() {
   return getDatabase()
     .prepare(`
@@ -502,6 +508,7 @@ module.exports = {
   getRaidAvalonParticipant,
   getReview,
   listActiveEvents,
+  listInteractiveEvents,
   listApprovedEventsForCareer,
   listEventsWithTempRoles,
   listExpiredReviewChannels,

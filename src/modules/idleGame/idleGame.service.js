@@ -3,6 +3,7 @@ const { execFileSync } = require('child_process');
 const { Readable } = require('stream');
 const fs = require('fs');
 const path = require('path');
+const { EmbedBuilder } = require('discord.js');
 const env = require('../../config/env');
 const eventRepo = require('../events/events.repository');
 const repo = require('./idleGame.repository');
@@ -34,8 +35,7 @@ async function postSessionMessage(session, channel) {
     '🧘 **Estacao de Foco iniciada**',
     '',
     'Fique com o microfone mutado para produzir. Ao falar, sua producao entra em resfriamento por pelo menos 1 minuto.',
-    `Dashboard local: **http://localhost:${env.dashboardPort}**`,
-    `Historico permanente: <#${env.idleTopicId}>`
+    `Dashboard e historico: <#${env.idleTopicId}>`
   ].join('\n') }).catch(() => null);
   if (message) repo.setMessageId(session.id, message.id);
 }
@@ -43,6 +43,55 @@ async function postSessionMessage(session, channel) {
 async function updateTopic(content) {
   const topic = await client.channels.fetch(env.idleTopicId).catch(() => null);
   if (topic?.isTextBased()) await topic.send({ content }).catch(() => null);
+}
+
+function formatDuration(seconds) {
+  const value = Math.max(0, Math.floor(seconds || 0));
+  const hours = Math.floor(value / 3600);
+  const minutes = Math.floor((value % 3600) / 60);
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+function discordDashboardEmbed(session, ended = false) {
+  const players = repo.listParticipation(session.id);
+  const online = players.filter((player) => activeChannel?.members.has(player.discord_id));
+  const totalPoints = players.reduce((sum, player) => sum + Number(player.points || 0), 0);
+  const totalFocus = players.reduce((sum, player) => sum + Number(player.focus_seconds || 0), 0);
+  const crew = online.slice(0, 12).map((player) => {
+    const member = activeChannel?.members.get(player.discord_id);
+    const muted = member?.voice.selfMute || member?.voice.serverMute;
+    const cooldown = Math.max(0, Math.ceil((Date.parse(player.penalty_until || 0) - Date.now()) / 1000));
+    const status = cooldown > 0 ? `🟠 resfriando ${cooldown}s` : muted ? '🟢 farm ativo' : '⚪ microfone aberto';
+    return `<@${player.discord_id}> — **${Math.floor(player.points)} pts** · ${status}${player.event_bonus ? ' · ✦ 1,5x' : ''}`;
+  }).join('\n') || 'Nenhum tripulante farmando agora.';
+  const ranking = repo.leaderboard(8).map((player, index) => `${index + 1}. **${player.discord_name || player.discord_id}** — ${Math.floor(player.total_points)} pts`).join('\n') || 'O ranking comeca na primeira sessao.';
+  return new EmbedBuilder()
+    .setColor(ended ? 0x64748b : 0x66f2ad)
+    .setTitle(`${ended ? '🏁' : '🧘'} Estacao de Foco ${ended ? 'encerrada' : 'online'}`)
+    .setDescription(`**${session.voice_channel_name || 'Call de voz'}**\nSilencio gera energia. Presenca constroi progresso.`)
+    .addFields(
+      { name: '👥 Tripulacao', value: String(online.length), inline: true },
+      { name: '⏱️ Foco acumulado', value: formatDuration(totalFocus), inline: true },
+      { name: '⚡ Energia gerada', value: `${Math.floor(totalPoints)} pontos`, inline: true },
+      { name: '📡 Tempo real', value: crew },
+      { name: '🏆 Maiores produtores', value: ranking },
+      { name: '⚙️ Regras', value: 'Mutado: farm ativo · Falou: resfriamento progressivo · Evento inscrito: 1,5x' }
+    )
+    .setFooter({ text: ended ? 'Sessao finalizada' : 'Atualizacao automatica a cada 10 segundos' })
+    .setTimestamp();
+}
+
+async function refreshDiscordDashboard(session = repo.getRunningSession(), ended = false) {
+  if (!session || !client) return;
+  const topic = await client.channels.fetch(env.idleTopicId).catch(() => null);
+  if (!topic?.isTextBased()) return;
+  const payload = { embeds: [discordDashboardEmbed(session, ended)] };
+  let message = session.topic_message_id ? await topic.messages.fetch(session.topic_message_id).catch(() => null) : null;
+  if (message) await message.edit(payload);
+  else {
+    message = await topic.send(payload);
+    repo.setTopicMessageId(session.id, message.id);
+  }
 }
 
 async function connectTo(channel) {
@@ -68,6 +117,8 @@ function pcmFromWav(buffer) {
 }
 
 function createLocalSpeech(text) {
+  const packagedAudioPath = path.resolve('resources', 'audio', 'bucha.wav');
+  if (fs.existsSync(packagedAudioPath)) return pcmFromWav(fs.readFileSync(packagedAudioPath));
   const cacheDir = path.resolve('data', 'idle-audio');
   const audioPath = path.join(cacheDir, 'bucha-voce.wav');
   if (!fs.existsSync(audioPath)) {
@@ -132,7 +183,7 @@ async function startSession(channel) {
   for (const member of eligibleMembers(channel)) repo.joinPlayer({ sessionId: session.id, discordId: member.id, discordName: displayName(member), joinedAt: nowIso(), eventBonus: runningEventBonus(channel.id, member.id) });
   await connectTo(channel);
   await postSessionMessage(session, channel);
-  await updateTopic(`🟢 Estacao de foco ligada em **${channel.name}**. Acompanhe em http://localhost:${env.dashboardPort}`);
+  await refreshDiscordDashboard(session);
 }
 
 async function stopSession() {
@@ -142,6 +193,7 @@ async function stopSession() {
   const players = repo.listParticipation(session.id);
   const summary = players.slice(0, 10).map((p, i) => `${i + 1}. <@${p.discord_id}> — **${Math.floor(p.points)}** pontos`).join('\n') || 'Nenhum participante pontuou.';
   await updateTopic(`🏁 **Sessao encerrada — ${session.voice_channel_name}**\n${summary}`);
+  await refreshDiscordDashboard(session, true);
   if (connection) connection.destroy();
   connection = null;
   activeChannel = null;
@@ -187,6 +239,7 @@ function farmTick() {
     const penalized = player?.penalty_until && Date.parse(player.penalty_until) > now;
     if (muted && !penalized) repo.addFarm({ sessionId: session.id, discordId: member.id, seconds: TICK_SECONDS, points: BASE_POINTS_PER_TICK * multiplier * (eventBonus ? 1.5 : 1) });
   }
+  refreshDiscordDashboard(session).catch((error) => console.error('Falha ao atualizar dashboard Discord:', error));
 }
 
 async function handleVoiceStateUpdate(oldState, newState) {
@@ -216,4 +269,4 @@ async function start(discordClient) {
   refreshTimer = setInterval(syncHost, 30_000);
 }
 
-module.exports = { start, stopSession, handleVoiceStateUpdate, handleMessage, getDashboardState, handleSpeaking, farmTick, speak, createLocalSpeech };
+module.exports = { start, stopSession, handleVoiceStateUpdate, handleMessage, getDashboardState, handleSpeaking, farmTick, speak, createLocalSpeech, discordDashboardEmbed, refreshDiscordDashboard };
