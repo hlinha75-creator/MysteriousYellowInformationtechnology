@@ -16,6 +16,15 @@ const commands = [
     .setName('registro')
     .setDescription('Abre registro de nome em jogo.'),
   new SlashCommandBuilder()
+    .setName('perguntas_voz')
+    .setDescription('Escuta perguntas curtas na call e gera relatorio para a staff.')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addStringOption((option) => option.setName('acao').setDescription('Acao da escuta').setRequired(true).addChoices(
+      { name: 'Iniciar', value: 'iniciar' },
+      { name: 'Parar e gerar relatorio', value: 'parar' },
+      { name: 'Ver status', value: 'status' }
+    )),
+  new SlashCommandBuilder()
     .setName('publicar_rank')
     .setDescription('Publica manualmente o ranking completo de fama Albion.')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)

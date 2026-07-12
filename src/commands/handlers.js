@@ -24,6 +24,7 @@ const memberList = require('../modules/members/memberList.service');
 const inactiveEvents = require('../modules/members/inactiveEvents.service');
 const inactiveGuests = require('../modules/members/inactiveGuests.service');
 const dailyPveRanking = require('../modules/albion/dailyPveRanking.service');
+const questionListening = require('../modules/voice/questionListening.service');
 
 const pausedCommands = new Set([
   'albion',
@@ -75,6 +76,24 @@ async function handleCommand(interaction) {
     return interaction.showModal(modal('registration:submit', 'Registro Albion', [
       input('albionName', 'Nome do personagem no Albion')
     ]));
+  }
+
+  if (interaction.commandName === 'perguntas_voz') {
+    if (!can(interaction.member, 'approveRegistration')) {
+      return interaction.reply({ content: 'Voce nao tem permissao para controlar a escuta de perguntas.', flags: MessageFlags.Ephemeral });
+    }
+    const action = interaction.options.getString('acao');
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    if (action === 'iniciar') {
+      const result = await questionListening.start({ guild: interaction.guild, member: interaction.member, textChannel: interaction.channel });
+      return interaction.editReply({ content: `Escuta iniciada em ${result.channel}. ${result.event ? `Evento: ${result.event.event_code}.` : 'Nenhum evento ativo foi associado a esta call.'}` });
+    }
+    if (action === 'parar') {
+      const session = await questionListening.stop(interaction.guildId);
+      return interaction.editReply({ content: questionListening.report(session), allowedMentions: { parse: [] } });
+    }
+    const current = questionListening.status(interaction.guildId);
+    return interaction.editReply({ content: current.active ? `Escuta ativa em ${current.channel}. ${current.count} pergunta(s) detectada(s).` : 'A escuta de perguntas esta desativada.' });
   }
 
   if (interaction.commandName === 'publicar_rank') {
