@@ -37,7 +37,9 @@ module.exports = {
     campaignAnnouncements: '1484312044772655154',
     inactivityNotice: '1518215036030685214',
     staffTutorial: '1516001418052501614',
-    pveCareer: '1516001449505460235'
+    pveCareer: '1516001449505460235',
+    killFeed: '1481317632140513395',
+    deathFeed: '1525810975515611216'
   },
   importantChannels: [
     '1497902778771701800',

@@ -8,17 +8,23 @@ const { migrate } = require('./database/migrate');
 const { backupDatabase } = require('./database/backup');
 const registration = require('./modules/registration/registration.service');
 const voice = require('./modules/voice/voice.service');
+const idleGame = require('./modules/idleGame/idleGame.service');
+const { startDashboard } = require('./modules/idleGame/dashboard.service');
 const events = require('./modules/events/events.service');
 const guildVerification = require('./modules/albion/guildVerification.service');
 const dailyPveRanking = require('./modules/albion/dailyPveRanking.service');
+const killFeed = require('./modules/albion/killFeed.service');
 const balanceBackup = require('./modules/csv/balanceBackup.service');
 const operations = require('./modules/operations/operations.service');
+const { startResourceMonitor } = require('./modules/operations/resourceMonitor');
 const campaigns = require('./modules/campaigns/campaigns.service');
 const { handleInteraction } = require('./interactions/router');
 const { isExpiredOrDuplicateInteraction } = require('./utils/interactions');
 
 migrate();
 backupDatabase('startup');
+startResourceMonitor();
+startDashboard();
 
 const recovered = voice.markRunningEventsForReview();
 if (recovered > 0) {
@@ -43,6 +49,7 @@ const client = new Client({
 
 client.once('clientReady', () => {
   console.log(`Notag bot online como ${client.user.tag}`);
+  idleGame.start(client).catch((error) => console.error('Falha ao iniciar estacao de foco:', error));
   events.cleanupExpiredReviewChannels(client).catch((error) => console.error('Falha ao limpar canais de revisao:', error));
   balanceBackup.postDailyBackupIfNeeded(client).catch((error) => console.error('Falha ao postar backup diario de saldos:', error));
   operations.postDailyAdminReportIfNeeded(client).catch((error) => console.error('Falha ao enviar relatorio diario ADM:', error));
@@ -55,11 +62,15 @@ client.once('clientReady', () => {
   voice.postWeeklyCoreAwardsIfNeeded(client).catch((error) => console.error('Falha ao publicar jogadores constantes:', error));
   dailyPveRanking.postDailyPveRankingIfNeeded(client).catch((error) => console.error('Falha ao publicar Top 5 PvE:', error));
   dailyPveRanking.postWeeklyRankingIfNeeded(client).catch((error) => console.error('Falha ao publicar ranking semanal de fama:', error));
+  killFeed.pollKillFeed(client).catch((error) => console.error('Falha ao consultar killfeed:', error));
   setInterval(() => {
     events.refreshRunningEventMessages(client).catch((error) => console.error('Falha ao atualizar eventos em andamento:', error));
   }, 60000);
   setInterval(() => {
     events.checkEventStartWarnings(client).catch((error) => console.error('Falha ao verificar avisos de eventos:', error));
+  }, 30000);
+  setInterval(() => {
+    killFeed.pollKillFeed(client).catch((error) => console.error('Falha ao consultar killfeed:', error));
   }, 30000);
   setInterval(() => {
     campaigns.processExpiredEventPayouts(client).catch((error) => console.error('Falha ao processar escolhas vencidas da campanha:', error));
@@ -94,6 +105,9 @@ client.on('error', (error) => {
 client.on('guildMemberAdd', registration.handleGuildMemberAdd);
 client.on('guildMemberRemove', registration.handleGuildMemberRemove);
 client.on('voiceStateUpdate', voice.handleVoiceStateUpdate);
+client.on('voiceStateUpdate', (oldState, newState) => {
+  idleGame.handleVoiceStateUpdate(oldState, newState).catch((error) => console.error('Falha na estacao de foco:', error));
+});
 client.on('interactionCreate', handleInteraction);
 client.on('messageCreate', (message) => {
   guildVerification.handleDirectNickReply(message).catch((error) => console.error('Falha ao tratar resposta de nick por DM:', error));

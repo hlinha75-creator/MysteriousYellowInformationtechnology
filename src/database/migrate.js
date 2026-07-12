@@ -1026,6 +1026,111 @@ const migrations = [
           ON albion_fame_daily_snapshots (albion_key, snapshot_date);
       `);
     }
+  },
+  {
+    version: 33,
+    name: 'albion_killfeed_events',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS albion_killfeed_events (
+          event_id INTEGER PRIMARY KEY,
+          event_type TEXT NOT NULL,
+          event_at TEXT,
+          discord_message_id TEXT,
+          posted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_albion_killfeed_posted_at
+          ON albion_killfeed_events (posted_at);
+      `);
+    }
+  },
+  {
+    version: 34,
+    name: 'albion_vengeance_rewards',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS albion_vengeance_deaths (
+          original_event_id INTEGER PRIMARY KEY,
+          victim_discord_id TEXT NOT NULL,
+          victim_albion_name TEXT NOT NULL,
+          enemy_player_id TEXT NOT NULL,
+          enemy_player_name TEXT NOT NULL,
+          occurred_at TEXT NOT NULL,
+          avenged_event_id INTEGER,
+          avenger_discord_id TEXT,
+          avenged_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_vengeance_pending_enemy
+          ON albion_vengeance_deaths (enemy_player_id, avenged_event_id, occurred_at);
+
+        CREATE TABLE IF NOT EXISTS albion_vengeance_rewards (
+          vengeance_event_id INTEGER PRIMARY KEY,
+          avenger_discord_id TEXT NOT NULL,
+          amount INTEGER NOT NULL,
+          original_events_json TEXT NOT NULL,
+          rewarded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_vengeance_rewards_user_date
+          ON albion_vengeance_rewards (avenger_discord_id, rewarded_at);
+      `);
+    }
+  },
+  {
+    version: 35,
+    name: 'silent_idle_game',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS idle_game_sessions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          guild_id TEXT NOT NULL,
+          voice_channel_id TEXT NOT NULL,
+          voice_channel_name TEXT,
+          host_id TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'running',
+          discord_message_id TEXT,
+          started_at TEXT NOT NULL,
+          ended_at TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_idle_sessions_status ON idle_game_sessions(status, started_at);
+
+        CREATE TABLE IF NOT EXISTS idle_game_players (
+          discord_id TEXT PRIMARY KEY,
+          discord_name TEXT,
+          total_points REAL NOT NULL DEFAULT 0,
+          total_focus_seconds INTEGER NOT NULL DEFAULT 0,
+          total_speeches INTEGER NOT NULL DEFAULT 0,
+          sessions_joined INTEGER NOT NULL DEFAULT 0,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS idle_game_participation (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          session_id INTEGER NOT NULL,
+          discord_id TEXT NOT NULL,
+          discord_name TEXT,
+          points REAL NOT NULL DEFAULT 0,
+          focus_seconds INTEGER NOT NULL DEFAULT 0,
+          speech_count INTEGER NOT NULL DEFAULT 0,
+          penalty_until TEXT,
+          joined_at TEXT NOT NULL,
+          left_at TEXT,
+          event_bonus INTEGER NOT NULL DEFAULT 0,
+          UNIQUE(session_id, discord_id),
+          FOREIGN KEY(session_id) REFERENCES idle_game_sessions(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_idle_participation_session ON idle_game_participation(session_id, points DESC);
+
+        CREATE TABLE IF NOT EXISTS idle_game_speech_events (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          session_id INTEGER NOT NULL,
+          discord_id TEXT NOT NULL,
+          penalty_seconds INTEGER NOT NULL,
+          occurred_at TEXT NOT NULL,
+          FOREIGN KEY(session_id) REFERENCES idle_game_sessions(id) ON DELETE CASCADE
+        );
+      `);
+    }
   }
 ];
 
