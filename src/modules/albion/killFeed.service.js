@@ -7,7 +7,9 @@ const { renderKillCard } = require('./killCardRenderer');
 const DEFAULT_API_BASE = 'https://gameinfo.albiononline.com/api/gameinfo';
 const GUILD_NAME = process.env.ALBION_GUILD_NAME || 'NoTag';
 const PAGE_SIZE = 51;
-const MAX_PAGES = 5;
+const MAX_PAGES = 20;
+const API_TIMEOUT_MS = 45000;
+const API_RETRIES = 3;
 const VENGEANCE_REWARD = 100000;
 const VENGEANCE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_DAILY_VENGEANCE_REWARDS = 3;
@@ -248,19 +250,44 @@ async function imageEventPayload(event, type, apiBase = DEFAULT_API_BASE, option
   };
 }
 
-async function fetchPage(fetchImpl, apiBase, offset) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20000);
-  try {
-    const url = `${apiBase.replace(/\/$/, '')}/events?limit=${PAGE_SIZE}&offset=${offset}&timestamp=${Date.now()}`;
-    const response = await fetchImpl(url, { signal: controller.signal, headers: { Accept: 'application/json' } });
-    if (!response.ok) throw new Error(`API Albion respondeu ${response.status}.`);
-    const body = await response.json();
-    if (!Array.isArray(body)) throw new Error('API Albion retornou um formato inesperado.');
-    return body;
-  } finally {
-    clearTimeout(timeout);
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchPage(fetchImpl, apiBase, offset, options = {}) {
+  const retries = options.retries ?? API_RETRIES;
+  const timeoutMs = options.timeoutMs ?? API_TIMEOUT_MS;
+  const url = `${apiBase.replace(/\/$/, '')}/events?limit=${PAGE_SIZE}&offset=${offset}`;
+  let lastError;
+  for (let attempt = 1; attempt <= retries; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetchImpl(url, {
+        signal: controller.signal,
+        headers: { Accept: 'application/json', 'User-Agent': 'Notag-Discord-Killfeed/1.0' }
+      });
+      if (!response.ok) {
+        const error = new Error(`API Albion respondeu ${response.status}.`);
+        error.retryable = response.status === 429 || response.status >= 500;
+        throw error;
+      }
+      const body = await response.json();
+      if (!Array.isArray(body)) throw new Error('API Albion retornou um formato inesperado.');
+      return body;
+    } catch (error) {
+      lastError = error;
+      const retryable = error.name === 'AbortError' || error.retryable || error instanceof TypeError;
+      if (!retryable || attempt === retries) break;
+      await (options.waitImpl || wait)(attempt * 1500);
+    } finally {
+      clearTimeout(timeout);
+    }
   }
+  const detail = lastError?.name === 'AbortError'
+    ? `timeout de ${Math.round(timeoutMs / 1000)}s`
+    : lastError?.message || 'erro desconhecido';
+  throw new Error(`Falha na API Albion após ${retries} tentativa(s): ${detail}`, { cause: lastError });
 }
 
 async function fetchRecentEvents(options = {}) {
@@ -269,7 +296,7 @@ async function fetchRecentEvents(options = {}) {
   const lastId = Number(options.lastId || 0);
   const result = [];
   for (let page = 0; page < MAX_PAGES; page += 1) {
-    const rows = await fetchPage(fetchImpl, apiBase, page * PAGE_SIZE);
+    const rows = await fetchPage(fetchImpl, apiBase, page * PAGE_SIZE, options);
     result.push(...rows);
     if (rows.length < PAGE_SIZE || (lastId && rows.some((row) => Number(row.EventId) <= lastId))) break;
   }
@@ -281,7 +308,9 @@ async function pollKillFeed(client, options = {}) {
   polling = true;
   try {
     const db = options.db || getDatabase();
-    const latest = db.prepare('SELECT MAX(event_id) AS id FROM albion_killfeed_events').get()?.id || 0;
+    const storedCursor = Number(db.prepare("SELECT value FROM albion_killfeed_state WHERE key = 'latest_global_event_id'").get()?.value || 0);
+    const latestRelevant = Number(db.prepare('SELECT MAX(event_id) AS id FROM albion_killfeed_events').get()?.id || 0);
+    const latest = storedCursor || latestRelevant;
     const events = await fetchRecentEvents({ ...options, lastId: latest });
     const relevant = events
       .map((event) => ({ event, type: classifyEvent(event, options.guildName) }))
@@ -309,6 +338,14 @@ async function pollKillFeed(client, options = {}) {
       if (item.type === 'death') recordVengeanceDeath(db, item.event);
       if (item.type === 'kill') await processVengeance(client, channel, db, item.event);
       posted += 1;
+    }
+    const newestGlobalId = Math.max(latest, ...events.map((event) => Number(event.EventId) || 0));
+    if (newestGlobalId > 0) {
+      db.prepare(`
+        INSERT INTO albion_killfeed_state (key, value, updated_at)
+        VALUES ('latest_global_event_id', ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+      `).run(String(newestGlobalId));
     }
     return { posted, checked: events.length };
   } finally {

@@ -43,6 +43,23 @@ test('consulta eventos com paginação e para ao encontrar o último evento salv
   assert.match(calls[1], /offset=51/);
 });
 
+test('repete consulta quando a API Albion responde erro temporário', async () => {
+  let attempts = 0;
+  const fetchImpl = async () => {
+    attempts += 1;
+    if (attempts < 3) return { ok: false, status: 504 };
+    return { ok: true, json: async () => [{ EventId: 300 }] };
+  };
+  const rows = await fetchRecentEvents({
+    fetchImpl,
+    apiBase: 'https://example.test/api',
+    retries: 3,
+    waitImpl: async () => {}
+  });
+  assert.equal(attempts, 3);
+  assert.equal(rows[0].EventId, 300);
+});
+
 test('registra morte e encontra vingança feita por outro membro em até sete dias', () => {
   const db = new Database(':memory:');
   db.exec(`

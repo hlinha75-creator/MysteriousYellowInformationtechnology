@@ -1141,6 +1141,19 @@ const migrations = [
         db.exec('ALTER TABLE idle_game_sessions ADD COLUMN topic_message_id TEXT');
       }
     }
+  },
+  {
+    version: 37,
+    name: 'albion_killfeed_cursor',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS albion_killfeed_state (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+    }
   }
 ];
 
