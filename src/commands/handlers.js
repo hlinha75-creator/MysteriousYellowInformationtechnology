@@ -83,9 +83,13 @@ async function handleCommand(interaction) {
     }
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const period = interaction.options.getString('periodo');
-    const result = await dailyPveRanking.publishRanking(interaction.client, { period, saveSnapshot: period === 'daily' });
+    const result = period === 'daily'
+      ? await dailyPveRanking.replaceDailyRanking(interaction.client)
+      : await dailyPveRanking.publishRanking(interaction.client, { period });
     return interaction.editReply({
-      content: `Ranking ${period === 'weekly' ? 'semanal' : 'diario'} publicado em <#${result.channelId}> com ${result.totalPlayers} jogadores.`
+      content: period === 'daily' && result.replacedMessageId
+        ? `Ranking diario de hoje atualizado em <#${result.channelId}>; a publicacao anterior foi removida.`
+        : `Ranking ${period === 'weekly' ? 'semanal' : 'diario'} publicado em <#${result.channelId}> com ${result.totalPlayers} jogadores.`
     });
   }
 

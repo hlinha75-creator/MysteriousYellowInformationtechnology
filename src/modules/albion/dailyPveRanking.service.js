@@ -40,6 +40,35 @@ async function publishPveRanking(client, now = new Date()) {
   return publishRanking(client, { period: 'daily', now, saveSnapshot: true });
 }
 
+async function replaceDailyRanking(client, now = new Date()) {
+  const dateKey = saoPauloDateKey(now);
+  const reminderKey = `albion-fame-daily:${dateKey}`;
+  const db = getDatabase();
+  const previous = db.prepare(`
+    SELECT message_id, channel_id FROM operation_reminders WHERE reminder_key = ?
+  `).get(reminderKey);
+
+  const result = await publishRanking(client, { period: 'daily', now, saveSnapshot: true });
+
+  if (previous?.message_id && previous?.channel_id && previous.message_id !== result.messageId) {
+    const oldChannel = await client.channels.fetch(previous.channel_id).catch(() => null);
+    if (oldChannel?.isTextBased()) {
+      const oldMessage = await oldChannel.messages.fetch(previous.message_id).catch(() => null);
+      if (oldMessage) await oldMessage.delete().catch(() => null);
+    }
+  }
+
+  db.prepare(`
+    INSERT INTO operation_reminders (reminder_key, type, message_id, channel_id)
+    VALUES (?, 'albion_fame_daily', ?, ?)
+    ON CONFLICT(reminder_key) DO UPDATE SET
+      message_id = excluded.message_id,
+      channel_id = excluded.channel_id,
+      sent_at = CURRENT_TIMESTAMP
+  `).run(reminderKey, result.messageId, result.channelId);
+  return { ...result, replacedMessageId: previous?.message_id || null };
+}
+
 async function publishRanking(client, { period = 'daily', now = new Date(), saveSnapshot = period === 'daily' } = {}) {
   const dateKey = saoPauloDateKey(now);
   let rows;
@@ -51,10 +80,14 @@ async function publishRanking(client, { period = 'daily', now = new Date(), save
     if (!rows.length) throw new Error(`Nao ha pelo menos dois snapshots entre ${range.start} e ${range.end} para gerar o semanal.`);
     subtitle = `Fama conquistada de ${formatDate(range.start)} a ${formatDate(range.end)}`;
   } else {
-    rows = await fetchFameRanking(registeredAlbionNames());
-    if (!rows.length) throw new Error('A API do Albion nao retornou fama para nenhum jogador cadastrado.');
-    if (saveSnapshot) saveDailySnapshot(dateKey, rows);
-    subtitle = `Fama total de carreira • Atualizado em ${formatDate(dateKey)}`;
+    const currentRows = await fetchFameRanking(registeredAlbionNames());
+    if (!currentRows.length) throw new Error('A API do Albion nao retornou fama para nenhum jogador cadastrado.');
+    const daily = dailyGrowthRows(dateKey, currentRows);
+    if (saveSnapshot) saveDailySnapshot(dateKey, currentRows);
+    rows = daily.rows;
+    subtitle = daily.previousDate
+      ? `Fama conquistada desde ${formatDate(daily.previousDate)} • Total de carreira ao lado`
+      : `Base inicial salva em ${formatDate(dateKey)} • Ainda sem dia anterior para comparar`;
   }
 
   attachDiscordIds(rows);
@@ -176,6 +209,49 @@ function weeklyGrowthRows(start, end) {
   });
 }
 
+function dailyGrowthRows(dateKey, currentRows) {
+  const previousDate = getDatabase().prepare(`
+    SELECT MAX(snapshot_date) AS snapshot_date
+    FROM albion_fame_daily_snapshots
+    WHERE snapshot_date < ?
+  `).get(dateKey)?.snapshot_date || null;
+
+  if (!previousDate) return { previousDate: null, rows: currentRows };
+
+  const previous = getDatabase().prepare(`
+    SELECT * FROM albion_fame_daily_snapshots WHERE snapshot_date = ?
+  `).all(previousDate);
+  const byPlayer = new Map(previous.map((row) => [row.albion_key, row]));
+  const columns = {
+    pveFame: 'pve_fame',
+    pvpFame: 'pvp_fame',
+    craftingFame: 'crafting_fame',
+    gatheringFame: 'gathering_fame',
+    totalFame: 'total_fame'
+  };
+
+  const rows = currentRows.map((current) => {
+    const before = byPlayer.get(current.key);
+    if (!before) {
+      return {
+        ...current,
+        pveFame: 0,
+        pvpFame: 0,
+        craftingFame: 0,
+        gatheringFame: 0,
+        totalFame: 0,
+        careerTotals: current
+      };
+    }
+    const growth = { name: current.name, key: current.key, careerTotals: current };
+    for (const [key, column] of Object.entries(columns)) {
+      growth[key] = Math.max(0, Number(current[key]) - Number(before[column]));
+    }
+    return growth;
+  });
+  return { previousDate, rows };
+}
+
 function rankingEmbed(rows, period, subtitle) {
   const embed = new EmbedBuilder()
     .setColor(period === 'weekly' ? 0xf5a623 : 0x38a169)
@@ -187,7 +263,10 @@ function rankingEmbed(rows, period, subtitle) {
       name: label,
       value: top.map((row, index) => {
         const mention = row.discordId ? ` (<@${row.discordId}>)` : '';
-        return `${medal(index)} **${row.name}**${mention} — ${formatFame(row[key])}`;
+        const value = row.careerTotals
+          ? `+${formatFame(row[key])} hoje | Total: ${formatFame(row.careerTotals[key])}`
+          : formatFame(row[key]);
+        return `${medal(index)} **${row.name}**${mention} — ${value}`;
       }).join('\n') || 'Sem dados.'
     });
   }
@@ -263,6 +342,6 @@ function saoPauloDateKey(date) {
 function formatDate(key) { const [y, m, d] = key.split('-'); return `${d}/${m}/${y}`; }
 
 module.exports = {
-  extractFame, extractPveFame, fetchFameRanking, fetchPveRanking, postDailyPveRankingIfNeeded,
-  postWeeklyRankingIfNeeded, previousWeekRange, publishPveRanking, publishRanking, weeklyGrowthRows
+  dailyGrowthRows, extractFame, extractPveFame, fetchFameRanking, fetchPveRanking, postDailyPveRankingIfNeeded,
+  postWeeklyRankingIfNeeded, previousWeekRange, publishPveRanking, publishRanking, replaceDailyRanking, weeklyGrowthRows
 };

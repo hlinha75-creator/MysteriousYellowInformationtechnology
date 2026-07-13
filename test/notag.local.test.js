@@ -87,6 +87,23 @@ test('ranking semanal calcula crescimento entre primeiro e ultimo snapshot', () 
   }]);
 });
 
+test('ranking diario calcula diferenca e preserva total de carreira', () => {
+  getDatabase().prepare(`INSERT INTO albion_fame_daily_snapshots
+    (snapshot_date, albion_key, albion_name, pve_fame, pvp_fame, crafting_fame, gathering_fame, total_fame)
+    VALUES ('2026-07-12', 'ana', 'Ana', 100, 20, 30, 40, 190)`).run();
+  const current = [{
+    name: 'Ana', key: 'ana', pveFame: 160, pvpFame: 35,
+    craftingFame: 50, gatheringFame: 70, totalFame: 315
+  }];
+  const result = dailyPveRanking.dailyGrowthRows('2026-07-13', current);
+  assert.equal(result.previousDate, '2026-07-12');
+  assert.deepEqual(result.rows[0], {
+    name: 'Ana', key: 'ana', pveFame: 60, pvpFame: 15,
+    craftingFame: 20, gatheringFame: 30, totalFame: 125,
+    careerTotals: current[0]
+  });
+});
+
 test('semana de voz usa segunda a domingo no horario de Sao Paulo', () => {
   assert.deepEqual(
     voice.previousCompletedWeek(new Date('2026-07-11T12:00:00Z')),
