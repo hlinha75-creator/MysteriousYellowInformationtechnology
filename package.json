@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "@discordjs/builders": "^1.8.2",
-    "@discordjs/voice": "^0.18.0",
+    "@discordjs/voice": "^0.19.2",
     "@napi-rs/canvas": "^0.1.100",
     "better-sqlite3": "^11.9.1",
     "discord.js": "^14.15.3",
@@ -28,6 +28,6 @@
     "opusscript": "^0.0.8"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.12.0"
   }
 }
