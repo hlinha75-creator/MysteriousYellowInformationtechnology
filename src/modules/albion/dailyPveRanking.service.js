@@ -4,6 +4,7 @@ const { getDatabase, transaction } = require('../../database/connection');
 const { formatFame } = require('./fame.service');
 
 const DEFAULT_API_BASE = 'https://gameinfo-ams.albiononline.com/api/gameinfo';
+const GUILD_NAME = process.env.ALBION_GUILD_NAME || 'NoTag';
 const POST_AFTER_HOUR = 9;
 const CATEGORIES = [
   ['pveFame', 'PvE'],
@@ -139,6 +140,7 @@ async function fetchPlayerFame(name, { fetchImpl, apiBase }) {
   const response = await fetchImpl(`${apiBase}/players/${encodeURIComponent(match.Id)}`);
   if (!response.ok) throw new Error(`API Albion respondeu ${response.status} ao consultar ${name}.`);
   const player = await response.json();
+  if (normalizeGuildName(player?.GuildName) !== normalizeGuildName(GUILD_NAME)) return null;
   return extractFame(player, match.Name || name);
 }
 
@@ -190,8 +192,13 @@ function weeklyGrowthRows(start, end) {
     SELECT * FROM albion_fame_daily_snapshots WHERE snapshot_date BETWEEN ? AND ?
     ORDER BY snapshot_date, albion_name COLLATE NOCASE
   `).all(start, end);
+  const latestDate = snapshots.at(-1)?.snapshot_date;
+  const presentOnLatestDate = new Set(
+    snapshots.filter((row) => row.snapshot_date === latestDate).map((row) => row.albion_key)
+  );
   const grouped = new Map();
   for (const row of snapshots) {
+    if (!presentOnLatestDate.has(row.albion_key)) continue;
     const list = grouped.get(row.albion_key) || [];
     list.push(row);
     grouped.set(row.albion_key, list);
@@ -332,6 +339,7 @@ function saveReminder(key, type, messageId, channelId) {
 }
 function medal(index) { return ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'][index] || `${index + 1}.`; }
 function normalizeName(value) { return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
+function normalizeGuildName(value) { return String(value || '').trim().toLocaleLowerCase('en-US'); }
 function saoPauloHour(date) { return Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Sao_Paulo', hour: '2-digit', hour12: false }).format(date)); }
 function saoPauloWeekday(date) { return Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Sao_Paulo', weekday: 'short' }).formatToParts(date).find((p) => p.type === 'weekday')?.value === 'Mon'); }
 function saoPauloDateKey(date) {

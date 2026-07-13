@@ -52,7 +52,7 @@ test('ranking PvE consulta jogadores e ordena os cinco maiores', async () => {
     }
     const id = parsed.pathname.split('/').pop();
     const [name, player] = Object.entries(players).find(([, value]) => value.id === id);
-    return { ok: true, json: async () => ({ Name: name, LifetimeStatistics: { PvE: { Total: player.fame } } }) };
+    return { ok: true, json: async () => ({ Name: name, GuildName: 'NoTag', LifetimeStatistics: { PvE: { Total: player.fame } } }) };
   };
 
   const ranking = await dailyPveRanking.fetchPveRanking(Object.keys(players), { fetchImpl, apiBase: 'https://example.test/api' });
@@ -73,6 +73,20 @@ test('fama Albion extrai PvE, PvP, craft, coleta e calcula total', () => {
     name: 'JogadorEU', key: 'jogadoreu', pveFame: 1000, pvpFame: 200,
     craftingFame: 300, gatheringFame: 400, totalFame: 1900
   });
+});
+
+test('ranking de fama ignora personagem que esta em outra guilda', async () => {
+  const fetchImpl = async (url) => {
+    if (new URL(url).pathname.endsWith('/search')) {
+      return { ok: true, json: async () => ({ players: [{ Id: 'fora', Name: 'ExMembro' }] }) };
+    }
+    return {
+      ok: true,
+      json: async () => ({ Name: 'ExMembro', GuildName: 'OutraGuild', KillFame: 999999999 })
+    };
+  };
+  const ranking = await dailyPveRanking.fetchFameRanking(['ExMembro'], { fetchImpl, apiBase: 'https://example.test/api' });
+  assert.deepEqual(ranking, []);
 });
 
 test('ranking semanal calcula crescimento entre primeiro e ultimo snapshot', () => {
