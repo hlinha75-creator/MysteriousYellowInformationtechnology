@@ -41,6 +41,11 @@ async function handleSelect(interaction) {
     ]);
   }
 
+  if (scope === 'event_world_boss_slot' && action === 'slot') {
+    const slot = await events.joinWorldBossSlot(interaction, Number(id), interaction.values[0]);
+    return interaction.reply({ content: `Voce entrou como ${slot.label}.`, flags: MessageFlags.Ephemeral });
+  }
+
   if (scope === 'event_review_select') {
     const eventId = Number(id);
     const event = eventsRepo.getEvent(eventId);

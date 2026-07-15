@@ -102,6 +102,20 @@ async function handleModal(interaction) {
     return safeEditReply(interaction, { content: `Raid Avalon Full ${event.event_code} criada com 20 vagas.` });
   }
 
+  if (interaction.customId === 'event:create_world_boss') {
+    if (!can(interaction.member, 'createEvent')) {
+      return safeReply(interaction, { content: 'Voce nao tem permissao para criar World Boss.', flags: MessageFlags.Ephemeral });
+    }
+    const acknowledged = await safeDeferReply(interaction, { flags: MessageFlags.Ephemeral });
+    if (!acknowledged) return null;
+    const event = await events.createWorldBossFromModal(interaction, {
+      scheduledTime: fieldOrDefault(interaction, 'scheduledTime', defaultAlbionTime(10)),
+      location: fieldOrDefault(interaction, 'location', 'Daemonium Keep'),
+      massing: fieldOrDefault(interaction, 'massing', 'Frostspring Volcano Smuggler')
+    });
+    return safeEditReply(interaction, { content: `World Boss ${event.event_code} criado com 16 vagas.` });
+  }
+
   if (interaction.customId.startsWith('event:raid_join:')) {
     const [, , eventIdText, role, weaponKey] = interaction.customId.split(':');
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });

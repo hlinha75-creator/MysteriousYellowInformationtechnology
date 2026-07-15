@@ -1154,6 +1154,31 @@ const migrations = [
         );
       `);
     }
+  },
+  {
+    version: 38,
+    name: 'world_boss_events',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS world_boss_events (
+          event_id INTEGER PRIMARY KEY,
+          massing TEXT NOT NULL DEFAULT 'Frostspring Volcano Smuggler',
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS world_boss_assignments (
+          event_id INTEGER NOT NULL,
+          slot_key TEXT NOT NULL,
+          discord_id TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (event_id, slot_key),
+          UNIQUE (event_id, discord_id),
+          FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
+        );
+      `);
+    }
   }
 ];
 

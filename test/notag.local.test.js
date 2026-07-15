@@ -280,6 +280,40 @@ test('deposito rapido bloqueia confirmacao sem participantes', async () => {
   assert.equal(financeRepo.listTransactions().length, 0);
 });
 
+test('world boss cria 16 vagas unicas e permite trocar ou sair da composicao', async () => {
+  const harness = createDiscordHarness();
+  const creator = 'wb-creator';
+  const playerA = 'wb-player-a';
+  const playerB = 'wb-player-b';
+  const event = await events.createWorldBossFromModal(harness.interaction(creator), {
+    scheduledTime: '13/07/2026 00:00 as 02:00 UTC',
+    location: 'Daemonium Keep',
+    massing: 'Frostspring Volcano Smuggler'
+  });
+
+  assert.equal(harness.sentMessages[0].channelId, '1526954695938019490');
+  assert.equal(events.worldBossSlotOptions(event.id, playerA).length, 16);
+  assert.match([...harness.messages.values()][0].payload.embeds[0].data.description, /TOTAL: 0\/16/);
+
+  await events.joinWorldBossSlot(harness.interaction(playerA), event.id, 'main_tank');
+  assertParticipant(event.id, playerA, { role: 'tank', isSpectator: 0 });
+  assert.equal(eventsRepo.listWorldBossAssignments(event.id)[0].slot_key, 'main_tank');
+  assert.equal(events.worldBossSlotOptions(event.id, playerB).length, 15);
+  await assert.rejects(
+    () => events.joinWorldBossSlot(harness.interaction(playerB), event.id, 'main_tank'),
+    /ja esta ocupada/
+  );
+
+  await events.joinWorldBossSlot(harness.interaction(playerA), event.id, 'badon');
+  assert.equal(eventsRepo.listWorldBossAssignments(event.id).length, 1);
+  assert.equal(eventsRepo.listWorldBossAssignments(event.id)[0].slot_key, 'badon');
+  assertParticipant(event.id, playerA, { role: 'support', isSpectator: 0 });
+
+  await events.leaveWorldBoss(harness.interaction(playerA), event.id);
+  assert.equal(eventsRepo.listWorldBossAssignments(event.id).length, 0);
+  assert.equal(eventsRepo.getParticipant({ eventId: event.id, discordId: playerA }), undefined);
+});
+
 function seedDeterministicVoiceTime(eventId, event, ids) {
   const db = getDatabase();
   const startedAt = '2026-07-08T10:00:00.000Z';

@@ -112,6 +112,8 @@ const publicEventActions = new Set([
   'raid_slot',
   'raid_role',
   'raid_helper',
+  'wb_slot',
+  'wb_leave',
   'join_role',
   'change_role',
   'auto_join',
@@ -235,6 +237,17 @@ async function handleButton(interaction) {
     ]);
   }
 
+  if (interaction.customId === 'panel:create_world_boss') {
+    if (!can(interaction.member, 'createEvent')) {
+      return interaction.reply({ content: 'Voce nao tem permissao para criar World Boss.', flags: MessageFlags.Ephemeral });
+    }
+    return showModal(interaction, 'event:create_world_boss', 'Criar World Boss', [
+      textInput('scheduledTime', 'Data e horario UTC', true, 'Ex: 13/07/2026 00:00 as 02:00 UTC'),
+      textInput('location', 'Local', false, 'Daemonium Keep'),
+      textInput('massing', 'Massing', false, 'Frostspring Volcano Smuggler')
+    ]);
+  }
+
   if (interaction.customId === 'panel:registration') {
     return showModal(interaction, 'registration:submit', 'Registro Albion', [
       textInput('albionName', 'Nome do personagem no Albion')
@@ -307,6 +320,27 @@ async function handleButton(interaction) {
         components: [select],
         flags: MessageFlags.Ephemeral
       });
+    }
+    if (action === 'wb_slot') {
+      const options = events.worldBossSlotOptions(eventId, interaction.user.id);
+      if (options.length === 0) {
+        return interaction.reply({ content: 'Todas as vagas do World Boss estao ocupadas.', flags: MessageFlags.Ephemeral });
+      }
+      const select = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId(`event_world_boss_slot:slot:${eventId}`)
+          .setPlaceholder('Escolha sua funcao ou scout')
+          .addOptions(options)
+      );
+      return interaction.reply({
+        content: 'Escolha uma vaga. Se voce ja estiver inscrito, a vaga anterior sera liberada:',
+        components: [select],
+        flags: MessageFlags.Ephemeral
+      });
+    }
+    if (action === 'wb_leave') {
+      await events.leaveWorldBoss(interaction, eventId);
+      return interaction.reply({ content: 'Voce saiu da composicao do World Boss.', flags: MessageFlags.Ephemeral });
     }
     if (action === 'raid_role') {
       const role = extra;

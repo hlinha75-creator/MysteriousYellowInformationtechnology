@@ -272,6 +272,50 @@ function getRaidAvalonEventMeta(eventId) {
   return getDatabase().prepare('SELECT * FROM raid_avalon_events WHERE event_id = ?').get(eventId);
 }
 
+function createWorldBossEventMeta({ eventId, massing }) {
+  return getDatabase()
+    .prepare(`
+      INSERT INTO world_boss_events (event_id, massing)
+      VALUES (?, ?)
+      ON CONFLICT(event_id) DO UPDATE SET
+        massing = excluded.massing,
+        updated_at = CURRENT_TIMESTAMP
+    `)
+    .run(eventId, massing);
+}
+
+function getWorldBossEventMeta(eventId) {
+  return getDatabase().prepare('SELECT * FROM world_boss_events WHERE event_id = ?').get(eventId);
+}
+
+function listWorldBossAssignments(eventId) {
+  return getDatabase()
+    .prepare('SELECT * FROM world_boss_assignments WHERE event_id = ? ORDER BY slot_key')
+    .all(eventId);
+}
+
+function assignWorldBossSlot({ eventId, slotKey, discordId }) {
+  return transaction(() => {
+    const occupied = getDatabase()
+      .prepare('SELECT * FROM world_boss_assignments WHERE event_id = ? AND slot_key = ?')
+      .get(eventId, slotKey);
+    if (occupied && occupied.discord_id !== discordId) return { assigned: false, occupied };
+    getDatabase()
+      .prepare('DELETE FROM world_boss_assignments WHERE event_id = ? AND discord_id = ?')
+      .run(eventId, discordId);
+    getDatabase()
+      .prepare('INSERT OR REPLACE INTO world_boss_assignments (event_id, slot_key, discord_id) VALUES (?, ?, ?)')
+      .run(eventId, slotKey, discordId);
+    return { assigned: true };
+  })();
+}
+
+function removeWorldBossAssignment({ eventId, discordId }) {
+  return getDatabase()
+    .prepare('DELETE FROM world_boss_assignments WHERE event_id = ? AND discord_id = ?')
+    .run(eventId, discordId);
+}
+
 function upsertRaidAvalonParticipant({ eventId, discordId, weaponKey = null, weaponName = null, itemPower = null, helperRole = null }) {
   return getDatabase()
     .prepare(`
@@ -490,12 +534,14 @@ function listExpiredReviewChannels(nowIso) {
 }
 
 module.exports = {
+  assignWorldBossSlot,
   closeOpenVoiceSession,
   addCareerPointTransaction,
   clearCareerPointData,
   countCareerPointTransactions,
   createEvent,
   createRaidAvalonEventMeta,
+  createWorldBossEventMeta,
   clearParticipantPayouts,
   getEvent,
   getEventByCode,
@@ -506,6 +552,7 @@ module.exports = {
   getRaidAvalonCareer,
   getRaidAvalonEventMeta,
   getRaidAvalonParticipant,
+  getWorldBossEventMeta,
   getReview,
   listActiveEvents,
   listInteractiveEvents,
@@ -518,9 +565,11 @@ module.exports = {
   listRaidAvalonCareer,
   listRaidAvalonCareerByWeapon,
   listRaidAvalonParticipants,
+  listWorldBossAssignments,
   markReviewApproved,
   refreshParticipantSeconds,
   removeParticipant,
+  removeWorldBossAssignment,
   replaceCareerPointData,
   setParticipantPayout,
   setPersistentMessage,

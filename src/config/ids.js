@@ -16,6 +16,8 @@ module.exports = {
     createEvent: '1481397653316178022',
     participate: '1481397657065754797',
     pingContent: '1515475884193222767',
+    worldBoss: '1526954695938019490',
+    worldBossBuilds: '1526970793261666398',
     deposit: '1481251393967886518',
     finance: '1481318081145077812',
     consultBalance: '1481284047526166731',
