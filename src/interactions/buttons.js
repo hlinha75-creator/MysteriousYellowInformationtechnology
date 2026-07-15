@@ -243,8 +243,7 @@ async function handleButton(interaction) {
     }
     return showModal(interaction, 'event:create_world_boss', 'Criar World Boss', [
       textInput('scheduledTime', 'Data e horario UTC', true, 'Ex: 13/07/2026 00:00 as 02:00 UTC'),
-      textInput('location', 'Local', false, 'Daemonium Keep'),
-      textInput('massing', 'Massing', false, 'Frostspring Volcano Smuggler')
+      textInput('location', 'Local', false, 'Daemonium Keep')
     ]);
   }
 

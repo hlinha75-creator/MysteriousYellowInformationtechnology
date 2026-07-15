@@ -287,8 +287,7 @@ test('world boss cria 16 vagas unicas e permite trocar ou sair da composicao', a
   const playerB = 'wb-player-b';
   const event = await events.createWorldBossFromModal(harness.interaction(creator), {
     scheduledTime: '13/07/2026 00:00 as 02:00 UTC',
-    location: 'Daemonium Keep',
-    massing: 'Frostspring Volcano Smuggler'
+    location: 'Daemonium Keep'
   });
 
   assert.equal(harness.sentMessages[0].channelId, '1526954695938019490');

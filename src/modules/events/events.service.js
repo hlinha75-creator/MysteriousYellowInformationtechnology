@@ -220,7 +220,7 @@ function eventEmbed(event, participants = []) {
   if (worldBossMeta) {
     return embed
       .setTitle(null)
-      .setDescription(worldBossAnnouncementDescription(event, worldBossMeta));
+      .setDescription(worldBossAnnouncementDescription(event));
   }
 
   if (raidMeta) {
@@ -255,7 +255,7 @@ function eventEmbed(event, participants = []) {
     .setDescription(commonEventAnnouncement(event, participants));
 }
 
-function worldBossAnnouncementDescription(event, meta) {
+function worldBossAnnouncementDescription(event) {
   const assignments = new Map(
     repo.listWorldBossAssignments(event.id).map((assignment) => [assignment.slot_key, assignment.discord_id])
   );
@@ -273,9 +273,6 @@ function worldBossAnnouncementDescription(event, meta) {
     '> \u2022 7.3 or 6.4 Weapon',
     '> \u2022 Weapon Spec 100',
     `> \u2022 [Build](${buildUrl})`,
-    '',
-    '### \u{1F4E6} MASSING',
-    `> ${meta.massing || 'Frostspring Volcano Smuggler'}`,
     '',
     '\u2501'.repeat(22),
     `## ROLES \u2014 ${worldBossFilledCount(assignments, 0, 10)}/10`,
@@ -590,7 +587,7 @@ async function createWorldBossFromModal(interaction, fields) {
   });
   repo.createWorldBossEventMeta({
     eventId: event.id,
-    massing: fields.massing || 'Frostspring Volcano Smuggler'
+    massing: ''
   });
   await refreshEventMessage(interaction.client, event.id);
   return repo.getEvent(event.id);

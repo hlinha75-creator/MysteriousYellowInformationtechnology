@@ -110,8 +110,7 @@ async function handleModal(interaction) {
     if (!acknowledged) return null;
     const event = await events.createWorldBossFromModal(interaction, {
       scheduledTime: fieldOrDefault(interaction, 'scheduledTime', defaultAlbionTime(10)),
-      location: fieldOrDefault(interaction, 'location', 'Daemonium Keep'),
-      massing: fieldOrDefault(interaction, 'massing', 'Frostspring Volcano Smuggler')
+      location: fieldOrDefault(interaction, 'location', 'Daemonium Keep')
     });
     return safeEditReply(interaction, { content: `World Boss ${event.event_code} criado com 16 vagas.` });
   }
