@@ -172,22 +172,22 @@ const raidAvalonHelpers = {
   uper: 'Uper'
 };
 const worldBossSlots = [
-  { key: 'main_tank', label: 'Main Tank - Incubus', role: 'tank', emoji: '<:INCUB:1405212541809852591>' },
-  { key: 'badon', label: 'Badon', role: 'support', emoji: '<:BADON:1405212474529022122>' },
-  { key: 'main_heal', label: 'Main Heal', role: 'healer', emoji: '<:HEAL:1405212508993622108>' },
-  { key: 'shadowcaller', label: 'Shadowcaller (Support)', role: 'support', emoji: '<:SHADOW:1405212439993389166>' },
-  { key: 'perma_support', label: 'Perma Support', role: 'support', emoji: '<:PERMA:1405212394577334475>' },
-  { key: 'mistpiercer_1', label: 'Mistpiercer 1', role: 'dps', emoji: '<:mistpiercer:1423689584935567360>' },
-  { key: 'mistpiercer_2', label: 'Mistpiercer 2', role: 'dps', emoji: '<:mistpiercer:1423689584935567360>' },
-  { key: 'mist_or_lizard', label: 'Mistpiercer 3 ou Lizard', role: 'dps', emoji: '<:mistpiercer:1423689584935567360> / <:LIZARD:1405213280250626190>' },
-  { key: 'bastion', label: 'Bastion (FE - 3.5m/rotacao)', role: 'support', emoji: '<:LIZARD:1405213280250626190>' },
-  { key: 'looter', label: 'Looter', role: 'dps', emoji: '<:LOOTER:1405212349941416027>' },
-  { key: 'scout_sw_gate', label: '1 SW Gate (Mando)', role: 'scout', emoji: '<:OX:1496990523305623582>' },
-  { key: 'scout_nw_gate', label: '2 NW Gate (Mando)', role: 'scout', emoji: '<:OX:1496990523305623582>' },
-  { key: 'scout_ne_gate', label: '3 NE Gate (Mando)', role: 'scout', emoji: '<:OX:1496990523305623582>' },
-  { key: 'scout_sw_bridge', label: '4 SW Bridge (Not Mando)', role: 'scout', emoji: '<:OX:1496990523305623582>' },
-  { key: 'scout_ne_bridge', label: '5 NE Bridge (Not Mando)', role: 'scout', emoji: '<:OX:1496990523305623582>' },
-  { key: 'scout_se_bridge', label: '6 SE Bridge (Not Mando)', role: 'scout', emoji: '<:OX:1496990523305623582>' }
+  { key: 'main_tank', label: 'Main Tank - Incubus', role: 'tank', emoji: '<:Incubus:1517096493457342474>' },
+  { key: 'badon', label: 'Badon', role: 'support', emoji: '<:Badon:1481800829819158705>' },
+  { key: 'main_heal', label: 'Main Heal', role: 'healer', emoji: '<:Healer:1517096201915334829>' },
+  { key: 'shadowcaller', label: 'Shadowcaller (Support)', role: 'support', emoji: '<:Shadow:1517097701148459131>' },
+  { key: 'perma_support', label: 'Perma Support', role: 'support', emoji: '<:perm:1526996726123204698>' },
+  { key: 'mistpiercer_1', label: 'Mistpiercer 1', role: 'dps', emoji: '<:Fura_Mist:1517189201232138240>' },
+  { key: 'mistpiercer_2', label: 'Mistpiercer 2', role: 'dps', emoji: '<:Fura_Mist:1517189201232138240>' },
+  { key: 'mist_or_lizard', label: 'Mistpiercer 3', role: 'dps', emoji: '<:Fura_Mist:1517189201232138240>' },
+  { key: 'bastion', label: 'Bastion (FE - 3.5m/rotacao)', role: 'support', emoji: '\u{1F98E}' },
+  { key: 'looter', label: 'Looter', role: 'dps', emoji: '\u{1F4B0}' },
+  { key: 'scout_sw_gate', label: '1 SW Gate (Mando)', role: 'scout', emoji: '<:oxt3:1527018389019562024>' },
+  { key: 'scout_nw_gate', label: '2 NW Gate (Mando)', role: 'scout', emoji: '<:oxt3:1527018389019562024>' },
+  { key: 'scout_ne_gate', label: '3 NE Gate (Mando)', role: 'scout', emoji: '<:oxt3:1527018389019562024>' },
+  { key: 'scout_sw_bridge', label: '4 SW Bridge (Not Mando)', role: 'scout', emoji: '<:oxt3:1527018389019562024>' },
+  { key: 'scout_ne_bridge', label: '5 NE Bridge (Not Mando)', role: 'scout', emoji: '<:oxt3:1527018389019562024>' },
+  { key: 'scout_se_bridge', label: '6 SE Bridge (Not Mando)', role: 'scout', emoji: '<:oxt3:1527018389019562024>' }
 ];
 const defaultFunctionByRole = {
   tank: 'Incubus',
