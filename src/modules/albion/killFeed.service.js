@@ -4,7 +4,8 @@ const { getDatabase, transaction } = require('../../database/connection');
 const finance = require('../finance/finance.service');
 const { renderKillCard } = require('./killCardRenderer');
 
-const DEFAULT_API_BASE = 'https://gameinfo.albiononline.com/api/gameinfo';
+const DEFAULT_API_BASE = 'https://gameinfo-ams.albiononline.com/api/gameinfo';
+const LEGACY_AMERICAS_API_BASE = 'https://gameinfo.albiononline.com/api/gameinfo';
 const GUILD_NAME = process.env.ALBION_GUILD_NAME || 'NoTag';
 const PAGE_SIZE = 51;
 const MAX_PAGES = 20;
@@ -14,6 +15,15 @@ const VENGEANCE_REWARD = 100000;
 const VENGEANCE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_DAILY_VENGEANCE_REWARDS = 3;
 let polling = false;
+let lastHealthLogAt = 0;
+
+function configuredApiBase(options = {}) {
+  if (options.apiBase) return options.apiBase;
+  const configured = String(process.env.ALBION_API_BASE_URL || process.env.ALBION_API_BASE || '').replace(/\/$/, '');
+  // A NoTag deste Discord joga na Europa. Corrige automaticamente a configuracao antiga de Americas.
+  if (!configured || configured === LEGACY_AMERICAS_API_BASE) return DEFAULT_API_BASE;
+  return configured;
+}
 
 function normalize(value) {
   return String(value || '').trim().toLocaleLowerCase('en-US');
@@ -292,7 +302,7 @@ async function fetchPage(fetchImpl, apiBase, offset, options = {}) {
 
 async function fetchRecentEvents(options = {}) {
   const fetchImpl = options.fetchImpl || fetch;
-  const apiBase = options.apiBase || process.env.ALBION_API_BASE_URL || process.env.ALBION_API_BASE || DEFAULT_API_BASE;
+  const apiBase = configuredApiBase(options);
   const lastId = Number(options.lastId || 0);
   const result = [];
   for (let page = 0; page < MAX_PAGES; page += 1) {
@@ -308,9 +318,10 @@ async function pollKillFeed(client, options = {}) {
   polling = true;
   try {
     const db = options.db || getDatabase();
-    const storedCursor = Number(db.prepare("SELECT value FROM albion_killfeed_state WHERE key = 'latest_global_event_id'").get()?.value || 0);
-    const latestRelevant = Number(db.prepare('SELECT MAX(event_id) AS id FROM albion_killfeed_events').get()?.id || 0);
-    const latest = storedCursor || latestRelevant;
+    const apiBase = configuredApiBase(options);
+    const cursorKey = `latest_global_event_id:${killboardRegion(apiBase)}`;
+    const storedCursor = Number(db.prepare('SELECT value FROM albion_killfeed_state WHERE key = ?').get(cursorKey)?.value || 0);
+    const latest = storedCursor;
     const events = await fetchRecentEvents({ ...options, lastId: latest });
     const relevant = events
       .map((event) => ({ event, type: classifyEvent(event, options.guildName) }))
@@ -325,7 +336,6 @@ async function pollKillFeed(client, options = {}) {
       const channelId = item.type === 'death' ? ids.channels.deathFeed : ids.channels.killFeed;
       const channel = await client.channels.fetch(channelId);
       if (!channel?.isTextBased()) throw new Error(`Canal do killfeed indisponivel: ${channelId}`);
-      const apiBase = options.apiBase || process.env.ALBION_API_BASE_URL || process.env.ALBION_API_BASE || DEFAULT_API_BASE;
       let payload;
       try {
         payload = await imageEventPayload(item.event, item.type, apiBase, options);
@@ -343,11 +353,16 @@ async function pollKillFeed(client, options = {}) {
     if (newestGlobalId > 0) {
       db.prepare(`
         INSERT INTO albion_killfeed_state (key, value, updated_at)
-        VALUES ('latest_global_event_id', ?, CURRENT_TIMESTAMP)
+        VALUES (?, ?, CURRENT_TIMESTAMP)
         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
-      `).run(String(newestGlobalId));
+      `).run(cursorKey, String(newestGlobalId));
     }
-    return { posted, checked: events.length };
+    const now = Date.now();
+    if (posted > 0 || now - lastHealthLogAt >= 10 * 60 * 1000) {
+      console.log(`[KILLFEED] OK Europa | ${events.length} eventos consultados | ${relevant.length} da NoTag | ${posted} publicados | cursor ${newestGlobalId}`);
+      lastHealthLogAt = now;
+    }
+    return { posted, checked: events.length, relevant: relevant.length, cursor: newestGlobalId };
   } finally {
     polling = false;
   }
@@ -355,6 +370,7 @@ async function pollKillFeed(client, options = {}) {
 
 module.exports = {
   classifyEvent,
+  configuredApiBase,
   eventEmbed,
   eventPayload,
   imageEventPayload,

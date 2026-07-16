@@ -3,11 +3,24 @@ const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
 const {
   classifyEvent,
+  configuredApiBase,
   eventPayload,
   fetchRecentEvents,
   findVengeanceMatches,
   recordVengeanceDeath
 } = require('../src/modules/albion/killFeed.service');
+
+test('killfeed usa Europa mesmo quando restou a configuração antiga de Americas', () => {
+  const previousUrl = process.env.ALBION_API_BASE_URL;
+  const previousBase = process.env.ALBION_API_BASE;
+  process.env.ALBION_API_BASE_URL = 'https://gameinfo.albiononline.com/api/gameinfo';
+  delete process.env.ALBION_API_BASE;
+  assert.equal(configuredApiBase(), 'https://gameinfo-ams.albiononline.com/api/gameinfo');
+  if (previousUrl == null) delete process.env.ALBION_API_BASE_URL;
+  else process.env.ALBION_API_BASE_URL = previousUrl;
+  if (previousBase == null) delete process.env.ALBION_API_BASE;
+  else process.env.ALBION_API_BASE = previousBase;
+});
 
 test('killfeed separa kills, deaths e eventos externos da NoTag', () => {
   assert.equal(classifyEvent({ Killer: { GuildName: 'NoTag' }, Victim: { GuildName: 'Outra' } }), 'kill');
