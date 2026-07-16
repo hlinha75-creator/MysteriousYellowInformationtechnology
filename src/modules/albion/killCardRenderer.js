@@ -111,13 +111,19 @@ async function renderKillCard(event, type, options = {}) {
   ctx.fillStyle = '#372820';
   ctx.font = 'bold 21px Arial';
   ctx.fillText(`${new Intl.NumberFormat('pt-BR').format(Number(event.TotalVictimKillFame || 0))} FAMA`, 500, 235);
+  if (Number(options.estimatedLoss || 0) > 0) {
+    ctx.fillStyle = '#6b4f12';
+    ctx.font = 'bold 20px Arial';
+    ctx.fillText(`~ ${new Intl.NumberFormat('pt-BR').format(options.estimatedLoss)} PRATA PERDIDA`, 500, 263);
+  }
+  ctx.fillStyle = '#372820';
   ctx.font = '17px Arial';
-  ctx.fillText(`${event.numberOfParticipants || event.Participants?.length || 1} participante(s)`, 500, 265);
+  ctx.fillText(`${event.numberOfParticipants || event.Participants?.length || 1} participante(s)`, 500, 289);
   const when = event.TimeStamp ? new Date(event.TimeStamp).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '';
-  ctx.fillText(when, 500, 294);
+  ctx.fillText(when, 500, 314);
   ctx.font = 'bold 15px Arial';
   ctx.fillStyle = '#705444';
-  ctx.fillText(`Evento #${event.EventId} • NOTAG KILLFEED`, 500, 326);
+  ctx.fillText(`Evento #${event.EventId} • NOTAG KILLFEED`, 500, 340);
 
   ctx.fillStyle = '#372820';
   ctx.font = 'bold 20px Arial';

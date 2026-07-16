@@ -3,6 +3,7 @@ const ids = require('../../config/ids');
 const { getDatabase, transaction } = require('../../database/connection');
 const finance = require('../finance/finance.service');
 const { renderKillCard } = require('./killCardRenderer');
+const { estimateVictimLoss } = require('./marketValue.service');
 
 const DEFAULT_API_BASE = 'https://gameinfo-ams.albiononline.com/api/gameinfo';
 const LEGACY_AMERICAS_API_BASE = 'https://gameinfo.albiononline.com/api/gameinfo';
@@ -250,8 +251,21 @@ function eventPayload(event, type, apiBase = DEFAULT_API_BASE) {
 
 async function imageEventPayload(event, type, apiBase = DEFAULT_API_BASE, options = {}) {
   const base = eventPayload(event, type, apiBase);
-  const image = await renderKillCard(event, type, options);
+  let valuation = null;
+  try {
+    valuation = await estimateVictimLoss(event, options);
+  } catch (error) {
+    console.error(`Falha ao estimar valor perdido no evento Albion #${event.EventId}:`, error.message);
+  }
+  const image = await renderKillCard(event, type, { ...options, estimatedLoss: valuation?.total || 0 });
   const summary = base.embeds[0].setImage('attachment://kill-card.png');
+  if (valuation?.total > 0) {
+    summary.addFields({
+      name: 'Prata perdida (estimativa)',
+      value: `${formatNumber(valuation.total)} (${valuation.priced}/${valuation.items} itens com preço)`,
+      inline: true
+    });
+  }
   const participantEmbeds = base.embeds.filter((embed) => embed.data.title?.startsWith('👥'));
   return {
     embeds: [summary, ...participantEmbeds].slice(0, 10),
