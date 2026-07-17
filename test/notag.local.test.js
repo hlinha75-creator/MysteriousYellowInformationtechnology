@@ -22,6 +22,8 @@ const deposit = require('../src/modules/deposit/deposit.service');
 const voice = require('../src/modules/voice/voice.service');
 const voiceRepo = require('../src/modules/voice/voice.repository');
 const dailyPveRanking = require('../src/modules/albion/dailyPveRanking.service');
+const accountLinks = require('../src/modules/accounts/accountLinks.service');
+const guildReverification = require('../src/modules/members/guildReverification.service');
 
 migrate();
 
@@ -32,6 +34,38 @@ test.after(() => {
 
 test.beforeEach(() => {
   resetDatabase();
+});
+
+test('mescla contas Discord, soma saldo e elimina conflito de nick Albion', () => {
+  const db = getDatabase();
+  db.prepare(`INSERT INTO users (discord_id, discord_name, albion_name, registration_status) VALUES (?, ?, ?, ?)`)
+    .run('primary', 'Conta Principal', 'Jogador', 'member');
+  db.prepare(`INSERT INTO users (discord_id, discord_name, albion_name, registration_status) VALUES (?, ?, ?, ?)`)
+    .run('secondary', 'Conta Secundaria', 'jogador', 'guest');
+  db.prepare('INSERT INTO balances (discord_id, balance) VALUES (?, ?)').run('primary', 100);
+  db.prepare('INSERT INTO balances (discord_id, balance) VALUES (?, ?)').run('secondary', 250);
+  db.prepare(`
+    INSERT INTO balance_transactions
+      (type, user_id, amount, before_balance, after_balance, reason, created_by)
+    VALUES ('manual', 'secondary', 250, 0, 250, 'teste', 'staff')
+  `).run();
+
+  const result = accountLinks.mergeAccounts({
+    primaryId: 'primary',
+    secondaryId: 'secondary',
+    actorId: 'staff',
+    label: 'Jogador'
+  });
+
+  assert.equal(result.primaryId, 'primary');
+  assert.equal(db.prepare('SELECT balance FROM balances WHERE discord_id = ?').get('primary').balance, 350);
+  assert.equal(db.prepare('SELECT 1 FROM balances WHERE discord_id = ?').get('secondary'), undefined);
+  assert.equal(db.prepare('SELECT albion_name FROM users WHERE discord_id = ?').get('primary').albion_name, 'Jogador');
+  assert.equal(db.prepare('SELECT albion_name FROM users WHERE discord_id = ?').get('secondary').albion_name, null);
+  assert.equal(db.prepare('SELECT user_id FROM balance_transactions LIMIT 1').get().user_id, 'primary');
+  assert.equal(accountLinks.resolvePrimaryUserId('secondary'), 'primary');
+  assert.deepEqual(accountLinks.linkedUserIds('primary').sort(), ['primary', 'secondary']);
+  assert.equal(db.prepare("SELECT COUNT(*) AS total FROM audit_logs WHERE type = 'discord_accounts_merged'").get().total, 1);
 });
 
 test('ranking PvE consulta jogadores e ordena os cinco maiores', async () => {
@@ -146,6 +180,22 @@ test('jogador constante precisa de 30 minutos em seis dias e soma contas vincula
   assert.deepEqual(voiceRepo.listWeeklyConsistentPlayers({ weekStart: '2026-06-15', weekEnd: '2026-06-21' }), [
     { discord_id: 'primary', name: 'Jogador', days: 6, seconds: 10800 }
   ]);
+});
+
+test('verificacao da guild le roster TSV e exige 30 minutos de voz com alguma presenca de staff', () => {
+  assert.deepEqual(guildReverification.parseRoster('"Character Name"\t"Last Seen"\n"Jogador A"\t"Online"\n"Jogador B"\t"ontem"'), [
+    { normalizedName: 'jogador a', albionName: 'Jogador A' },
+    { normalizedName: 'jogador b', albionName: 'Jogador B' }
+  ]);
+
+  const sessions = [
+    { discord_id: 'player', primary_discord_id: 'player', channel_id: 'recrutamento', joined_at: '2026-07-17T18:00:00.000Z', left_at: '2026-07-17T18:31:00.000Z' },
+    { discord_id: 'staff', primary_discord_id: 'staff', channel_id: 'recrutamento', joined_at: '2026-07-17T18:10:00.000Z', left_at: '2026-07-17T18:11:00.000Z' }
+  ];
+  const startsAt = '2026-07-17T18:00:00.000Z';
+  const endsAt = '2026-07-24T18:00:00.000Z';
+  assert.equal(guildReverification.calculateVoiceTime(sessions, startsAt, endsAt).get('player'), 1860);
+  assert.equal(guildReverification.calculateStaffOverlap(sessions, ['staff'], startsAt, endsAt).get('player'), 60);
 });
 
 test('fluxo local cobre evento, voz, loot split, aprovacao, ledger, saque e deposito', async () => {

@@ -1179,6 +1179,45 @@ const migrations = [
         );
       `);
     }
+  },
+  {
+    version: 39,
+    name: 'guild_reverification_campaign',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS guild_reverification_campaigns (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          guild_id TEXT NOT NULL,
+          announcement_channel_id TEXT NOT NULL,
+          verified_role_id TEXT NOT NULL,
+          voice_channel_ids_json TEXT NOT NULL,
+          starts_at TEXT NOT NULL,
+          deadline_at TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'active',
+          created_by TEXT NOT NULL,
+          last_reminder_date TEXT,
+          final_posted_at TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS guild_reverification_members (
+          campaign_id INTEGER NOT NULL,
+          albion_name TEXT NOT NULL,
+          normalized_name TEXT NOT NULL,
+          discord_id TEXT,
+          status TEXT NOT NULL DEFAULT 'pending',
+          qualification_seconds INTEGER NOT NULL DEFAULT 0,
+          verified_by TEXT,
+          verified_at TEXT,
+          PRIMARY KEY (campaign_id, normalized_name),
+          FOREIGN KEY (campaign_id) REFERENCES guild_reverification_campaigns(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_guild_reverification_members_status
+          ON guild_reverification_members (campaign_id, status);
+      `);
+    }
   }
 ];
 

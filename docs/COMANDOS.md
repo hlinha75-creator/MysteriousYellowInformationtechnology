@@ -349,3 +349,6 @@ As permissoes ficam em `src/config/permissions.js`.
 | `withdrawBalance` | staff, adm, treasurer |
 | `approveRegistration` | staff, adm, recruiter |
 | `assumeEvent` | staff, caller, treasurer, recruiter, adm |
+### `/mesclar_contas`
+
+Use `/mesclar_contas principal secundaria nome` quando duas contas Discord representam o mesmo jogador. Somente a staff autorizada pode confirmar a operacao. O bot mostra uma previa antes de somar saldo e historico financeiro na conta principal; voz, eventos e carreira passam a aparecer juntos no perfil.

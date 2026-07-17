@@ -68,6 +68,7 @@ function fieldText(value, maxLength = 1024) {
 
 async function submitRegistration({ interaction, albionName }) {
   const member = interaction.member;
+  assertAlbionNameAvailable(albionName, member.id);
   repo.upsertUser({
     discordId: member.id,
     discordName: interaction.user.tag,
@@ -102,6 +103,7 @@ async function applyAlbionNickname(member, albionName) {
 async function approveRegistration({ guild, registrationId, actorId, asMember, note }) {
   const registration = repo.getRegistration(registrationId);
   if (!registration) throw new Error('Registro nao encontrado.');
+  assertAlbionNameAvailable(registration.albion_name, registration.discord_id);
 
   repo.updateRegistration({
     id: registrationId,
@@ -135,6 +137,12 @@ async function approveRegistration({ guild, registrationId, actorId, asMember, n
   });
 
   return registration;
+}
+
+function assertAlbionNameAvailable(albionName, discordId) {
+  const owner = repo.findUserByAlbionName(albionName, discordId);
+  if (!owner) return;
+  throw new Error(`O nick Albion ${albionName} ja esta vinculado a <@${owner.discord_id}>. Se as duas contas forem da mesma pessoa, use /mesclar_contas.`);
 }
 
 function previewPendingGuildRegistrations(csvText, actorId) {

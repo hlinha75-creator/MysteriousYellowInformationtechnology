@@ -1,6 +1,7 @@
 const {
   SlashCommandBuilder,
-  PermissionFlagsBits
+  PermissionFlagsBits,
+  ChannelType
 } = require('discord.js');
 
 const commands = [
@@ -15,6 +16,12 @@ const commands = [
   new SlashCommandBuilder()
     .setName('registro')
     .setDescription('Abre registro de nome em jogo.'),
+  new SlashCommandBuilder()
+    .setName('mesclar_contas')
+    .setDescription('Mescla duas contas Discord do mesmo jogador.')
+    .addUserOption((option) => option.setName('principal').setDescription('Conta que permanecera como principal.').setRequired(true))
+    .addUserOption((option) => option.setName('secundaria').setDescription('Outra conta do mesmo jogador.').setRequired(true))
+    .addStringOption((option) => option.setName('nome').setDescription('Nome publico do jogador (opcional).').setMaxLength(80)),
   new SlashCommandBuilder()
     .setName('publicar_rank')
     .setDescription('Publica manualmente o ranking completo de fama Albion.')
@@ -80,7 +87,27 @@ const commands = [
       .setName('tempo_minimo')
       .setDescription('Eventos: minutos minimos na janela para nao rebaixar. Padrao: 15.')
       .setMinValue(1)
-      .setMaxValue(1440))
+      .setMaxValue(1440)),
+  new SlashCommandBuilder()
+    .setName('verificacao_guild')
+    .setDescription('Gerencia a confirmacao dos membros da guilda em voz.')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addSubcommand((subcommand) => subcommand
+      .setName('iniciar')
+      .setDescription('Inicia a verificacao usando a lista exportada da guilda.')
+      .addAttachmentOption((option) => option.setName('arquivo').setDescription('CSV/TSV com a coluna Character Name.').setRequired(true))
+      .addRoleOption((option) => option.setName('cargo_verificado').setDescription('Tag concedida a quem for confirmado.').setRequired(true))
+      .addChannelOption((option) => option.setName('sala_recrutamento').setDescription('Sala de voz Recrutamento.').addChannelTypes(ChannelType.GuildVoice).setRequired(true))
+      .addChannelOption((option) => option.setName('sala_eventos').setDescription('Sala de voz Aguardando Evento.').addChannelTypes(ChannelType.GuildVoice).setRequired(true))
+      .addChannelOption((option) => option.setName('canal_avisos').setDescription('Canal dos lembretes. Padrao: canal de inatividade.').addChannelTypes(ChannelType.GuildText))
+      .addStringOption((option) => option.setName('prazo_utc').setDescription('Prazo ISO em UTC. Padrao: 2026-07-24T18:00:00Z.')))
+    .addSubcommand((subcommand) => subcommand
+      .setName('confirmar')
+      .setDescription('Confirma manualmente um jogador depois de falar com ele.')
+      .addUserOption((option) => option.setName('membro').setDescription('Membro confirmado.').setRequired(true)))
+    .addSubcommand((subcommand) => subcommand.setName('atualizar').setDescription('Recalcula os 30 minutos com staff e mostra o status.'))
+    .addSubcommand((subcommand) => subcommand.setName('status').setDescription('Mostra e exporta a lista atual.'))
+    .addSubcommand((subcommand) => subcommand.setName('finalizar').setDescription('Encerra agora e publica a lista restante.'))
 ];
 
 module.exports = commands.map((command) => command.toJSON());

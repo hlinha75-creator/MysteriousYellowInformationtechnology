@@ -20,6 +20,7 @@ const albionFame = require('../modules/albion/fame.service');
 const { formatSilver } = require('../utils/silver');
 const registration = require('../modules/registration/registration.service');
 const { safeSend } = require('../utils/discord');
+const accountLinks = require('../modules/accounts/accountLinks.service');
 
 const pausedButtonScopes = new Set([
   'auction',
@@ -147,6 +148,27 @@ async function handleButton(interaction) {
   const [scope, action, id, extra] = interaction.customId.split(':');
   if (pausedButtonScopes.has(scope) || pausedButtonIds.has(interaction.customId)) {
     return pausedFeatureReply(interaction);
+  }
+
+  if (scope === 'accounts' && ['merge', 'cancel_merge'].includes(action)) {
+    if (!can(interaction.member, 'approveRegistration')) {
+      return interaction.reply({ content: 'Voce nao tem permissao para mesclar contas.', flags: MessageFlags.Ephemeral });
+    }
+    if (action === 'cancel_merge') {
+      accountLinks.cancelMergePreview(id, interaction.user.id);
+      return interaction.update({ content: 'Mesclagem cancelada. Nenhum dado foi alterado.', components: [] });
+    }
+    const result = accountLinks.applyMergePreview(id, interaction.user.id);
+    return interaction.update({
+      content: [
+        'Contas mescladas com sucesso.',
+        `Principal: <@${result.primaryId}>`,
+        `Contas incorporadas: ${result.secondaryIds.map((userId) => `<@${userId}>`).join(' ')}`,
+        result.albionName ? `Albion: ${result.albionName}` : null
+      ].filter(Boolean).join('\n'),
+      allowedMentions: { parse: [] },
+      components: []
+    });
   }
 
   if (scope === 'campaign' && ['donate_event', 'keep_event'].includes(action)) {

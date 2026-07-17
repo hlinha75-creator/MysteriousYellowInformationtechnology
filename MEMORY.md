@@ -88,6 +88,8 @@ Regras:
 - saldo, saque, pedido de pagamento, transacoes financeiras e contribuicoes de campanha usam sempre a conta principal;
 - perfil do membro e rank geral somam voz, eventos e carreira PvE das contas vinculadas;
 - a conta secundaria nao deve aparecer como saldo separado em exportacoes/listas financeiras;
+- staff pode vincular outros jogadores com `/mesclar_contas principal secundaria nome`, sempre com previa e confirmacao;
+- ao mesclar, o nick Albion fica somente na conta principal para nao violar a unicidade de `users.albion_name`.
 - ao migrar banco antigo, saldo e historico financeiro da secundaria devem ser absorvidos pela principal;
 - presenca em voz e participacao de evento podem continuar registradas no Discord ID real que entrou na call.
 

@@ -23,6 +23,17 @@ function getUser(discordId) {
   return getDatabase().prepare('SELECT * FROM users WHERE discord_id = ?').get(discordId);
 }
 
+function findUserByAlbionName(albionName, exceptDiscordId = null) {
+  return getDatabase()
+    .prepare(`
+      SELECT * FROM users
+      WHERE lower(trim(albion_name)) = lower(trim(?))
+        AND (? IS NULL OR discord_id <> ?)
+      LIMIT 1
+    `)
+    .get(albionName, exceptDiscordId, exceptDiscordId);
+}
+
 function createRegistration({ discordId, albionName }) {
   return getDatabase()
     .prepare('INSERT INTO registrations (discord_id, albion_name) VALUES (?, ?)')
@@ -76,6 +87,7 @@ function logGuildMemberEvent({ eventType, discordId, discordName, displayName })
 
 module.exports = {
   createRegistration,
+  findUserByAlbionName,
   getRegistration,
   getUser,
   listPendingRegistrations,

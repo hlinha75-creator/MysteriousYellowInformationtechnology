@@ -24,6 +24,9 @@ const memberList = require('../modules/members/memberList.service');
 const inactiveEvents = require('../modules/members/inactiveEvents.service');
 const inactiveGuests = require('../modules/members/inactiveGuests.service');
 const dailyPveRanking = require('../modules/albion/dailyPveRanking.service');
+const accountLinks = require('../modules/accounts/accountLinks.service');
+const guildReverification = require('../modules/members/guildReverification.service');
+const guildReverificationRepo = require('../modules/members/guildReverification.repository');
 
 const pausedCommands = new Set([
   'albion',
@@ -75,6 +78,38 @@ async function handleCommand(interaction) {
     return interaction.showModal(modal('registration:submit', 'Registro Albion', [
       input('albionName', 'Nome do personagem no Albion')
     ]));
+  }
+
+  if (interaction.commandName === 'mesclar_contas') {
+    if (!can(interaction.member, 'approveRegistration')) {
+      return interaction.reply({ content: 'Voce nao tem permissao para mesclar contas.', flags: MessageFlags.Ephemeral });
+    }
+    const primary = interaction.options.getUser('principal');
+    const secondary = interaction.options.getUser('secundaria');
+    const preview = accountLinks.createMergePreview({
+      primaryUser: primary,
+      secondaryUser: secondary,
+      actorId: interaction.user.id,
+      label: interaction.options.getString('nome')
+    });
+    return interaction.reply({
+      content: [
+        '**Confirmar mesclagem de contas?**',
+        `Principal: <@${preview.primaryId}> (${preview.primaryName})`,
+        `Secundaria: <@${preview.secondaryId}> (${preview.secondaryName})`,
+        preview.label ? `Nome: ${preview.label}` : null,
+        '',
+        'Saldo e historico financeiro passarao para a principal. Voz, eventos e carreira das duas contas serao somados no mesmo perfil.'
+      ].filter((line) => line !== null).join('\n'),
+      allowedMentions: { parse: [] },
+      flags: MessageFlags.Ephemeral,
+      components: [
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId(`accounts:merge:${preview.id}`).setLabel('Confirmar mesclagem').setStyle(ButtonStyle.Danger),
+          new ButtonBuilder().setCustomId(`accounts:cancel_merge:${preview.id}`).setLabel('Cancelar').setStyle(ButtonStyle.Secondary)
+        )
+      ]
+    });
   }
 
   if (interaction.commandName === 'publicar_rank') {
@@ -276,6 +311,71 @@ async function handleCommand(interaction) {
       daysMin: interaction.options.getInteger('dias_minimos') || inactiveGuests.defaultDaysMin
     });
     return interaction.editReply(inactiveGuests.previewPayload(preview));
+  }
+  if (interaction.commandName === 'verificacao_guild') {
+    if (!can(interaction.member, 'approveRegistration')) {
+      return interaction.reply({ content: 'Voce nao tem permissao para gerenciar a verificacao da guilda.', flags: MessageFlags.Ephemeral });
+    }
+    const subcommand = interaction.options.getSubcommand();
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    if (subcommand === 'iniciar') {
+      const attachment = interaction.options.getAttachment('arquivo');
+      const announcementChannel = interaction.options.getChannel('canal_avisos')
+        || await interaction.guild.channels.fetch(ids.channels.inactivityNotice);
+      if (!announcementChannel?.isTextBased()) throw new Error('O canal configurado para os avisos nao esta disponivel.');
+      const response = await fetch(attachment.url);
+      if (!response.ok) throw new Error('Nao consegui baixar a lista da guilda.');
+      const result = await guildReverification.startCampaign({
+        guild: interaction.guild,
+        actorId: interaction.user.id,
+        rosterText: await response.text(),
+        announcementChannelId: announcementChannel.id,
+        verifiedRoleId: interaction.options.getRole('cargo_verificado').id,
+        voiceChannelIds: [
+          interaction.options.getChannel('sala_recrutamento').id,
+          interaction.options.getChannel('sala_eventos').id
+        ],
+        deadlineAt: interaction.options.getString('prazo_utc') || guildReverification.DEFAULT_DEADLINE
+      });
+      await guildReverification.postPendingList(announcementChannel, result.campaign, [
+        '📢 **CONFIRMACAO OBRIGATORIA DOS MEMBROS**',
+        '',
+        'Prazo: **24/07 às 18h UTC**.',
+        'Entre em **Recrutamento** ou **Aguardando Evento**, procure uma pessoa da staff (nome iniciado por `.`) e diga: “Ola, no jogo eu sou o jogador [nome]”.',
+        'Quem acumular mais de **30 minutos em call com staff presente** podera ser dispensado automaticamente.',
+        'Ao final, quem permanecer pendente entrara na lista para remocao da guilda no jogo.'
+      ].join('\n'));
+      return interaction.editReply({
+        content: `Campanha iniciada com ${result.roster.length} jogadores; ${result.linked} vinculados ao Discord e ${result.roster.length - result.linked} sem vinculo.`,
+        files: [guildReverification.campaignAttachment(result.campaign)]
+      });
+    }
+
+    const campaign = guildReverificationRepo.getActiveCampaign();
+    if (!campaign) throw new Error('Nao existe campanha de verificacao ativa.');
+
+    if (subcommand === 'confirmar') {
+      const user = interaction.options.getUser('membro');
+      const item = await guildReverification.confirmMember({ guild: interaction.guild, discordId: user.id, actorId: interaction.user.id });
+      return interaction.editReply({ content: `${item.albion_name} foi confirmado e recebeu a tag <@&${campaign.verified_role_id}>.`, allowedMentions: { parse: [] } });
+    }
+    if (subcommand === 'atualizar') {
+      const result = await guildReverification.refreshQualifications(interaction.client);
+      const status = guildReverification.summary(campaign);
+      return interaction.editReply({ content: `Atualizado: ${result.qualified.length} nova(s) dispensa(s). Pendentes: ${status.pending}; confirmados: ${status.verified}; dispensados por voz: ${status.voiceQualified}.` });
+    }
+    if (subcommand === 'status') {
+      const status = guildReverification.summary(campaign);
+      return interaction.editReply({
+        content: `Total: ${status.total}; pendentes: ${status.pending}; confirmados: ${status.verified}; dispensados por voz: ${status.voiceQualified}.`,
+        files: [guildReverification.campaignAttachment(campaign)]
+      });
+    }
+    if (subcommand === 'finalizar') {
+      const result = await guildReverification.finishIfNeeded(interaction.client, new Date(), true);
+      return interaction.editReply({ content: `Campanha encerrada. Lista final publicada com ${result.pending.length} jogador(es) pendente(s).` });
+    }
   }
   if (interaction.commandName === 'albion') {
     if (!can(interaction.member, 'importCsv')) {

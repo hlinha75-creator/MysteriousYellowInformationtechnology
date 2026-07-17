@@ -17,6 +17,7 @@ const balanceBackup = require('./modules/csv/balanceBackup.service');
 const operations = require('./modules/operations/operations.service');
 const { startResourceMonitor } = require('./modules/operations/resourceMonitor');
 const campaigns = require('./modules/campaigns/campaigns.service');
+const guildReverification = require('./modules/members/guildReverification.service');
 const { handleInteraction } = require('./interactions/router');
 const { isExpiredOrDuplicateInteraction } = require('./utils/interactions');
 
@@ -58,6 +59,7 @@ client.once('clientReady', () => {
   campaigns.processExpiredEventPayouts(client).catch((error) => console.error('Falha ao processar escolhas vencidas da campanha:', error));
   guildVerification.processIdentificationNoticeQueue(client).catch((error) => console.error('Falha ao processar avisos de regularizacao:', error));
   voice.postWeeklyCoreAwardsIfNeeded(client).catch((error) => console.error('Falha ao publicar jogadores constantes:', error));
+  guildReverification.postReminderIfNeeded(client).catch((error) => console.error('Falha ao processar verificacao da guilda:', error));
   dailyPveRanking.postDailyPveRankingIfNeeded(client).catch((error) => console.error('Falha ao publicar Top 5 PvE:', error));
   dailyPveRanking.postWeeklyRankingIfNeeded(client).catch((error) => console.error('Falha ao publicar ranking semanal de fama:', error));
   killFeed.pollKillFeed(client).catch((error) => console.error('Falha ao consultar killfeed:', error));
@@ -92,6 +94,7 @@ client.once('clientReady', () => {
     operations.postWeeklyAlbionReminderIfNeeded(client).catch((error) => console.error('Falha ao postar lembrete semanal Albion:', error));
     operations.postMonthlyInactivityPreviewIfNeeded(client).catch((error) => console.error('Falha ao postar previa mensal de inatividade:', error));
     voice.postWeeklyCoreAwardsIfNeeded(client).catch((error) => console.error('Falha ao publicar jogadores constantes:', error));
+    guildReverification.postReminderIfNeeded(client).catch((error) => console.error('Falha ao processar verificacao da guilda:', error));
   }, 60 * 60 * 1000);
 });
 
