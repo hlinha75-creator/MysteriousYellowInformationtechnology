@@ -172,16 +172,16 @@ const raidAvalonHelpers = {
   uper: 'Uper'
 };
 const worldBossSlots = [
-  { key: 'main_tank', label: 'Main Tank - Incubus', role: 'tank', kind: 'main', emoji: '<:Incubus:1517096493457342474>' },
-  { key: 'main_heal', label: 'Main Healer - Queda Santa', role: 'healer', kind: 'main', emoji: '<:QuedaSanta:1481801328161329152>' },
+  { key: 'main_tank', label: 'Main Tank', role: 'tank', kind: 'main', emoji: '<:Incubus:1517096493457342474>' },
+  { key: 'main_heal', label: 'Main Healer', role: 'healer', kind: 'main', emoji: '<:QuedaSanta:1481801328161329152>' },
   { key: 'badon', label: 'Badon', role: 'support', kind: 'main', emoji: '<:Badon:1481800829819158705>' },
   { key: 'shadowcaller', label: 'Shadowcaller', role: 'support', kind: 'main', emoji: '<:Shadow:1517097701148459131>' },
   { key: 'perma_support', label: 'Permafrost', role: 'support', kind: 'main', emoji: '<:perm:1526996726123204698>' },
-  { key: 'lightcaller', label: 'Aguia - Lightcaller', role: 'dps', kind: 'main', emoji: '<:LightCaller:1517098287251853312>' },
+  { key: 'lightcaller', label: 'Aguia', role: 'dps', kind: 'main', emoji: '<:LightCaller:1517098287251853312>' },
   { key: 'mistpiercer_1', label: 'Mistpiercer 1', role: 'dps', kind: 'main', emoji: '<:Fura_Mist:1517189201232138240>' },
   { key: 'mistpiercer_2', label: 'Mistpiercer 2', role: 'dps', kind: 'main', emoji: '<:Fura_Mist:1517189201232138240>' },
   { key: 'mistpiercer_3', label: 'Mistpiercer 3', role: 'dps', kind: 'main', emoji: '<:Fura_Mist:1517189201232138240>' },
-  { key: 'looter', label: 'Looter', role: 'dps', kind: 'main', emoji: '\u{1F4B0}' },
+  { key: 'looter', label: 'Looter', role: 'dps', kind: 'main', emoji: '<:Looter:1528440806208442519>' },
   { key: 'scout_sw_gate', label: 'Portao SW (Mobile)', role: 'scout', kind: 'mobile', emoji: '<:oxt3:1527018389019562024>' },
   { key: 'scout_nw_gate', label: 'Portao NW (Mobile)', role: 'scout', kind: 'mobile', emoji: '<:oxt3:1527018389019562024>' },
   { key: 'scout_ne_gate', label: 'Portao NE (Mobile)', role: 'scout', kind: 'mobile', emoji: '<:oxt3:1527018389019562024>' },
