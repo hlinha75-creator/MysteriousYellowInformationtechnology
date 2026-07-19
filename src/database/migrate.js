@@ -1218,6 +1218,35 @@ const migrations = [
           ON guild_reverification_members (campaign_id, status);
       `);
     }
+  },
+  {
+    version: 40,
+    name: 'world_boss_multiple_assignments',
+    up(db) {
+      db.exec(`
+        CREATE TABLE world_boss_assignments_v2 (
+          event_id INTEGER NOT NULL,
+          slot_key TEXT NOT NULL,
+          discord_id TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (event_id, slot_key),
+          FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
+        );
+
+        INSERT INTO world_boss_assignments_v2 (event_id, slot_key, discord_id, created_at)
+        SELECT event_id, slot_key, discord_id, created_at
+        FROM world_boss_assignments;
+
+        UPDATE world_boss_assignments_v2 SET slot_key = 'lightcaller' WHERE slot_key = 'bastion';
+        UPDATE world_boss_assignments_v2 SET slot_key = 'mistpiercer_3' WHERE slot_key = 'mist_or_lizard';
+
+        DROP TABLE world_boss_assignments;
+        ALTER TABLE world_boss_assignments_v2 RENAME TO world_boss_assignments;
+
+        CREATE INDEX idx_world_boss_assignments_member
+          ON world_boss_assignments (event_id, discord_id);
+      `);
+    }
   }
 ];
 

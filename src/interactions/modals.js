@@ -109,8 +109,7 @@ async function handleModal(interaction) {
     const acknowledged = await safeDeferReply(interaction, { flags: MessageFlags.Ephemeral });
     if (!acknowledged) return null;
     const event = await events.createWorldBossFromModal(interaction, {
-      scheduledTime: fieldOrDefault(interaction, 'scheduledTime', defaultAlbionTime(10)),
-      location: fieldOrDefault(interaction, 'location', 'Daemonium Keep')
+      eventDate: fieldOrDefault(interaction, 'eventDate', '')
     });
     return safeEditReply(interaction, { content: `World Boss ${event.event_code} criado com 16 vagas.` });
   }

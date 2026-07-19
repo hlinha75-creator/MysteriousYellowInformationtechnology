@@ -1,4 +1,4 @@
-const { ActionRowBuilder, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const events = require('../modules/events/events.service');
 const eventsRepo = require('../modules/events/events.repository');
 const deposit = require('../modules/deposit/deposit.service');
@@ -42,8 +42,23 @@ async function handleSelect(interaction) {
   }
 
   if (scope === 'event_world_boss_slot' && action === 'slot') {
-    const slot = await events.joinWorldBossSlot(interaction, Number(id), interaction.values[0]);
-    return interaction.reply({ content: `Voce entrou como ${slot.label}.`, flags: MessageFlags.Ephemeral });
+    const slotKey = interaction.values[0];
+    const slot = events.worldBossSlot(slotKey);
+    if (!slot) throw new Error('Vaga de World Boss invalida.');
+    return interaction.update({
+      content: worldBossConfirmationText(slot.label),
+      components: [
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId(`event:wb_confirm:${id}:${slotKey}`).setLabel('Confirmar funcao').setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId(`event:wb_abort:${id}:${slotKey}`).setLabel('Cancelar').setStyle(ButtonStyle.Secondary)
+        )
+      ]
+    });
+  }
+
+  if (scope === 'event_world_boss_slot' && action === 'remove') {
+    const slot = await events.removeWorldBossSlot(interaction, Number(id), interaction.values[0]);
+    return interaction.update({ content: `Vaga liberada: **${slot.label}**.`, components: [] });
   }
 
   if (scope === 'event_review_select') {
@@ -195,4 +210,23 @@ function roleLabel(role) {
     dps: 'DPS'
   };
   return labels[role] || role;
+}
+
+function worldBossConfirmationText(slotLabel) {
+  return [
+    '## \u26A0\uFE0F CONFIRMACAO DA FUNCAO',
+    '',
+    `Voce escolheu: **${slotLabel}**`,
+    '',
+    '\u2022 Avise com antecedencia caso precise desistir.',
+    '\u2022 Use **Gerenciar vagas** para liberar a funcao e retirar seu ping.',
+    '\u2022 A organizacao esta pagando o mapa.',
+    '\u2022 O loot de dentro do World Boss sera usado para pagar o rent.',
+    '\u2022 Scouts Ativos recebem **1m de loot** como auxilio.',
+    '\u2022 DPS devem usar arma **T9 ou 6.3**.',
+    '\u2022 Main Roles devem seguir exatamente a imagem da build.',
+    '\u2022 Nao teremos FE/Basilisco.',
+    '\u2022 O foco e aprender, adaptar o content e criar constancia.',
+    '\u2022 Scout Mobile com funcao DPS pode acumular as duas vagas.'
+  ].join('\n');
 }

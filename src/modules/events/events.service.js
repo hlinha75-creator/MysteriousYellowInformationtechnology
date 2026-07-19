@@ -172,22 +172,22 @@ const raidAvalonHelpers = {
   uper: 'Uper'
 };
 const worldBossSlots = [
-  { key: 'main_tank', label: 'Main Tank - Incubus', role: 'tank', emoji: '<:Incubus:1517096493457342474>' },
-  { key: 'badon', label: 'Badon', role: 'support', emoji: '<:Badon:1481800829819158705>' },
-  { key: 'main_heal', label: 'Main Heal', role: 'healer', emoji: '<:Healer:1517096201915334829>' },
-  { key: 'shadowcaller', label: 'Shadowcaller (Support)', role: 'support', emoji: '<:Shadow:1517097701148459131>' },
-  { key: 'perma_support', label: 'Perma Support', role: 'support', emoji: '<:perm:1526996726123204698>' },
-  { key: 'mistpiercer_1', label: 'Mistpiercer 1', role: 'dps', emoji: '<:Fura_Mist:1517189201232138240>' },
-  { key: 'mistpiercer_2', label: 'Mistpiercer 2', role: 'dps', emoji: '<:Fura_Mist:1517189201232138240>' },
-  { key: 'mist_or_lizard', label: 'Mistpiercer 3', role: 'dps', emoji: '<:Fura_Mist:1517189201232138240>' },
-  { key: 'bastion', label: 'Bastion (FE - 3.5m/rotacao)', role: 'support', emoji: '\u{1F98E}' },
-  { key: 'looter', label: 'Looter', role: 'dps', emoji: '\u{1F4B0}' },
-  { key: 'scout_sw_gate', label: '1 SW Gate (Mando)', role: 'scout', emoji: '<:oxt3:1527018389019562024>' },
-  { key: 'scout_nw_gate', label: '2 NW Gate (Mando)', role: 'scout', emoji: '<:oxt3:1527018389019562024>' },
-  { key: 'scout_ne_gate', label: '3 NE Gate (Mando)', role: 'scout', emoji: '<:oxt3:1527018389019562024>' },
-  { key: 'scout_sw_bridge', label: '4 SW Bridge (Not Mando)', role: 'scout', emoji: '<:oxt3:1527018389019562024>' },
-  { key: 'scout_ne_bridge', label: '5 NE Bridge (Not Mando)', role: 'scout', emoji: '<:oxt3:1527018389019562024>' },
-  { key: 'scout_se_bridge', label: '6 SE Bridge (Not Mando)', role: 'scout', emoji: '<:oxt3:1527018389019562024>' }
+  { key: 'main_tank', label: 'Main Tank - Incubus', role: 'tank', kind: 'main', emoji: '<:Incubus:1517096493457342474>' },
+  { key: 'main_heal', label: 'Main Healer - Queda Santa', role: 'healer', kind: 'main', emoji: '<:QuedaSanta:1481801328161329152>' },
+  { key: 'badon', label: 'Badon', role: 'support', kind: 'main', emoji: '<:Badon:1481800829819158705>' },
+  { key: 'shadowcaller', label: 'Shadowcaller', role: 'support', kind: 'main', emoji: '<:Shadow:1517097701148459131>' },
+  { key: 'perma_support', label: 'Permafrost', role: 'support', kind: 'main', emoji: '<:perm:1526996726123204698>' },
+  { key: 'lightcaller', label: 'Aguia - Lightcaller', role: 'dps', kind: 'main', emoji: '<:LightCaller:1517098287251853312>' },
+  { key: 'mistpiercer_1', label: 'Mistpiercer 1', role: 'dps', kind: 'main', emoji: '<:Fura_Mist:1517189201232138240>' },
+  { key: 'mistpiercer_2', label: 'Mistpiercer 2', role: 'dps', kind: 'main', emoji: '<:Fura_Mist:1517189201232138240>' },
+  { key: 'mistpiercer_3', label: 'Mistpiercer 3', role: 'dps', kind: 'main', emoji: '<:Fura_Mist:1517189201232138240>' },
+  { key: 'looter', label: 'Looter', role: 'dps', kind: 'main', emoji: '\u{1F4B0}' },
+  { key: 'scout_sw_gate', label: 'Portao SW (Mobile)', role: 'scout', kind: 'mobile', emoji: '<:oxt3:1527018389019562024>' },
+  { key: 'scout_nw_gate', label: 'Portao NW (Mobile)', role: 'scout', kind: 'mobile', emoji: '<:oxt3:1527018389019562024>' },
+  { key: 'scout_ne_gate', label: 'Portao NE (Mobile)', role: 'scout', kind: 'mobile', emoji: '<:oxt3:1527018389019562024>' },
+  { key: 'scout_sw_bridge', label: 'Ponte SW (Ativo)', role: 'scout', kind: 'active', emoji: '<:oxt3:1527018389019562024>' },
+  { key: 'scout_se_bridge', label: 'Ponte SE (Ativo)', role: 'scout', kind: 'active', emoji: '<:oxt3:1527018389019562024>' },
+  { key: 'scout_ne_bridge', label: 'Ponte NE (Ativo)', role: 'scout', kind: 'active', emoji: '<:oxt3:1527018389019562024>' }
 ];
 const defaultFunctionByRole = {
   tank: 'Incubus',
@@ -265,14 +265,10 @@ function worldBossAnnouncementDescription(event) {
   const buildUrl = `https://discord.com/channels/${ids.guildId}/${ids.channels.worldBossBuilds}`;
   const status = event.status === 'running' ? '\n\n\u{1F7E2} **EVENTO EM ANDAMENTO**' : '';
   return [
-    '# \u2694\uFE0F DAEMONIUM KEEP \u2694\uFE0F',
-    `> **\u{1F4CD} Location:** ${event.location || 'Daemonium Keep'}`,
-    `> **\u{1F552} Time:** ${event.scheduled_time || 'Nao informado'}`,
-    '',
-    '### \u2694\uFE0F REQUIREMENTS',
-    '> \u2022 7.3 or 6.4 Weapon',
-    '> \u2022 Weapon Spec 100',
-    `> \u2022 [Build](${buildUrl})`,
+    '# \u2694\uFE0F FARM WORLD BOSS \u2694\uFE0F',
+    `> **\u{1F552} Horario:** ${event.scheduled_time || '00:00 as 02:00 UTC'}`,
+    `> **\u{1F4CD} Local:** ${event.location || 'DK / Vulcano'}`,
+    `> **\u{1F4DA} [BUILDS](${buildUrl})**`,
     '',
     '\u2501'.repeat(22),
     `## ROLES \u2014 ${worldBossFilledCount(assignments, 0, 10)}/10`,
@@ -463,8 +459,8 @@ function eventComponents(event) {
   if (isWorldBoss) {
     if (event.status === 'created') {
       rows.push(new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`event:wb_slot:${event.id}:wb`).setLabel('Escolher vaga').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId(`event:wb_leave:${event.id}:wb`).setLabel('Sair da composicao').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`event:wb_slot:${event.id}:wb`).setLabel('Escolher funcao').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`event:wb_manage:${event.id}:wb`).setLabel('Gerenciar vagas').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId(`event:start:${event.id}:wb`).setLabel('Iniciar').setStyle(ButtonStyle.Primary),
         new ButtonBuilder().setCustomId(`event:cancel:${event.id}:wb`).setLabel('Cancelar').setStyle(ButtonStyle.Danger)
       ));
@@ -571,16 +567,20 @@ async function createRaidAvalonFullFromModal(interaction, fields) {
 
 async function createWorldBossFromModal(interaction, fields) {
   const pingRoles = [ids.roles.core, ids.roles.member].filter(Boolean);
+  const eventDate = String(fields.eventDate || '').trim();
+  if (!/^\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?$/.test(eventDate)) {
+    throw new Error('Informe a data no formato DD/MM/AAAA. Ex: 20/07/2026.');
+  }
   const event = await createEventFromFields(interaction, {
     creatorId: interaction.user.id,
-    title: 'Daemonium Keep',
-    description: 'World Boss | 7.3 ou 6.4 | Spec 100',
-    location: fields.location || 'Daemonium Keep',
-    scheduledTime: fields.scheduledTime,
+    title: 'Farm World Boss',
+    description: `BUILDS > https://discord.com/channels/${ids.guildId}/${ids.channels.worldBossBuilds}`,
+    location: 'DK / Vulcano',
+    scheduledTime: `${eventDate} 00:00 as 02:00 UTC`,
     tankSlots: 1,
     healerSlots: 1,
-    supportSlots: 4,
-    dpsSlots: 4,
+    supportSlots: 3,
+    dpsSlots: 5,
     postChannelId: ids.channels.worldBoss,
     messageContent: pingRoles.map((roleId) => `<@&${roleId}>`).join(' '),
     allowedMentions: { parse: [], roles: pingRoles }
@@ -717,20 +717,45 @@ function worldBossSlotOptions(eventId, discordId) {
     }));
 }
 
+function worldBossMemberSlotOptions(eventId, discordId) {
+  const assigned = new Set(
+    repo.listWorldBossAssignments(eventId)
+      .filter((assignment) => assignment.discord_id === discordId)
+      .map((assignment) => assignment.slot_key)
+  );
+  return worldBossSlots
+    .filter((slot) => assigned.has(slot.key))
+    .map((slot) => ({ label: slot.label, value: slot.key, description: 'Liberar esta vaga' }));
+}
+
+function worldBossSlot(slotKey) {
+  return worldBossSlots.find((candidate) => candidate.key === slotKey) || null;
+}
+
 async function joinWorldBossSlot(interaction, eventId, slotKey) {
   const event = repo.getEvent(eventId);
   if (!event || !['created', 'running'].includes(event.status)) throw new Error('Evento nao esta aberto.');
   if (!repo.getWorldBossEventMeta(eventId)) throw new Error('Esse evento nao e um World Boss.');
-  const slot = worldBossSlots.find((candidate) => candidate.key === slotKey);
+  const slot = worldBossSlot(slotKey);
   if (!slot) throw new Error('Vaga de World Boss invalida.');
 
-  const result = repo.assignWorldBossSlot({ eventId, slotKey, discordId: interaction.user.id });
+  const ownAssignments = repo.listWorldBossAssignments(eventId)
+    .filter((assignment) => assignment.discord_id === interaction.user.id);
+  const ownSlots = ownAssignments.map((assignment) => worldBossSlot(assignment.slot_key)).filter(Boolean);
+  const removeSlotKeys = worldBossReplacementSlots(slot, ownSlots);
+  const result = repo.assignWorldBossSlot({
+    eventId,
+    slotKey,
+    discordId: interaction.user.id,
+    removeSlotKeys
+  });
   if (!result.assigned) {
     throw new Error(`A vaga ${slot.label} ja esta ocupada por <@${result.occupied.discord_id}>.`);
   }
 
   const previous = repo.getParticipant({ eventId, discordId: interaction.user.id });
-  repo.upsertParticipant({ eventId, discordId: interaction.user.id, role: slot.role, isSpectator: 0 });
+  const participantRole = worldBossParticipantRole(eventId, interaction.user.id);
+  repo.upsertParticipant({ eventId, discordId: interaction.user.id, role: participantRole, isSpectator: 0 });
   await addEventRoleToMember(interaction.guild, event, interaction.user.id).catch(() => {});
   let voiceResult = null;
   if (event.status === 'running') voiceResult = await ensureParticipantVoiceSession(interaction, event);
@@ -746,6 +771,72 @@ async function joinWorldBossSlot(interaction, eventId, slotKey) {
   return slot;
 }
 
+function worldBossReplacementSlots(selected, ownSlots) {
+  if (ownSlots.some((slot) => slot.key === selected.key)) return [];
+  const main = ownSlots.find((slot) => slot.kind === 'main');
+  const mobile = ownSlots.find((slot) => slot.kind === 'mobile');
+  const active = ownSlots.find((slot) => slot.kind === 'active');
+
+  if (selected.kind === 'main') {
+    if (active) throw new Error('Libere sua vaga de Scout Ativo antes de escolher uma funcao principal.');
+    if (mobile && selected.role !== 'dps') {
+      throw new Error('Scout Mobile so pode acumular com uma funcao DPS. Libere o scout primeiro.');
+    }
+    return main ? [main.key] : [];
+  }
+  if (selected.kind === 'mobile') {
+    if (active) throw new Error('Libere sua vaga de Scout Ativo antes de escolher Scout Mobile.');
+    if (main && main.role !== 'dps') {
+      throw new Error('Scout Mobile so pode acumular com uma funcao DPS. Libere sua funcao atual primeiro.');
+    }
+    return mobile ? [mobile.key] : [];
+  }
+  if (main || mobile) {
+    throw new Error('Scout Ativo e uma funcao exclusiva. Libere suas outras vagas primeiro.');
+  }
+  return active ? [active.key] : [];
+}
+
+function worldBossParticipantRole(eventId, discordId) {
+  const slots = repo.listWorldBossAssignments(eventId)
+    .filter((assignment) => assignment.discord_id === discordId)
+    .map((assignment) => worldBossSlot(assignment.slot_key))
+    .filter(Boolean);
+  return slots.find((slot) => slot.kind === 'main')?.role || 'scout';
+}
+
+async function removeWorldBossSlot(interaction, eventId, slotKey) {
+  const event = repo.getEvent(eventId);
+  if (!event || event.status !== 'created') throw new Error('So e possivel liberar vagas antes do evento iniciar.');
+  if (!repo.getWorldBossEventMeta(eventId)) throw new Error('Esse evento nao e um World Boss.');
+  const slot = worldBossSlot(slotKey);
+  if (!slot) throw new Error('Vaga de World Boss invalida.');
+  const removed = repo.removeWorldBossAssignment({ eventId, discordId: interaction.user.id, slotKey });
+  if (!removed.changes) throw new Error('Essa vaga nao pertence a voce.');
+  const remaining = repo.listWorldBossAssignments(eventId)
+    .filter((assignment) => assignment.discord_id === interaction.user.id);
+  if (remaining.length === 0) {
+    repo.removeParticipant({ eventId, discordId: interaction.user.id });
+    await removeEventRoleFromMember(interaction.guild, event, interaction.user.id).catch(() => {});
+  } else {
+    repo.upsertParticipant({
+      eventId,
+      discordId: interaction.user.id,
+      role: worldBossParticipantRole(eventId, interaction.user.id),
+      isSpectator: 0
+    });
+  }
+  audit.createAuditLog({
+    type: 'world_boss_slot_left',
+    actorId: interaction.user.id,
+    targetId: String(eventId),
+    beforeValue: slot.key,
+    reason: 'Vaga liberada antes do inicio'
+  });
+  await refreshEventMessage(interaction.client, eventId);
+  return slot;
+}
+
 async function leaveWorldBoss(interaction, eventId) {
   const event = repo.getEvent(eventId);
   if (!event || event.status !== 'created') throw new Error('So e possivel sair da composicao antes do evento iniciar.');
@@ -753,6 +844,7 @@ async function leaveWorldBoss(interaction, eventId) {
   const removed = repo.removeWorldBossAssignment({ eventId, discordId: interaction.user.id });
   if (!removed.changes) throw new Error('Voce nao esta inscrito neste World Boss.');
   repo.removeParticipant({ eventId, discordId: interaction.user.id });
+  await removeEventRoleFromMember(interaction.guild, event, interaction.user.id).catch(() => {});
   audit.createAuditLog({
     type: 'world_boss_slot_left',
     actorId: interaction.user.id,
@@ -2060,6 +2152,14 @@ async function addEventRoleToMember(guild, event, discordId) {
   await member?.roles.add(event.warning_role_id, `Participante do evento ${event.event_code}`).catch(() => {});
 }
 
+async function removeEventRoleFromMember(guild, event, discordId) {
+  if (!event?.warning_role_id) return;
+  const member = await guild.members.fetch(discordId).catch(() => null);
+  if (member?.roles?.remove) {
+    await member.roles.remove(event.warning_role_id, `Saiu do evento ${event.event_code}`).catch(() => {});
+  }
+}
+
 async function sendEventReminder(client, event, text) {
   const guild = await client.guilds.fetch(ids.guildId);
   const role = await ensureEventTempRole(guild, event);
@@ -2186,6 +2286,7 @@ module.exports = {
   refreshEventMessage,
   refreshRaidAvalonCareerPanel,
   refreshRunningEventMessages,
+  removeWorldBossSlot,
   removeParticipantReview,
   rebuildCareerPoints,
   returnEventToReview,
@@ -2197,5 +2298,7 @@ module.exports = {
   submitEventToFinance,
   spectateEvent,
   startEvent,
+  worldBossMemberSlotOptions,
+  worldBossSlot,
   worldBossSlotOptions
 };

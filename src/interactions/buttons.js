@@ -115,6 +115,9 @@ const publicEventActions = new Set([
   'raid_helper',
   'wb_slot',
   'wb_leave',
+  'wb_manage',
+  'wb_confirm',
+  'wb_abort',
   'join_role',
   'change_role',
   'auto_join',
@@ -264,8 +267,7 @@ async function handleButton(interaction) {
       return interaction.reply({ content: 'Voce nao tem permissao para criar World Boss.', flags: MessageFlags.Ephemeral });
     }
     return showModal(interaction, 'event:create_world_boss', 'Criar World Boss', [
-      textInput('scheduledTime', 'Data e horario UTC', true, 'Ex: 13/07/2026 00:00 as 02:00 UTC'),
-      textInput('location', 'Local', false, 'Daemonium Keep')
+      textInput('eventDate', 'Data do Farm', true, 'Ex: 20/07/2026')
     ]);
   }
 
@@ -358,6 +360,30 @@ async function handleButton(interaction) {
         components: [select],
         flags: MessageFlags.Ephemeral
       });
+    }
+    if (action === 'wb_manage') {
+      const options = events.worldBossMemberSlotOptions(eventId, interaction.user.id);
+      if (options.length === 0) {
+        return interaction.reply({ content: 'Voce nao possui vagas neste World Boss.', flags: MessageFlags.Ephemeral });
+      }
+      const select = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId(`event_world_boss_slot:remove:${eventId}`)
+          .setPlaceholder('Escolha a vaga que deseja liberar')
+          .addOptions(options)
+      );
+      return interaction.reply({
+        content: 'Selecione somente a vaga que deseja liberar:',
+        components: [select],
+        flags: MessageFlags.Ephemeral
+      });
+    }
+    if (action === 'wb_confirm') {
+      const slot = await events.joinWorldBossSlot(interaction, eventId, extra);
+      return interaction.update({ content: `Funcao confirmada: **${slot.label}**.`, components: [] });
+    }
+    if (action === 'wb_abort') {
+      return interaction.update({ content: 'Escolha de funcao cancelada.', components: [] });
     }
     if (action === 'wb_leave') {
       await events.leaveWorldBoss(interaction, eventId);

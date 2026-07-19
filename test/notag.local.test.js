@@ -330,14 +330,13 @@ test('deposito rapido bloqueia confirmacao sem participantes', async () => {
   assert.equal(financeRepo.listTransactions().length, 0);
 });
 
-test('world boss cria 16 vagas unicas e permite trocar ou sair da composicao', async () => {
+test('world boss cria 16 vagas e permite acumular DPS com Scout Mobile', async () => {
   const harness = createDiscordHarness();
   const creator = 'wb-creator';
   const playerA = 'wb-player-a';
   const playerB = 'wb-player-b';
   const event = await events.createWorldBossFromModal(harness.interaction(creator), {
-    scheduledTime: '13/07/2026 00:00 as 02:00 UTC',
-    location: 'Daemonium Keep'
+    eventDate: '20/07/2026'
   });
 
   assert.equal(harness.sentMessages[0].channelId, '1526954695938019490');
@@ -361,6 +360,16 @@ test('world boss cria 16 vagas unicas e permite trocar ou sair da composicao', a
   await events.leaveWorldBoss(harness.interaction(playerA), event.id);
   assert.equal(eventsRepo.listWorldBossAssignments(event.id).length, 0);
   assert.equal(eventsRepo.getParticipant({ eventId: event.id, discordId: playerA }), undefined);
+
+  await events.joinWorldBossSlot(harness.interaction(playerA), event.id, 'lightcaller');
+  await events.joinWorldBossSlot(harness.interaction(playerA), event.id, 'scout_sw_gate');
+  assert.equal(eventsRepo.listWorldBossAssignments(event.id).length, 2);
+  assertParticipant(event.id, playerA, { role: 'dps', isSpectator: 0 });
+  await events.removeWorldBossSlot(harness.interaction(playerA), event.id, 'scout_sw_gate');
+  assert.deepEqual(
+    eventsRepo.listWorldBossAssignments(event.id).map((assignment) => assignment.slot_key),
+    ['lightcaller']
+  );
 });
 
 function seedDeterministicVoiceTime(eventId, event, ids) {

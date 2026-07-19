@@ -294,15 +294,16 @@ function listWorldBossAssignments(eventId) {
     .all(eventId);
 }
 
-function assignWorldBossSlot({ eventId, slotKey, discordId }) {
+function assignWorldBossSlot({ eventId, slotKey, discordId, removeSlotKeys = [] }) {
   return transaction(() => {
     const occupied = getDatabase()
       .prepare('SELECT * FROM world_boss_assignments WHERE event_id = ? AND slot_key = ?')
       .get(eventId, slotKey);
     if (occupied && occupied.discord_id !== discordId) return { assigned: false, occupied };
-    getDatabase()
-      .prepare('DELETE FROM world_boss_assignments WHERE event_id = ? AND discord_id = ?')
-      .run(eventId, discordId);
+    const remove = getDatabase().prepare(
+      'DELETE FROM world_boss_assignments WHERE event_id = ? AND discord_id = ? AND slot_key = ?'
+    );
+    for (const key of [...new Set(removeSlotKeys)]) remove.run(eventId, discordId, key);
     getDatabase()
       .prepare('INSERT OR REPLACE INTO world_boss_assignments (event_id, slot_key, discord_id) VALUES (?, ?, ?)')
       .run(eventId, slotKey, discordId);
@@ -310,7 +311,12 @@ function assignWorldBossSlot({ eventId, slotKey, discordId }) {
   })();
 }
 
-function removeWorldBossAssignment({ eventId, discordId }) {
+function removeWorldBossAssignment({ eventId, discordId, slotKey = null }) {
+  if (slotKey) {
+    return getDatabase()
+      .prepare('DELETE FROM world_boss_assignments WHERE event_id = ? AND discord_id = ? AND slot_key = ?')
+      .run(eventId, discordId, slotKey);
+  }
   return getDatabase()
     .prepare('DELETE FROM world_boss_assignments WHERE event_id = ? AND discord_id = ?')
     .run(eventId, discordId);
