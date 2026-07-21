@@ -18,6 +18,7 @@ const operations = require('./modules/operations/operations.service');
 const { startResourceMonitor } = require('./modules/operations/resourceMonitor');
 const campaigns = require('./modules/campaigns/campaigns.service');
 const guildReverification = require('./modules/members/guildReverification.service');
+const lochMarket = require('./modules/community/lochMarket.service');
 const { handleInteraction } = require('./interactions/router');
 const { isExpiredOrDuplicateInteraction } = require('./utils/interactions');
 
@@ -62,6 +63,7 @@ client.once('clientReady', () => {
   guildReverification.postReminderIfNeeded(client).catch((error) => console.error('Falha ao processar verificacao da guilda:', error));
   dailyPveRanking.postDailyPveRankingIfNeeded(client).catch((error) => console.error('Falha ao publicar Top 5 PvE:', error));
   dailyPveRanking.postWeeklyRankingIfNeeded(client).catch((error) => console.error('Falha ao publicar ranking semanal de fama:', error));
+  lochMarket.postAnnouncementIfNeeded(client).catch((error) => console.error('Falha ao publicar comunicado do mercado de Loch:', error));
   killFeed.pollKillFeed(client).catch((error) => console.error('Falha ao consultar killfeed:', error));
   setInterval(() => {
     events.refreshRunningEventMessages(client).catch((error) => console.error('Falha ao atualizar eventos em andamento:', error));

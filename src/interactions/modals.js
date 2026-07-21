@@ -1,4 +1,4 @@
-const { can } = require('../config/permissions');
+const { can, hasRole, isOwner } = require('../config/permissions');
 const ids = require('../config/ids');
 const events = require('../modules/events/events.service');
 const eventsRepo = require('../modules/events/events.repository');
@@ -10,6 +10,7 @@ const { safeDeferReply, safeEditReply, safeReply } = require('../utils/interacti
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
 const financeRepo = require('../modules/finance/finance.repository');
 const deposit = require('../modules/deposit/deposit.service');
+const lochMarket = require('../modules/community/lochMarket.service');
 
 function intField(fields, name) {
   const value = Number.parseInt(fields.getTextInputValue(name), 10);
@@ -18,6 +19,52 @@ function intField(fields, name) {
 }
 
 async function handleModal(interaction) {
+  if (interaction.customId === 'loch:suggestion_modal') {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const suggestionText = interaction.fields.getTextInputValue('suggestion').trim();
+    if (suggestionText.length < 3) throw new Error('Escreva uma sugestão com pelo menos 3 caracteres.');
+    const suggestionId = lochMarket.createSuggestion({ authorId: interaction.user.id, suggestion: suggestionText });
+    const staffChannel = await interaction.client.channels.fetch(ids.channels.staff).catch(() => null);
+    if (!staffChannel?.isTextBased()) throw new Error('Nao foi possivel encontrar o canal da staff. Tente novamente mais tarde.');
+    const staffMessage = await staffChannel.send(lochMarket.suggestionStaffPayload({
+      id: suggestionId,
+      authorId: interaction.user.id,
+      suggestion: suggestionText
+    }));
+    lochMarket.attachStaffMessage(suggestionId, staffChannel.id, staffMessage.id);
+    return interaction.editReply({ content: `Sua sugestão #${suggestionId} foi enviada para a staff. Obrigado pela opinião!` });
+  }
+
+  if (interaction.customId.startsWith('loch:answer_modal:')) {
+    if (!isOwner(interaction.member) && !hasRole(interaction.member, 'staff') && !hasRole(interaction.member, 'adm')) {
+      return interaction.reply({ content: 'Somente a staff pode responder sugestões.', flags: MessageFlags.Ephemeral });
+    }
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const suggestionId = Number(interaction.customId.split(':')[2]);
+    const suggestion = lochMarket.getSuggestion(suggestionId);
+    if (!suggestion) throw new Error('Sugestão não encontrada.');
+    if (suggestion.status === 'answered') return interaction.editReply({ content: 'Essa sugestão já foi respondida.' });
+    const answer = interaction.fields.getTextInputValue('answer').trim();
+    const author = await interaction.client.users.fetch(suggestion.author_id).catch(() => null);
+    if (!author) throw new Error('Nao foi possivel localizar o autor da sugestao.');
+    const delivered = await author.send({
+      embeds: [
+        baseEmbed(`Resposta da staff sobre sua sugestão #${suggestion.id}`)
+          .addFields(
+            { name: 'Sua sugestão', value: suggestion.suggestion.slice(0, 1024), inline: false },
+            { name: 'Resposta', value: answer.slice(0, 1024), inline: false }
+          )
+      ],
+      allowedMentions: { parse: [] }
+    }).then(() => true).catch(() => false);
+    if (!delivered) {
+      return interaction.editReply({ content: 'Não consegui enviar a resposta por DM. O membro pode estar com as mensagens privadas fechadas; a sugestão continua pendente.' });
+    }
+    const answered = lochMarket.markAnswered({ id: suggestionId, staffId: interaction.user.id, answer });
+    await interaction.message?.edit(lochMarket.answeredStaffPayload(answered)).catch(() => {});
+    return interaction.editReply({ content: 'Resposta enviada ao autor por mensagem privada.' });
+  }
+
   if (interaction.customId === 'campaign:donate_balance_modal') {
     const amount = parseSilver(interaction.fields.getTextInputValue('amount'));
     const balance = financeRepo.getBalance(interaction.user.id);

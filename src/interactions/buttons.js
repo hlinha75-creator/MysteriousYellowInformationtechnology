@@ -21,6 +21,7 @@ const { formatSilver } = require('../utils/silver');
 const registration = require('../modules/registration/registration.service');
 const { safeSend } = require('../utils/discord');
 const accountLinks = require('../modules/accounts/accountLinks.service');
+const lochMarket = require('../modules/community/lochMarket.service');
 
 const pausedButtonScopes = new Set([
   'auction',
@@ -172,6 +173,35 @@ async function handleButton(interaction) {
       allowedMentions: { parse: [] },
       components: []
     });
+  }
+
+  if (scope === 'loch') {
+    if (action === 'feedback') {
+      const result = lochMarket.registerFeedback(interaction.user.id, id);
+      await interaction.update({ components: lochMarket.announcementComponents(result.counts) });
+      return interaction.followUp({
+        content: result.added ? 'Obrigado por registrar sua reação.' : 'Sua reação já estava registrada.',
+        flags: MessageFlags.Ephemeral
+      });
+    }
+    if (action === 'suggestion') {
+      return showModal(interaction, 'loch:suggestion_modal', 'Sugestão sobre o mercado', [
+        textInput('suggestion', 'Sua opinião', true, 'Escreva sua sugestão para a staff', TextInputStyle.Paragraph)
+      ]);
+    }
+    if (action === 'answer') {
+      if (!isOwner(interaction.member) && !hasRole(interaction.member, 'staff') && !hasRole(interaction.member, 'adm')) {
+        return interaction.reply({ content: 'Somente a staff pode responder sugestões.', flags: MessageFlags.Ephemeral });
+      }
+      const suggestion = lochMarket.getSuggestion(Number(id));
+      if (!suggestion) return interaction.reply({ content: 'Sugestão não encontrada.', flags: MessageFlags.Ephemeral });
+      if (suggestion.status === 'answered') {
+        return interaction.reply({ content: 'Essa sugestão já foi respondida.', flags: MessageFlags.Ephemeral });
+      }
+      return showModal(interaction, `loch:answer_modal:${id}`, 'Responder sugestão', [
+        textInput('answer', 'Resposta da staff', true, 'A resposta sera enviada por mensagem privada', TextInputStyle.Paragraph)
+      ]);
+    }
   }
 
   if (scope === 'campaign' && ['donate_event', 'keep_event'].includes(action)) {

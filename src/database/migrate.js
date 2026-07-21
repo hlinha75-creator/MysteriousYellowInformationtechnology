@@ -1247,6 +1247,37 @@ const migrations = [
           ON world_boss_assignments (event_id, discord_id);
       `);
     }
+  },
+  {
+    version: 41,
+    name: 'loch_market_announcement_feedback',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS loch_announcement_feedback (
+          user_id TEXT NOT NULL,
+          feedback_type TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (user_id, feedback_type),
+          CHECK (feedback_type IN ('liked', 'read'))
+        );
+
+        CREATE TABLE IF NOT EXISTS loch_market_suggestions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          author_id TEXT NOT NULL,
+          suggestion TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          staff_channel_id TEXT,
+          staff_message_id TEXT,
+          answered_by TEXT,
+          answer TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          answered_at TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_loch_market_suggestions_status
+          ON loch_market_suggestions (status, created_at);
+      `);
+    }
   }
 ];
 
