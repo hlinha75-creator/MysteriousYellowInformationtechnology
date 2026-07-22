@@ -2,8 +2,7 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('
 const ids = require('../../config/ids');
 const { getDatabase, transaction } = require('../../database/connection');
 const finance = require('../finance/finance.service');
-const { clearIconCache, renderKillCard } = require('./killCardRenderer');
-const { estimateVictimLoss } = require('./marketValue.service');
+const { estimateCombatValues } = require('./marketValue.service');
 
 const DEFAULT_API_BASE = 'https://gameinfo-ams.albiononline.com/api/gameinfo';
 const LEGACY_AMERICAS_API_BASE = 'https://gameinfo.albiononline.com/api/gameinfo';
@@ -15,23 +14,8 @@ const API_RETRIES = 3;
 const VENGEANCE_REWARD = 100000;
 const VENGEANCE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_DAILY_VENGEANCE_REWARDS = 3;
-const IMAGE_RSS_LIMIT_MB = Number(process.env.KILLFEED_IMAGE_RSS_LIMIT_MB || 380);
 let polling = false;
 let lastHealthLogAt = 0;
-let lastMemoryProtectionLogAt = 0;
-
-function imageMemoryProtection(options = {}) {
-  const rss = Number(options.rssBytes ?? process.memoryUsage().rss);
-  const limitMb = Number(options.imageRssLimitMb ?? IMAGE_RSS_LIMIT_MB);
-  return { protected: rss >= limitMb * 1048576, rssMb: rss / 1048576, limitMb };
-}
-
-function logMemoryProtection(status) {
-  const now = Date.now();
-  if (now - lastMemoryProtectionLogAt < 10 * 60 * 1000) return;
-  console.warn(`[KILLFEED] Imagem suspensa por RAM alta: RSS ${status.rssMb.toFixed(1)} MB, limite ${status.limitMb} MB. Publicando somente embeds.`);
-  lastMemoryProtectionLogAt = now;
-}
 
 function configuredApiBase(options = {}) {
   if (options.apiBase) return options.apiBase;
@@ -62,45 +46,24 @@ function playerLabel(player) {
   return `**${player?.Name || 'Desconhecido'}**${guild}`;
 }
 
-function itemLabel(item) {
-  if (!item?.Type) return null;
-  const quality = Number(item.Quality || 0) > 1 ? ` Q${item.Quality}` : '';
-  const count = Number(item.Count || 1) > 1 ? ` ×${item.Count}` : '';
-  return `\`${item.Type}\`${quality}${count}`;
-}
-
-function equipmentLines(player) {
-  const slots = [
-    ['Arma', 'MainHand'], ['Mão secundária', 'OffHand'], ['Cabeça', 'Head'],
-    ['Peito', 'Armor'], ['Pés', 'Shoes'], ['Capa', 'Cape'],
-    ['Bolsa', 'Bag'], ['Montaria', 'Mount'], ['Comida', 'Food'], ['Poção', 'Potion']
-  ];
-  const lines = slots
-    .map(([label, key]) => player?.Equipment?.[key] ? `**${label}:** ${itemLabel(player.Equipment[key])}` : null)
-    .filter(Boolean);
-  return lines.length ? lines.join('\n') : 'Equipamento não informado pela API.';
-}
-
-function inventoryLines(event) {
-  const items = (event?.Victim?.Inventory || []).filter(Boolean);
-  if (!items.length) return ['Inventário vazio ou não informado pela API.'];
-  return items.map((item, index) => `${index + 1}. ${itemLabel(item)}`);
-}
-
 function participantLines(event) {
-  const victimId = event?.Victim?.Id;
-  return (event?.Participants || [])
-    .filter((participant) => participant?.Id && participant.Id !== victimId)
-    .sort((a, b) => Number(b.DamageDone || 0) - Number(a.DamageDone || 0))
-    .map((participant, index) => {
-      const guild = participant.GuildName ? ` [${participant.GuildName}]` : '';
-      const damage = formatNumber(participant.DamageDone);
-      const support = formatNumber(participant.SupportHealingDone);
-      return `${index + 1}. **${participant.Name || 'Desconhecido'}**${guild} — ${damage} dano${Number(participant.SupportHealingDone || 0) ? ` • ${support} cura` : ''}`;
+  const seen = new Set();
+  return [event?.Killer, ...(event?.Participants || [])]
+    .filter((player) => {
+      if (!player?.Name || (event?.Victim?.Id && player.Id === event.Victim.Id)) return false;
+      const key = player.Id || normalize(player.Name);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .map((player, index) => {
+      const guild = player.GuildName || 'Sem guild';
+      const alliance = player.AllianceName || 'Sem aliança';
+      return `${index + 1}. **${player.Name}** — Guild: **${guild}** | Ally: **${alliance}**`;
     });
 }
 
-function splitLines(lines, maxLength = 3800) {
+function chunkLines(lines, maxLength = 3800) {
   const chunks = [];
   let current = '';
   for (const line of lines) {
@@ -112,6 +75,23 @@ function splitLines(lines, maxLength = 3800) {
   }
   if (current) chunks.push(current);
   return chunks;
+}
+
+function weaponImageUrl(player) {
+  const weapon = player?.Equipment?.MainHand;
+  if (!weapon?.Type) return null;
+  return `https://render.albiononline.com/v1/item/${encodeURIComponent(weapon.Type)}.png?quality=${Number(weapon.Quality || 1)}`;
+}
+
+function weaponEmbed(player, label, color) {
+  const weapon = player?.Equipment?.MainHand;
+  const embed = new EmbedBuilder()
+    .setColor(color)
+    .setTitle(`Arma ${label}`)
+    .setDescription(weapon?.Type ? `${playerLabel(player)}\n\`${weapon.Type}\`` : `${playerLabel(player)}\nArma não informada.`);
+  const imageUrl = weaponImageUrl(player);
+  if (imageUrl) embed.setThumbnail(imageUrl);
+  return embed;
 }
 
 function killboardRegion(apiBase = '') {
@@ -215,9 +195,11 @@ const awardVengeance = transaction((event, match, originalIds) => {
   match.rows.forEach((row) => mark.run(event.EventId, match.avenger.discord_id, row.original_event_id));
 });
 
-function eventEmbed(event, type) {
+function eventEmbed(event, type, apiBase = DEFAULT_API_BASE, valuations = null) {
   const death = type === 'death';
   const occurredAt = event.TimeStamp ? new Date(event.TimeStamp) : null;
+  const region = killboardRegion(apiBase);
+  const regionLabel = region === 'eu' ? 'Europa' : region === 'asia' ? 'Ásia' : 'Américas';
   const embed = new EmbedBuilder()
     .setColor(death ? 0xd83c3e : 0x2ecc71)
     .setTitle(death ? '☠️ Morte da NoTag' : '⚔️ Kill da NoTag')
@@ -227,66 +209,48 @@ function eventEmbed(event, type) {
       { name: 'IP', value: `${Math.round(Number(event.Killer?.AverageItemPower || 0))} vs ${Math.round(Number(event.Victim?.AverageItemPower || 0))}`, inline: true },
       { name: 'Participantes', value: String(event.numberOfParticipants || event.Participants?.length || 1), inline: true }
     )
-    .setFooter({ text: `Evento #${event.EventId} • Albion Americas` });
+    .setFooter({ text: `Evento #${event.EventId} • Albion ${regionLabel}` });
+  if (valuations?.killer?.total > 0) {
+    embed.addFields({
+      name: 'Valor estimado de quem matou',
+      value: `~ ${formatNumber(valuations.killer.total)} prata (${valuations.killer.priced}/${valuations.killer.items} itens com preço)`,
+      inline: false
+    });
+  }
+  if (valuations?.victim?.total > 0) {
+    embed.addFields({
+      name: 'Perda estimada de quem morreu',
+      value: `~ ${formatNumber(valuations.victim.total)} prata (${valuations.victim.priced}/${valuations.victim.items} itens com preço)`,
+      inline: false
+    });
+  }
   if (occurredAt && !Number.isNaN(occurredAt.getTime())) embed.setTimestamp(occurredAt);
   return embed;
 }
 
-function eventPayload(event, type, apiBase = DEFAULT_API_BASE) {
-  const embeds = [eventEmbed(event, type)];
-  embeds.push(new EmbedBuilder()
-    .setColor(0x5865f2)
-    .setTitle(`⚔️ Equipamento — ${event.Killer?.Name || 'Killer'}`)
-    .setDescription(equipmentLines(event.Killer)));
-  embeds.push(new EmbedBuilder()
-    .setColor(0x992d22)
-    .setTitle(`🛡️ Equipamento — ${event.Victim?.Name || 'Vítima'}`)
-    .setDescription(equipmentLines(event.Victim)));
-
-  splitLines(inventoryLines(event)).forEach((description, index) => {
-    embeds.push(new EmbedBuilder()
-      .setColor(0xfee75c)
-      .setTitle(`🎒 Inventário da vítima${index ? ` (${index + 1})` : ''}`)
-      .setDescription(description));
-  });
-  const participants = participantLines(event);
-  splitLines(participants.length ? participants : ['Nenhuma assistência informada pela API.']).forEach((description, index) => {
-    embeds.push(new EmbedBuilder()
-      .setColor(0x3498db)
-      .setTitle(`👥 Participantes${index ? ` (${index + 1})` : ''}`)
-      .setDescription(description));
-  });
-
-  const url = `https://killboard-1.com/${killboardRegion(apiBase)}/event/${event.EventId}`;
-  const components = [new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Ver no KillBoard #1').setURL(url)
-  )];
-  return { embeds: embeds.slice(0, 10), components };
-}
-
-async function imageEventPayload(event, type, apiBase = DEFAULT_API_BASE, options = {}) {
-  const base = eventPayload(event, type, apiBase);
-  let valuation = null;
+async function eventPayload(event, type, apiBase = DEFAULT_API_BASE, options = {}) {
+  let valuations = null;
   try {
-    valuation = await estimateVictimLoss(event, options);
+    valuations = await estimateCombatValues(event, options);
   } catch (error) {
     console.error(`Falha ao estimar valor perdido no evento Albion #${event.EventId}:`, error.message);
   }
-  const image = await renderKillCard(event, type, { ...options, estimatedLoss: valuation?.total || 0 });
-  const summary = base.embeds[0].setImage('attachment://kill-card.png');
-  if (valuation?.total > 0) {
-    summary.addFields({
-      name: 'Prata perdida (estimativa)',
-      value: `${formatNumber(valuation.total)} (${valuation.priced}/${valuation.items} itens com preço)`,
-      inline: true
-    });
-  }
-  const participantEmbeds = base.embeds.filter((embed) => embed.data.title?.startsWith('👥'));
-  return {
-    embeds: [summary, ...participantEmbeds].slice(0, 10),
-    components: base.components,
-    files: [{ attachment: image, name: 'kill-card.png' }]
-  };
+  const participants = participantLines(event);
+  const participantEmbeds = chunkLines(participants.length ? participants : ['Nenhum participante informado pela API.'])
+    .slice(0, 7)
+    .map((description, index) => new EmbedBuilder()
+      .setColor(0x3498db)
+      .setTitle(index ? `Participantes (${index + 1})` : 'Participantes')
+      .setDescription(description));
+  const weaponEmbeds = [
+    weaponEmbed(event.Killer, 'de quem matou', 0x2ecc71),
+    weaponEmbed(event.Victim, 'de quem morreu', 0xd83c3e)
+  ];
+  const url = `https://killboard-1.com/${killboardRegion(apiBase)}/event/${event.EventId}`;
+  const components = [new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Ver detalhes no KillBoard #1').setURL(url)
+  )];
+  return { embeds: [eventEmbed(event, type, apiBase, valuations), ...participantEmbeds, ...weaponEmbeds], components };
 }
 
 function wait(ms) {
@@ -365,20 +329,7 @@ async function pollKillFeed(client, options = {}) {
       const channelId = item.type === 'death' ? ids.channels.deathFeed : ids.channels.killFeed;
       const channel = await client.channels.fetch(channelId);
       if (!channel?.isTextBased()) throw new Error(`Canal do killfeed indisponivel: ${channelId}`);
-      let payload;
-      const protection = imageMemoryProtection(options);
-      if (protection.protected) {
-        clearIconCache();
-        logMemoryProtection(protection);
-        payload = eventPayload(item.event, item.type, apiBase);
-      } else {
-        try {
-          payload = await imageEventPayload(item.event, item.type, apiBase, options);
-        } catch (error) {
-          console.error(`Falha ao gerar imagem do evento Albion #${item.event.EventId}:`, error);
-          payload = eventPayload(item.event, item.type, apiBase);
-        }
-      }
+      const payload = await eventPayload(item.event, item.type, apiBase, options);
       const message = await channel.send(payload);
       save.run(item.event.EventId, item.type, item.event.TimeStamp || null, message.id);
       if (item.type === 'death') recordVengeanceDeath(db, item.event);
@@ -409,10 +360,10 @@ module.exports = {
   configuredApiBase,
   eventEmbed,
   eventPayload,
-  imageEventPayload,
-  imageMemoryProtection,
   fetchRecentEvents,
   findVengeanceMatches,
+  participantLines,
   pollKillFeed,
-  recordVengeanceDeath
+  recordVengeanceDeath,
+  weaponImageUrl
 };

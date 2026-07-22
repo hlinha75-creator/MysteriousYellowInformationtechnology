@@ -7,7 +7,7 @@ const {
   eventPayload,
   fetchRecentEvents,
   findVengeanceMatches,
-  imageMemoryProtection,
+  participantLines,
   recordVengeanceDeath
 } = require('../src/modules/albion/killFeed.service');
 
@@ -29,26 +29,35 @@ test('killfeed separa kills, deaths e eventos externos da NoTag', () => {
   assert.equal(classifyEvent({ Killer: { GuildName: 'Outra' }, Victim: { GuildName: 'Terceira' } }), null);
 });
 
-test('killfeed suspende imagens ao atingir o limite preventivo de RSS', () => {
-  const below = imageMemoryProtection({ rssBytes: 379 * 1048576, imageRssLimitMb: 380 });
-  const atLimit = imageMemoryProtection({ rssBytes: 380 * 1048576, imageRssLimitMb: 380 });
-  assert.equal(below.protected, false);
-  assert.equal(atLimit.protected, true);
-  assert.equal(atLimit.limitMb, 380);
-});
-
-test('monta detalhes de equipamento, inventário, participantes e link europeu', () => {
+test('monta resumo, participantes, preço, armas remotas e link europeu', async () => {
   const event = {
     EventId: 399468006,
-    Killer: { Id: 'k', Name: 'Killer', GuildName: 'Outra', Equipment: { MainHand: { Type: 'T6_MAIN_SWORD', Count: 1 } } },
-    Victim: { Id: 'v', Name: 'Victim', GuildName: 'NoTag', Equipment: { Bag: { Type: 'T5_BAG', Count: 1 } }, Inventory: [{ Type: 'T7_ORE', Count: 12 }] },
-    Participants: [{ Id: 'k', Name: 'Killer', GuildName: 'Outra', DamageDone: 1234 }]
+    Killer: { Id: 'k', Name: 'Killer', GuildName: 'Outra', AllianceName: 'ALLY-A', Equipment: { MainHand: { Type: 'T6_MAIN_SWORD', Quality: 2, Count: 1 } } },
+    Victim: { Id: 'v', Name: 'Victim', GuildName: 'NoTag', AllianceName: 'ALLY-B', Equipment: { MainHand: { Type: 'T5_MAIN_AXE', Quality: 1, Count: 1 } }, Inventory: [{ Type: 'T7_ORE', Quality: 1, Count: 12 }] },
+    Participants: [
+      { Id: 'k', Name: 'Killer', GuildName: 'Outra', AllianceName: 'ALLY-A', DamageDone: 1234 },
+      { Id: 'a', Name: 'Assist', GuildName: 'Ajuda', AllianceName: 'ALLY-C', DamageDone: 500 }
+    ]
   };
-  const payload = eventPayload(event, 'death', 'https://gameinfo-ams.albiononline.com/api/gameinfo');
-  assert.equal(payload.embeds.length, 5);
-  assert.match(payload.embeds[3].data.description, /T7_ORE/);
-  assert.match(payload.embeds[4].data.description, /1\.234 dano/);
+  const payload = await eventPayload(event, 'death', 'https://gameinfo-ams.albiononline.com/api/gameinfo', {
+    fetchImpl: async () => ({ ok: true, json: async () => [
+      { item_id: 'T6_MAIN_SWORD', quality: 2, sell_price_min: 50000, buy_price_max: 45000 },
+      { item_id: 'T5_MAIN_AXE', quality: 1, sell_price_min: 10000, buy_price_max: 9000 },
+      { item_id: 'T7_ORE', quality: 1, sell_price_min: 1000, buy_price_max: 800 }
+    ] })
+  });
+  assert.equal(payload.embeds.length, 4);
+  assert.match(payload.embeds[0].data.description, /Killer.*matou.*Victim/);
+  assert.match(payload.embeds[0].data.fields[3].value, /50\.000 prata/);
+  assert.match(payload.embeds[0].data.fields[4].value, /22\.000 prata/);
+  assert.equal(payload.embeds[0].data.footer.text, 'Evento #399468006 • Albion Europa');
+  assert.match(payload.embeds[1].data.description, /Killer.*Outra.*ALLY-A/);
+  assert.match(payload.embeds[1].data.description, /Assist.*Ajuda.*ALLY-C/);
+  assert.match(payload.embeds[2].data.thumbnail.url, /T6_MAIN_SWORD\.png\?quality=2/);
+  assert.match(payload.embeds[3].data.thumbnail.url, /T5_MAIN_AXE\.png\?quality=1/);
+  assert.equal(payload.files, undefined);
   assert.equal(payload.components[0].components[0].data.url, 'https://killboard-1.com/eu/event/399468006');
+  assert.equal(participantLines(event).length, 2);
 });
 
 test('consulta eventos com paginação e para ao encontrar o último evento salvo', async () => {

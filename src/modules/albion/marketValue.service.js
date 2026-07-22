@@ -3,9 +3,13 @@ const CACHE_MS = 10 * 60 * 1000;
 const priceCache = new Map();
 
 function victimItems(event) {
+  return playerItems(event?.Victim);
+}
+
+function playerItems(player) {
   return [
-    ...Object.values(event?.Victim?.Equipment || {}),
-    ...(event?.Victim?.Inventory || [])
+    ...Object.values(player?.Equipment || {}),
+    ...(player?.Inventory || [])
   ].filter((item) => item?.Type);
 }
 
@@ -44,6 +48,21 @@ async function estimateVictimLoss(event, options = {}) {
   const items = victimItems(event);
   if (!items.length) return { total: 0, priced: 0, items: 0 };
   await fetchPrices(items, options);
+  return estimateItems(items);
+}
+
+async function estimateCombatValues(event, options = {}) {
+  const killerItems = playerItems(event?.Killer);
+  const victimEquipment = playerItems(event?.Victim);
+  const allItems = [...killerItems, ...victimEquipment];
+  if (allItems.length) await fetchPrices(allItems, options);
+  return {
+    killer: estimateItems(killerItems),
+    victim: estimateItems(victimEquipment)
+  };
+}
+
+function estimateItems(items) {
   let total = 0;
   let priced = 0;
   for (const item of items) {
@@ -54,4 +73,4 @@ async function estimateVictimLoss(event, options = {}) {
   return { total: Math.round(total), priced, items: items.length };
 }
 
-module.exports = { estimateVictimLoss, victimItems };
+module.exports = { estimateCombatValues, estimateVictimLoss, playerItems, victimItems };
