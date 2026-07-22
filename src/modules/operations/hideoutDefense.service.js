@@ -7,6 +7,8 @@ const {
 } = require('discord.js');
 const ids = require('../../config/ids');
 const { getDatabase, transaction } = require('../../database/connection');
+const finance = require('../finance/finance.service');
+const accountLinks = require('../accounts/accountLinks.service');
 
 const ANNOUNCEMENT_KEY = 'hideout-defense:sunstrand-shoal:2026-07-22';
 const ACK_BUTTON_ID = 'ho_defense:ack:2026-07-22';
@@ -19,6 +21,8 @@ const ADMIN_PROMPT_AT = new Date('2026-07-22T21:35:00.000Z');
 const PREPARATION_AT = new Date('2026-07-22T21:45:00.000Z');
 const DEFENSE_START_AT = new Date('2026-07-22T22:00:00.000Z');
 const DEFENSE_END_AT = new Date('2026-07-22T22:15:00.000Z');
+const REWARDS_AT = new Date('2026-07-22T23:15:00.000Z');
+const REWARD_AMOUNT = 100000;
 
 function ensureState() {
   const db = getDatabase();
@@ -38,7 +42,9 @@ function updateState(fields) {
     'reminder_sent_at',
     'admin_prompt_sent_at',
     'started_at',
-    'cleaned_at'
+    'cleaned_at',
+    'rewards_processed_at',
+    'congratulations_sent_at'
   ]);
   const entries = Object.entries(fields).filter(([key]) => allowed.has(key));
   if (!entries.length) return ensureState();
@@ -63,6 +69,47 @@ function registeredUserIds() {
     WHERE announcement_key = ?
     ORDER BY user_id
   `).all(ANNOUNCEMENT_KEY, ANNOUNCEMENT_KEY).map((row) => row.user_id);
+}
+
+const createDefenseRewards = transaction(() => {
+  const db = getDatabase();
+  const canonicalUserIds = [...new Set(registeredUserIds().map((userId) => accountLinks.resolvePrimaryUserId(userId)))];
+  const existing = new Set(db.prepare(`
+    SELECT user_id FROM hideout_defense_rewards WHERE announcement_key = ?
+  `).all(ANNOUNCEMENT_KEY).map((row) => row.user_id));
+  const pending = canonicalUserIds.filter((userId) => userId && !existing.has(userId));
+  if (!pending.length) return [];
+
+  const transactions = finance.applyManyTransactions(pending.map((userId) => ({
+    type: 'hideout_defense_reward',
+    userId,
+    amount: REWARD_AMOUNT,
+    reason: 'Parabéns pela cooperação na defesa da HO em Sunstrand Shoal',
+    referenceType: 'hideout_defense',
+    referenceId: ANNOUNCEMENT_KEY,
+    createdBy: 'bot:hideout-defense'
+  })));
+  const insert = db.prepare(`
+    INSERT INTO hideout_defense_rewards
+      (announcement_key, user_id, amount, before_balance, after_balance)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+  for (const item of transactions) {
+    insert.run(ANNOUNCEMENT_KEY, item.userId, item.amount, item.beforeBalance, item.afterBalance);
+  }
+  return transactions;
+});
+
+function listVoiceAttendees() {
+  const state = ensureState();
+  if (!state.voice_channel_id) return [];
+  return getDatabase().prepare(`
+    SELECT DISTINCT discord_id
+    FROM voice_sessions
+    WHERE channel_id = ?
+      AND joined_at <= ?
+    ORDER BY discord_id
+  `).all(state.voice_channel_id, DEFENSE_END_AT.toISOString()).map((row) => row.discord_id);
 }
 
 function listAcknowledgements() {
@@ -491,13 +538,92 @@ async function cleanupDefense(client, now = new Date()) {
   return { cleaned: true };
 }
 
+async function notifyRewardedMembers(client) {
+  const db = getDatabase();
+  const pending = db.prepare(`
+    SELECT user_id, amount, before_balance, after_balance
+    FROM hideout_defense_rewards
+    WHERE announcement_key = ? AND notification_sent_at IS NULL
+    ORDER BY user_id
+  `).all(ANNOUNCEMENT_KEY);
+  for (const row of pending) {
+    await finance.notifyBalanceTransactions({
+      client,
+      transactions: [{
+        type: 'hideout_defense_reward',
+        userId: row.user_id,
+        amount: row.amount,
+        reason: 'Parabéns pela cooperação na defesa da HO em Sunstrand Shoal',
+        beforeBalance: row.before_balance,
+        afterBalance: row.after_balance
+      }]
+    });
+    db.prepare(`
+      UPDATE hideout_defense_rewards
+      SET notification_sent_at = CURRENT_TIMESTAMP
+      WHERE announcement_key = ? AND user_id = ?
+    `).run(ANNOUNCEMENT_KEY, row.user_id);
+  }
+  return pending.length;
+}
+
+async function postAttendanceCongratulations(client) {
+  const attendees = listVoiceAttendees();
+  const channel = await client.channels.fetch(ids.channels.notagChat).catch(() => null);
+  if (!channel?.isTextBased()) throw new Error('Chat NoTag nao encontrado para publicar os parabens da defesa.');
+  await sendRegisteredNotice(channel, attendees, [
+    '## 🏆 PARABÉNS PELA DEFESA DA HO!',
+    attendees.length
+      ? `Os **${attendees.length} membros** abaixo compareceram à sala de defesa e fizeram parte deste momento importante para a guilda:`
+      : 'A defesa foi encerrada, mas não foi possível identificar presença na sala de voz.',
+    '',
+    'Obrigado pela cooperação, organização e por ajudarem a escrever mais um capítulo da história da NoTag! ⚔️🛡️'
+  ].join('\n'));
+  return attendees;
+}
+
+async function processPostEventRewards(client, now = new Date()) {
+  if (now < REWARDS_AT) return { processed: false, reason: 'too_early' };
+  let state = ensureState();
+  let transactions = [];
+  let notified = 0;
+  if (!state.rewards_processed_at) {
+    transactions = createDefenseRewards();
+    notified = await notifyRewardedMembers(client);
+    updateState({ rewards_processed_at: now.toISOString() });
+  }
+
+  state = ensureState();
+  let attendees = [];
+  if (!state.congratulations_sent_at) {
+    attendees = await postAttendanceCongratulations(client);
+    updateState({ congratulations_sent_at: now.toISOString() });
+  }
+  const totalRewards = getDatabase().prepare(`
+    SELECT COUNT(*) AS total FROM hideout_defense_rewards WHERE announcement_key = ?
+  `).get(ANNOUNCEMENT_KEY).total;
+  return {
+    processed: true,
+    newRewards: transactions.length,
+    totalRewards: Number(totalRewards || 0),
+    notified,
+    attendees
+  };
+}
+
 let scheduleRunning = false;
 async function processSchedule(client, now = new Date()) {
   if (scheduleRunning) return { skipped: true };
   scheduleRunning = true;
   try {
     const state = ensureState();
-    if (now >= DEFENSE_END_AT) return cleanupDefense(client, now);
+    if (now >= DEFENSE_END_AT) {
+      const cleanup = await cleanupDefense(client, now);
+      const rewards = now >= REWARDS_AT
+        ? await processPostEventRewards(client, now)
+        : { processed: false, reason: 'too_early' };
+      return { cleanup, rewards };
+    }
     const guild = await fetchGuild(client);
     if (!guild) throw new Error('Servidor da guilda nao encontrado para preparar a defesa.');
     await syncAllDefenseRoles(guild, { now });
@@ -557,6 +683,8 @@ module.exports = {
   BUTTON_ID: ACK_BUTTON_ID,
   DEFENSE_END_AT,
   PARTICIPATE_BUTTON_ID,
+  REWARD_AMOUNT,
+  REWARDS_AT,
   START_BUTTON_ID,
   announcementPayload,
   cleanupDefense,
@@ -564,6 +692,8 @@ module.exports = {
   ensureState,
   listAcknowledgements,
   listParticipations,
+  listVoiceAttendees,
+  processPostEventRewards,
   postAnnouncementIfNeeded,
   processSchedule,
   registeredUserIds,

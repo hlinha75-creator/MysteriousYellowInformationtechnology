@@ -100,10 +100,38 @@ test('defesa da HO cria tag, lembra inscritos, avisa ADM e move conectados', asy
   assert.equal(aware.voice.channelId, started.voice.id);
   assert.equal(started.voice.name, '🛡️・defesa');
 
+  getDatabase().prepare(`
+    INSERT INTO voice_sessions
+      (discord_id, discord_name, channel_id, channel_name, joined_at, left_at, seconds)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    'aware', 'User aware', started.voice.id, started.voice.name,
+    '2026-07-22T21:35:00.000Z', '2026-07-22T22:10:00.000Z', 2100
+  );
+
   const cleaned = await hideoutDefense.cleanupDefense(harness.client, new Date('2026-07-22T22:15:00.000Z'));
   assert.equal(cleaned.cleaned, true);
   assert.equal(started.voice.deleted, true);
   assert.equal(harness.guild.roles.cache.get(state.role_id).deleted, true);
+
+  const rewardRun = await hideoutDefense.processSchedule(harness.client, new Date('2026-07-22T23:15:00.000Z'));
+  assert.equal(rewardRun.rewards.newRewards, 2);
+  assert.equal(financeRepo.getBalance('aware'), 100000);
+  assert.equal(financeRepo.getBalance('fighter'), 100000);
+  assert.equal(harness.sentDms.length, 2);
+  assert.ok(harness.sentDms.every(({ payload }) => String(payload).includes('Parabéns pela cooperação')));
+  const publicCongratulations = harness.sentMessages.find(({ channelId, payload }) => (
+    channelId === '1481363760110243910' && String(payload.content).includes('PARABÉNS PELA DEFESA DA HO')
+  ));
+  assert.ok(publicCongratulations);
+  assert.match(publicCongratulations.payload.content, /<@aware>/);
+  assert.doesNotMatch(publicCongratulations.payload.content, /<@fighter>/);
+
+  const repeatedRun = await hideoutDefense.processSchedule(harness.client, new Date('2026-07-22T23:16:00.000Z'));
+  assert.equal(repeatedRun.rewards.newRewards, 0);
+  assert.equal(financeRepo.getBalance('aware'), 100000);
+  assert.equal(financeRepo.getBalance('fighter'), 100000);
+  assert.equal(getDatabase().prepare("SELECT COUNT(*) AS total FROM balance_transactions WHERE type = 'hideout_defense_reward'").get().total, 2);
 });
 
 test.after(() => {
@@ -581,6 +609,7 @@ function createDiscordHarness() {
   const channels = new Map();
   const members = new Map();
   const sentMessages = [];
+  const sentDms = [];
   let messageSeq = 0;
   let voiceSeq = 0;
 
@@ -665,7 +694,10 @@ function createDiscordHarness() {
     users: {
       fetch: async (id) => ({
         id,
-        send: async (payload) => ({ id: `dm-${id}-${++messageSeq}`, payload })
+        send: async (payload) => {
+          sentDms.push({ userId: id, payload });
+          return { id: `dm-${id}-${++messageSeq}`, payload };
+        }
       })
     },
     guilds: {
@@ -722,6 +754,7 @@ function createDiscordHarness() {
     guild,
     interaction,
     messages,
+    sentDms,
     sentMessages
   };
 }

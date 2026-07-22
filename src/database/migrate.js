@@ -1404,6 +1404,31 @@ const migrations = [
         );
       `);
     }
+  },
+  {
+    version: 47,
+    name: 'hideout_defense_rewards',
+    up(db) {
+      const columns = db.prepare('PRAGMA table_info(hideout_defense_state)').all().map((column) => column.name);
+      if (!columns.includes('rewards_processed_at')) {
+        db.exec('ALTER TABLE hideout_defense_state ADD COLUMN rewards_processed_at TEXT');
+      }
+      if (!columns.includes('congratulations_sent_at')) {
+        db.exec('ALTER TABLE hideout_defense_state ADD COLUMN congratulations_sent_at TEXT');
+      }
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS hideout_defense_rewards (
+          announcement_key TEXT NOT NULL,
+          user_id TEXT NOT NULL,
+          amount INTEGER NOT NULL,
+          before_balance INTEGER NOT NULL,
+          after_balance INTEGER NOT NULL,
+          rewarded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          notification_sent_at TEXT,
+          PRIMARY KEY (announcement_key, user_id)
+        );
+      `);
+    }
   }
 ];
 
