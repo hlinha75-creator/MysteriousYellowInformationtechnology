@@ -177,11 +177,13 @@ async function handleButton(interaction) {
     return interaction.followUp({
       content: isParticipation
         ? (result.added
-            ? 'Participação confirmada. Você foi adicionado à lista de quem vai participar.'
-            : 'Sua confirmação de participação foi removida.')
-        : (result.added
-            ? 'Leitura confirmada. Você foi adicionado à lista de membros cientes.'
-            : 'Sua confirmação de leitura foi removida.'),
+            ? 'Presença confirmada. Você foi adicionado à lista de quem vai lutar.'
+            : 'Sua confirmação para lutar foi removida.')
+        : (result.alreadyParticipating
+            ? 'Você já está na lista “Vão lutar”, então já está ciente do aviso.'
+            : result.added
+              ? 'Leitura confirmada. Você foi adicionado à lista de membros cientes.'
+              : 'Sua confirmação de leitura foi removida.'),
       flags: MessageFlags.Ephemeral
     });
   }

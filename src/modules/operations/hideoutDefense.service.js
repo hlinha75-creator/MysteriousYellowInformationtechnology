@@ -16,6 +16,12 @@ function listAcknowledgements() {
     SELECT user_id, acknowledged_at
     FROM announcement_acknowledgements
     WHERE announcement_key = ?
+      AND NOT EXISTS (
+        SELECT 1
+        FROM announcement_participations
+        WHERE announcement_participations.announcement_key = announcement_acknowledgements.announcement_key
+          AND announcement_participations.user_id = announcement_acknowledgements.user_id
+      )
     ORDER BY acknowledged_at, user_id
   `).all(ANNOUNCEMENT_KEY);
 }
@@ -31,6 +37,19 @@ function listParticipations() {
 
 const toggleAcknowledgement = transaction((userId) => {
   const db = getDatabase();
+  const isParticipating = db.prepare(`
+    SELECT 1
+    FROM announcement_participations
+    WHERE announcement_key = ? AND user_id = ?
+  `).get(ANNOUNCEMENT_KEY, userId);
+  if (isParticipating) {
+    return {
+      added: false,
+      alreadyParticipating: true,
+      acknowledgements: listAcknowledgements()
+    };
+  }
+
   const existing = db.prepare(`
     SELECT 1
     FROM announcement_acknowledgements
@@ -71,6 +90,10 @@ const toggleParticipation = transaction((userId) => {
   db.prepare(`
     INSERT INTO announcement_participations (announcement_key, user_id)
     VALUES (?, ?)
+  `).run(ANNOUNCEMENT_KEY, userId);
+  db.prepare(`
+    DELETE FROM announcement_acknowledgements
+    WHERE announcement_key = ? AND user_id = ?
   `).run(ANNOUNCEMENT_KEY, userId);
   return { added: true, participations: listParticipations() };
 });
@@ -139,11 +162,11 @@ function announcementPayload(options = {}) {
         empty: '*Nenhum membro confirmou a leitura ainda.*'
       }),
       ...memberListFields(participations, {
-        title: 'Vão participar',
-        empty: '*Nenhum membro confirmou participação ainda.*'
+        title: 'Vão lutar',
+        empty: '*Nenhum membro confirmou que vai lutar ainda.*'
       })
     )
-    .setFooter({ text: 'Use “Eu li” para confirmar a leitura e “Eu vou participar” para confirmar presença. Clique novamente para remover.' });
+    .setFooter({ text: 'Use “Eu li” para confirmar a leitura e “Vou lutar” para confirmar presença na defesa. Quem vai lutar aparece somente nessa lista.' });
 
   return {
     content: `<@&${ids.roles.member}>`,
@@ -157,7 +180,7 @@ function announcementPayload(options = {}) {
           .setStyle(ButtonStyle.Primary),
         new ButtonBuilder()
           .setCustomId(PARTICIPATE_BUTTON_ID)
-          .setLabel('Eu vou participar')
+          .setLabel('Vou lutar')
           .setEmoji('⚔️')
           .setStyle(ButtonStyle.Success)
       )

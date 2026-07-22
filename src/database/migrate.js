@@ -1370,6 +1370,22 @@ const migrations = [
           ON announcement_participations (announcement_key, participating_at);
       `);
     }
+  },
+  {
+    version: 45,
+    name: 'hideout_fighters_imply_acknowledgement',
+    up(db) {
+      db.exec(`
+        DELETE FROM announcement_acknowledgements
+        WHERE announcement_key = 'hideout-defense:sunstrand-shoal:2026-07-22'
+          AND EXISTS (
+          SELECT 1
+          FROM announcement_participations
+          WHERE announcement_participations.announcement_key = announcement_acknowledgements.announcement_key
+            AND announcement_participations.user_id = announcement_acknowledgements.user_id
+        );
+      `);
+    }
   }
 ];
 
