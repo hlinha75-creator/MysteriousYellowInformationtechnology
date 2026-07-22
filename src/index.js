@@ -140,4 +140,25 @@ process.on('uncaughtException', (error) => {
   console.error('Uncaught exception:', error);
 });
 
+process.on('exit', (code) => {
+  console.log(`[PROCESSO] Encerrando com codigo ${code}.`);
+});
+
+let shuttingDown = false;
+function handleShutdownSignal(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.warn(`[PROCESSO] Sinal ${signal} recebido; encerrando conexao com o Discord.`);
+  const forceExit = setTimeout(() => process.exit(0), 1500);
+  Promise.resolve(client.destroy())
+    .catch((error) => console.error('[PROCESSO] Falha no encerramento do client Discord:', error))
+    .finally(() => {
+      clearTimeout(forceExit);
+      process.exit(0);
+    });
+}
+
+process.once('SIGTERM', () => handleShutdownSignal('SIGTERM'));
+process.once('SIGINT', () => handleShutdownSignal('SIGINT'));
+
 client.login(env.requireEnv('DISCORD_TOKEN'));

@@ -2,7 +2,7 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('
 const ids = require('../../config/ids');
 const { getDatabase, transaction } = require('../../database/connection');
 const finance = require('../finance/finance.service');
-const { renderKillCard } = require('./killCardRenderer');
+const { clearIconCache, renderKillCard } = require('./killCardRenderer');
 const { estimateVictimLoss } = require('./marketValue.service');
 
 const DEFAULT_API_BASE = 'https://gameinfo-ams.albiononline.com/api/gameinfo';
@@ -15,8 +15,23 @@ const API_RETRIES = 3;
 const VENGEANCE_REWARD = 100000;
 const VENGEANCE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_DAILY_VENGEANCE_REWARDS = 3;
+const IMAGE_RSS_LIMIT_MB = Number(process.env.KILLFEED_IMAGE_RSS_LIMIT_MB || 380);
 let polling = false;
 let lastHealthLogAt = 0;
+let lastMemoryProtectionLogAt = 0;
+
+function imageMemoryProtection(options = {}) {
+  const rss = Number(options.rssBytes ?? process.memoryUsage().rss);
+  const limitMb = Number(options.imageRssLimitMb ?? IMAGE_RSS_LIMIT_MB);
+  return { protected: rss >= limitMb * 1048576, rssMb: rss / 1048576, limitMb };
+}
+
+function logMemoryProtection(status) {
+  const now = Date.now();
+  if (now - lastMemoryProtectionLogAt < 10 * 60 * 1000) return;
+  console.warn(`[KILLFEED] Imagem suspensa por RAM alta: RSS ${status.rssMb.toFixed(1)} MB, limite ${status.limitMb} MB. Publicando somente embeds.`);
+  lastMemoryProtectionLogAt = now;
+}
 
 function configuredApiBase(options = {}) {
   if (options.apiBase) return options.apiBase;
@@ -351,11 +366,18 @@ async function pollKillFeed(client, options = {}) {
       const channel = await client.channels.fetch(channelId);
       if (!channel?.isTextBased()) throw new Error(`Canal do killfeed indisponivel: ${channelId}`);
       let payload;
-      try {
-        payload = await imageEventPayload(item.event, item.type, apiBase, options);
-      } catch (error) {
-        console.error(`Falha ao gerar imagem do evento Albion #${item.event.EventId}:`, error);
+      const protection = imageMemoryProtection(options);
+      if (protection.protected) {
+        clearIconCache();
+        logMemoryProtection(protection);
         payload = eventPayload(item.event, item.type, apiBase);
+      } else {
+        try {
+          payload = await imageEventPayload(item.event, item.type, apiBase, options);
+        } catch (error) {
+          console.error(`Falha ao gerar imagem do evento Albion #${item.event.EventId}:`, error);
+          payload = eventPayload(item.event, item.type, apiBase);
+        }
       }
       const message = await channel.send(payload);
       save.run(item.event.EventId, item.type, item.event.TimeStamp || null, message.id);
@@ -388,6 +410,7 @@ module.exports = {
   eventEmbed,
   eventPayload,
   imageEventPayload,
+  imageMemoryProtection,
   fetchRecentEvents,
   findVengeanceMatches,
   pollKillFeed,

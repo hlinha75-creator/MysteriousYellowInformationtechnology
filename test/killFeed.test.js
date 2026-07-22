@@ -7,6 +7,7 @@ const {
   eventPayload,
   fetchRecentEvents,
   findVengeanceMatches,
+  imageMemoryProtection,
   recordVengeanceDeath
 } = require('../src/modules/albion/killFeed.service');
 
@@ -26,6 +27,14 @@ test('killfeed separa kills, deaths e eventos externos da NoTag', () => {
   assert.equal(classifyEvent({ Killer: { GuildName: 'NoTag' }, Victim: { GuildName: 'Outra' } }), 'kill');
   assert.equal(classifyEvent({ Killer: { GuildName: 'Outra' }, Victim: { GuildName: 'NOTAG' } }), 'death');
   assert.equal(classifyEvent({ Killer: { GuildName: 'Outra' }, Victim: { GuildName: 'Terceira' } }), null);
+});
+
+test('killfeed suspende imagens ao atingir o limite preventivo de RSS', () => {
+  const below = imageMemoryProtection({ rssBytes: 379 * 1048576, imageRssLimitMb: 380 });
+  const atLimit = imageMemoryProtection({ rssBytes: 380 * 1048576, imageRssLimitMb: 380 });
+  assert.equal(below.protected, false);
+  assert.equal(atLimit.protected, true);
+  assert.equal(atLimit.limitMb, 380);
 });
 
 test('monta detalhes de equipamento, inventário, participantes e link europeu', () => {
