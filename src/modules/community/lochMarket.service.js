@@ -48,9 +48,13 @@ function announcementPayload() {
       new EmbedBuilder()
         .setTitle('HO Loch (Mapa T8)')
         .setDescription([
-          'Agora que só entra quem tem tag na HO de Loch, vamos vender no mercado interno itens pelo valor de mercado, sem aumentar muito o preço, para fortalecer nossa economia.',
+          'Agora que apenas jogadores com a tag da guilda podem entrar na HO de Loch, vamos fortalecer nossa economia interna!',
           '',
-          'Eu estou vendendo vários itens por **1 prata** só para aquecer a movimentação do nosso próprio mercado.'
+          'A ideia é vender nossos itens no mercado da HO por preços justos, seguindo o valor praticado no mercado geral e evitando aumentos exagerados.',
+          '',
+          'Para incentivar a participação e movimentar o nosso mercado, estou colocando vários itens à venda por apenas **1 prata**.',
+          '',
+          'Contamos com todos para comprar, vender e ajudar a desenvolver a economia da nossa HO!'
         ].join('\n'))
         .setColor(0x2f855a)
     ],
@@ -61,8 +65,22 @@ function announcementPayload() {
 
 async function postAnnouncementIfNeeded(client) {
   const db = getDatabase();
-  const existing = db.prepare('SELECT reminder_key FROM operation_reminders WHERE reminder_key = ?').get(announcementKey);
-  if (existing) return null;
+  const existing = db.prepare(`
+    SELECT reminder_key, message_id, channel_id
+    FROM operation_reminders
+    WHERE reminder_key = ?
+  `).get(announcementKey);
+
+  if (existing?.message_id && existing?.channel_id) {
+    const existingChannel = await client.channels.fetch(existing.channel_id).catch(() => null);
+    const existingMessage = existingChannel?.isTextBased()
+      ? await existingChannel.messages.fetch(existing.message_id).catch(() => null)
+      : null;
+    if (existingMessage) {
+      await existingMessage.edit(announcementPayload());
+      return existingMessage;
+    }
+  }
 
   const channel = await client.channels.fetch(ids.channels.campaignAnnouncements).catch(() => null);
   if (!channel?.isTextBased()) return null;
@@ -70,6 +88,9 @@ async function postAnnouncementIfNeeded(client) {
   db.prepare(`
     INSERT INTO operation_reminders (reminder_key, type, message_id, channel_id)
     VALUES (?, 'loch_market_announcement', ?, ?)
+    ON CONFLICT(reminder_key) DO UPDATE SET
+      message_id = excluded.message_id,
+      channel_id = excluded.channel_id
   `).run(announcementKey, message.id, channel.id);
   return message;
 }

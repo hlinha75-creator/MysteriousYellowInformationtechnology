@@ -1278,6 +1278,81 @@ const migrations = [
           ON loch_market_suggestions (status, created_at);
       `);
     }
+  },
+  {
+    version: 42,
+    name: 'announcement_acknowledgements',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS announcement_acknowledgements (
+          announcement_key TEXT NOT NULL,
+          user_id TEXT NOT NULL,
+          acknowledged_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (announcement_key, user_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_announcement_acknowledgements_key
+          ON announcement_acknowledgements (announcement_key, acknowledged_at);
+      `);
+    }
+  },
+  {
+    version: 43,
+    name: 'member_giveaways',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS giveaways (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          guild_id TEXT NOT NULL,
+          creator_id TEXT NOT NULL,
+          payer_id TEXT NOT NULL,
+          title TEXT NOT NULL,
+          description TEXT NOT NULL,
+          prize_name TEXT NOT NULL,
+          estimated_value INTEGER,
+          starts_at TEXT NOT NULL,
+          ends_at TEXT NOT NULL,
+          winner_count INTEGER NOT NULL,
+          notes TEXT,
+          status TEXT NOT NULL DEFAULT 'pending_payer',
+          requires_staff_approval INTEGER NOT NULL DEFAULT 0,
+          payer_approved_at TEXT,
+          staff_approved_at TEXT,
+          staff_approved_by TEXT,
+          channel_id TEXT,
+          message_id TEXT,
+          cancel_reason TEXT,
+          cancelled_by TEXT,
+          ended_at TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS giveaway_participants (
+          giveaway_id INTEGER NOT NULL,
+          user_id TEXT NOT NULL,
+          joined_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (giveaway_id, user_id),
+          FOREIGN KEY (giveaway_id) REFERENCES giveaways(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS giveaway_winners (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          giveaway_id INTEGER NOT NULL,
+          user_id TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'selected',
+          drawn_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          invalidated_by TEXT,
+          invalidated_at TEXT,
+          invalid_reason TEXT,
+          FOREIGN KEY (giveaway_id) REFERENCES giveaways(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_giveaways_status_time ON giveaways (status, starts_at, ends_at);
+        CREATE INDEX IF NOT EXISTS idx_giveaways_creator_active ON giveaways (creator_id, status, created_at);
+        CREATE INDEX IF NOT EXISTS idx_giveaway_winners_giveaway ON giveaway_winners (giveaway_id, status);
+      `);
+    }
   }
 ];
 

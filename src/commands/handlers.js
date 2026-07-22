@@ -27,6 +27,7 @@ const dailyPveRanking = require('../modules/albion/dailyPveRanking.service');
 const accountLinks = require('../modules/accounts/accountLinks.service');
 const guildReverification = require('../modules/members/guildReverification.service');
 const guildReverificationRepo = require('../modules/members/guildReverification.repository');
+const giveaways = require('../modules/giveaways/giveaways.service');
 
 const pausedCommands = new Set([
   'albion',
@@ -54,6 +55,23 @@ async function handleCommand(interaction) {
       content: 'Esse comando foi pausado para simplificar o bot. Use os comandos principais de evento, saldo, registro, exportacao/importacao, sincronizacao ou inativos.',
       flags: MessageFlags.Ephemeral
     });
+  }
+
+  if (interaction.commandName === 'give') {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const action = interaction.options.getSubcommand();
+    if (action === 'criar') {
+      const result = await giveaways.createFromCommand(interaction);
+      return interaction.editReply({ content: result.content, allowedMentions: { parse: [] } });
+    }
+    if (action === 'editar') {
+      const result = await giveaways.editFromCommand(interaction);
+      return interaction.editReply({ content: result.content, allowedMentions: { parse: [] } });
+    }
+    if (action === 'cancelar') return interaction.editReply(await giveaways.cancelFromCommand(interaction));
+    if (action === 'encerrar') return interaction.editReply(await giveaways.finishFromCommand(interaction));
+    if (action === 'refazer') return interaction.editReply(await giveaways.rerollFromCommand(interaction));
+    throw new Error('Acao de sorteio desconhecida.');
   }
 
   if (interaction.commandName === 'setup') {

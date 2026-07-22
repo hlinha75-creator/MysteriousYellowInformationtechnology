@@ -24,8 +24,30 @@ const voiceRepo = require('../src/modules/voice/voice.repository');
 const dailyPveRanking = require('../src/modules/albion/dailyPveRanking.service');
 const accountLinks = require('../src/modules/accounts/accountLinks.service');
 const guildReverification = require('../src/modules/members/guildReverification.service');
+const hideoutDefense = require('../src/modules/operations/hideoutDefense.service');
+const giveawaysRepo = require('../src/modules/giveaways/giveaways.repository');
+const giveaways = require('../src/modules/giveaways/giveaways.service');
+const { parseLocalDateTime } = require('../src/utils/timezone');
 
 migrate();
+
+test('aviso da defesa da HO registra e remove membros cientes', () => {
+  let result = hideoutDefense.toggleAcknowledgement('member-1');
+  assert.equal(result.added, true);
+  assert.deepEqual(result.acknowledgements.map((row) => row.user_id), ['member-1']);
+
+  result = hideoutDefense.toggleAcknowledgement('member-2');
+  assert.equal(result.added, true);
+  const payload = hideoutDefense.announcementPayload({ acknowledgements: result.acknowledgements });
+  assert.equal(payload.content, '<@&1481251365131911314>');
+  assert.equal(payload.components[0].components[0].data.label, 'Eu li (estou ciente)');
+  assert.match(payload.embeds[0].data.fields.at(-1).value, /<@member-1>/);
+  assert.match(payload.embeds[0].data.fields.at(-1).value, /<@member-2>/);
+
+  result = hideoutDefense.toggleAcknowledgement('member-1');
+  assert.equal(result.added, false);
+  assert.deepEqual(result.acknowledgements.map((row) => row.user_id), ['member-2']);
+});
 
 test.after(() => {
   getDatabase().close();
@@ -34,6 +56,40 @@ test.after(() => {
 
 test.beforeEach(() => {
   resetDatabase();
+});
+
+test('datas de sorteio usam o fuso configurado do servidor', () => {
+  const date = parseLocalDateTime('21/07/2026 12:30', 'America/Sao_Paulo');
+  assert.equal(date.toISOString(), '2026-07-21T15:30:00.000Z');
+  assert.throws(() => parseLocalDateTime('31/02/2026 12:30', 'America/Sao_Paulo'), /nao existe|invalida/i);
+});
+
+test('sorteio confirma responsaveis, registra participantes, encerra e refaz ganhador', () => {
+  const giveaway = giveawaysRepo.createGiveaway({
+    guildId: 'guild', creatorId: 'creator', payerId: 'payer', title: 'Premio grande',
+    description: 'Descricao', prizeName: '150m silver', estimatedValue: 150_000_000,
+    startsAt: '2026-07-21T10:00:00.000Z', endsAt: '2026-07-22T10:00:00.000Z',
+    winnerCount: 2, notes: null, requiresStaffApproval: 1
+  });
+  assert.equal(giveaway.status, 'pending_payer');
+  assert.equal(giveaways.STAFF_APPROVAL_THRESHOLD, 100_000_000);
+
+  giveawaysRepo.setPayerApproved(giveaway.id, 'payer');
+  giveawaysRepo.setStaffApproved(giveaway.id, 'staff');
+  giveawaysRepo.setReadyStatus(giveaway.id, 'open');
+  for (const userId of ['one', 'two', 'three', 'four']) {
+    giveawaysRepo.toggleParticipant(giveaway.id, userId, '2026-07-21T12:00:00.000Z');
+  }
+  assert.equal(giveawaysRepo.participantCount(giveaway.id), 4);
+
+  const result = giveawaysRepo.drawWinners(giveaway.id, true);
+  assert.equal(result.winners.length, 2);
+  assert.equal(new Set(result.winners.map((winner) => winner.user_id)).size, 2);
+  const invalid = result.winners[0].user_id;
+  const rerolled = giveawaysRepo.rerollWinner(giveaway.id, invalid, 'creator', 'offline');
+  assert.ok(rerolled.replacement);
+  assert.equal(rerolled.winners.length, 2);
+  assert.ok(!rerolled.winners.some((winner) => winner.user_id === invalid));
 });
 
 test('mescla contas Discord, soma saldo e elimina conflito de nick Albion', () => {

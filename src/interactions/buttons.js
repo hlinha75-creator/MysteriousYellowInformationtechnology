@@ -22,6 +22,8 @@ const registration = require('../modules/registration/registration.service');
 const { safeSend } = require('../utils/discord');
 const accountLinks = require('../modules/accounts/accountLinks.service');
 const lochMarket = require('../modules/community/lochMarket.service');
+const hideoutDefense = require('../modules/operations/hideoutDefense.service');
+const giveaways = require('../modules/giveaways/giveaways.service');
 
 const pausedButtonScopes = new Set([
   'auction',
@@ -152,6 +154,25 @@ async function handleButton(interaction) {
   const [scope, action, id, extra] = interaction.customId.split(':');
   if (pausedButtonScopes.has(scope) || pausedButtonIds.has(interaction.customId)) {
     return pausedFeatureReply(interaction);
+  }
+
+  if (scope === 'giveaway') return giveaways.handleButton(interaction);
+
+  if (interaction.customId === hideoutDefense.BUTTON_ID) {
+    if (!hasRole(interaction.member, 'member')) {
+      return interaction.reply({
+        content: 'Somente membros da guilda podem confirmar a leitura deste aviso.',
+        flags: MessageFlags.Ephemeral
+      });
+    }
+    const result = hideoutDefense.toggleAcknowledgement(interaction.user.id);
+    await interaction.update(hideoutDefense.announcementPayload({ acknowledgements: result.acknowledgements }));
+    return interaction.followUp({
+      content: result.added
+        ? 'Leitura confirmada. Você foi adicionado à lista de membros cientes.'
+        : 'Sua confirmação foi removida da lista.',
+      flags: MessageFlags.Ephemeral
+    });
   }
 
   if (scope === 'accounts' && ['merge', 'cancel_merge'].includes(action)) {
