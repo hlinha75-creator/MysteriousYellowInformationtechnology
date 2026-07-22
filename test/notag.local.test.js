@@ -66,6 +66,46 @@ test('aviso da defesa da HO controla leitura e participação separadamente', ()
   assert.deepEqual(participation.participations, []);
 });
 
+test('defesa da HO cria tag, lembra inscritos, avisa ADM e move conectados', async () => {
+  hideoutDefense.toggleAcknowledgement('aware');
+  hideoutDefense.toggleParticipation('fighter');
+  const harness = createDiscordHarness();
+  const aware = harness.addMember('aware', { inVoice: true });
+  const fighter = harness.addMember('fighter', { inVoice: false });
+
+  await hideoutDefense.processSchedule(harness.client, new Date('2026-07-22T21:30:00.000Z'));
+  let state = hideoutDefense.ensureState();
+  assert.ok(state.role_id);
+  assert.ok(state.reminder_sent_at);
+  assert.equal(aware.roles.cache.has(state.role_id), true);
+  assert.equal(fighter.roles.cache.has(state.role_id), true);
+  assert.ok(harness.sentMessages.some(({ payload }) => String(payload.content).includes('DEFESA DA HO EM 30 MINUTOS')));
+
+  await hideoutDefense.processSchedule(harness.client, new Date('2026-07-22T21:35:00.000Z'));
+  state = hideoutDefense.ensureState();
+  assert.ok(state.admin_prompt_sent_at);
+  assert.ok(harness.sentMessages.some(({ payload }) => (
+    String(payload.content).includes('hora de organizar a defesa')
+      && payload.components?.[0]?.components?.[0]?.data?.custom_id === hideoutDefense.START_BUTTON_ID
+  )));
+
+  const started = await hideoutDefense.startDefense({
+    client: harness.client,
+    guild: harness.guild,
+    actorId: 'admin',
+    now: new Date('2026-07-22T21:35:00.000Z')
+  });
+  assert.deepEqual(started.moved, ['aware']);
+  assert.deepEqual(started.notConnected, ['fighter']);
+  assert.equal(aware.voice.channelId, started.voice.id);
+  assert.equal(started.voice.name, '🛡️・defesa');
+
+  const cleaned = await hideoutDefense.cleanupDefense(harness.client, new Date('2026-07-22T22:15:00.000Z'));
+  assert.equal(cleaned.cleaned, true);
+  assert.equal(started.voice.deleted, true);
+  assert.equal(harness.guild.roles.cache.get(state.role_id).deleted, true);
+});
+
 test.after(() => {
   getDatabase().close();
   fs.rmSync(tempRoot, { recursive: true, force: true });
@@ -579,9 +619,15 @@ function createDiscordHarness() {
     roles: {
       everyone: { id: 'everyone' },
       cache: new Map(),
-      fetch: async () => guild.roles.cache,
+      fetch: async (id) => id ? guild.roles.cache.get(id) || null : guild.roles.cache,
       create: async ({ name }) => {
-        const role = { id: `role-${guild.roles.cache.size + 1}`, name, delete: async () => {} };
+        const role = {
+          id: `role-${guild.roles.cache.size + 1}`,
+          name,
+          members: new Map(),
+          deleted: false,
+          delete: async () => { role.deleted = true; }
+        };
         guild.roles.cache.set(role.id, role);
         return role;
       }
@@ -594,8 +640,10 @@ function createDiscordHarness() {
         const voice = {
           id: `event-voice-${++voiceSeq}`,
           type,
+          name: '🛡️・defesa',
           members: new Map(),
-          delete: async () => {}
+          deleted: false,
+          delete: async () => { voice.deleted = true; }
         };
         channels.set(voice.id, voice);
         return voice;
@@ -634,7 +682,14 @@ function createDiscordHarness() {
       roles: {
         cache: new Map(),
         add: async (role) => {
-          member.roles.cache.set(typeof role === 'string' ? role : role.id, role);
+          const roleId = typeof role === 'string' ? role : role.id;
+          member.roles.cache.set(roleId, role);
+          if (typeof role !== 'string') role.members?.set(member.id, member);
+        },
+        remove: async (role) => {
+          const roleId = typeof role === 'string' ? role : role.id;
+          member.roles.cache.delete(roleId);
+          if (typeof role !== 'string') role.members?.delete(member.id);
         }
       },
       voice: {

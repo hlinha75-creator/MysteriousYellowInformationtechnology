@@ -73,6 +73,7 @@ client.once('clientReady', () => {
   dailyPveRanking.postWeeklyRankingIfNeeded(client).catch((error) => console.error('Falha ao publicar ranking semanal de fama:', error));
   lochMarket.postAnnouncementIfNeeded(client).catch((error) => console.error('Falha ao publicar comunicado do mercado de Loch:', error));
   hideoutDefense.postAnnouncementIfNeeded(client).catch((error) => console.error('Falha ao publicar aviso da defesa da HO:', error));
+  hideoutDefense.processSchedule(client).catch((error) => console.error('Falha ao processar organizacao da defesa da HO:', error));
   killFeed.pollKillFeed(client).catch((error) => console.error('Falha ao consultar killfeed:', error));
   giveaways.processDueGiveaways(client).catch((error) => console.error('Falha ao processar sorteios:', error));
   setInterval(() => {
@@ -83,6 +84,9 @@ client.once('clientReady', () => {
   }, 30000);
   setInterval(() => {
     giveaways.processDueGiveaways(client).catch((error) => console.error('Falha ao processar sorteios:', error));
+  }, 30000);
+  setInterval(() => {
+    hideoutDefense.processSchedule(client).catch((error) => console.error('Falha ao processar organizacao da defesa da HO:', error));
   }, 30000);
   setInterval(() => {
     killFeed.pollKillFeed(client).catch((error) => console.error('Falha ao consultar killfeed:', error));

@@ -1386,6 +1386,24 @@ const migrations = [
         );
       `);
     }
+  },
+  {
+    version: 46,
+    name: 'hideout_defense_runtime_state',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS hideout_defense_state (
+          announcement_key TEXT PRIMARY KEY,
+          role_id TEXT,
+          voice_channel_id TEXT,
+          reminder_sent_at TEXT,
+          admin_prompt_sent_at TEXT,
+          started_at TEXT,
+          cleaned_at TEXT,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+    }
   }
 ];
 

@@ -158,6 +158,30 @@ async function handleButton(interaction) {
 
   if (scope === 'giveaway') return giveaways.handleButton(interaction);
 
+  if (interaction.customId === hideoutDefense.START_BUTTON_ID) {
+    if (!isOwner(interaction.member) && !hasRole(interaction.member, 'adm')) {
+      return interaction.reply({
+        content: 'Somente a ADM pode iniciar a defesa e mover os inscritos.',
+        flags: MessageFlags.Ephemeral
+      });
+    }
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const result = await hideoutDefense.startDefense({
+      client: interaction.client,
+      guild: interaction.guild,
+      actorId: interaction.user.id
+    });
+    return interaction.editReply({
+      content: [
+        `Sala temporária criada/atualizada: <#${result.voice.id}>.`,
+        `Movidos: ${result.moved.length}.`,
+        `Fora da call: ${result.notConnected.length}.`,
+        `Falhas ao mover: ${result.failed.length}.`
+      ].join(' '),
+      allowedMentions: { parse: [] }
+    });
+  }
+
   if ([hideoutDefense.ACK_BUTTON_ID, hideoutDefense.PARTICIPATE_BUTTON_ID].includes(interaction.customId)) {
     if (!hasRole(interaction.member, 'member')) {
       return interaction.reply({
@@ -174,16 +198,18 @@ async function handleButton(interaction) {
       ? hideoutDefense.announcementPayload({ participations: result.participations })
       : hideoutDefense.announcementPayload({ acknowledgements: result.acknowledgements });
     await interaction.update(payload);
+    const roleResult = await hideoutDefense.syncMemberDefenseRole(interaction.guild, interaction.user.id).catch(() => null);
     return interaction.followUp({
       content: isParticipation
         ? (result.added
-            ? 'Presença confirmada. Você foi adicionado à lista de quem vai lutar.'
+            ? `Presença confirmada. Você foi adicionado à lista de quem vai lutar${roleResult?.role ? ` e recebeu a tag <@&${roleResult.role.id}>` : ''}.`
             : 'Sua confirmação para lutar foi removida.')
         : (result.alreadyParticipating
             ? 'Você já está na lista “Vão lutar”, então já está ciente do aviso.'
             : result.added
-              ? 'Leitura confirmada. Você foi adicionado à lista de membros cientes.'
+              ? `Leitura confirmada. Você foi adicionado à lista de membros cientes${roleResult?.role ? ` e recebeu a tag <@&${roleResult.role.id}>` : ''}.`
               : 'Sua confirmação de leitura foi removida.'),
+      allowedMentions: { parse: [] },
       flags: MessageFlags.Ephemeral
     });
   }

@@ -2,6 +2,7 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  ChannelType,
   EmbedBuilder
 } = require('discord.js');
 const ids = require('../../config/ids');
@@ -10,6 +11,59 @@ const { getDatabase, transaction } = require('../../database/connection');
 const ANNOUNCEMENT_KEY = 'hideout-defense:sunstrand-shoal:2026-07-22';
 const ACK_BUTTON_ID = 'ho_defense:ack:2026-07-22';
 const PARTICIPATE_BUTTON_ID = 'ho_defense:participate:2026-07-22';
+const START_BUTTON_ID = 'ho_defense:start:2026-07-22';
+const DEFENSE_ROLE_NAME = 'Defesa';
+const DEFENSE_VOICE_NAME = '🛡️・defesa';
+const REMINDER_AT = new Date('2026-07-22T21:30:00.000Z');
+const ADMIN_PROMPT_AT = new Date('2026-07-22T21:35:00.000Z');
+const PREPARATION_AT = new Date('2026-07-22T21:45:00.000Z');
+const DEFENSE_START_AT = new Date('2026-07-22T22:00:00.000Z');
+const DEFENSE_END_AT = new Date('2026-07-22T22:15:00.000Z');
+
+function ensureState() {
+  const db = getDatabase();
+  db.prepare(`
+    INSERT OR IGNORE INTO hideout_defense_state (announcement_key)
+    VALUES (?)
+  `).run(ANNOUNCEMENT_KEY);
+  return db.prepare(`
+    SELECT * FROM hideout_defense_state WHERE announcement_key = ?
+  `).get(ANNOUNCEMENT_KEY);
+}
+
+function updateState(fields) {
+  const allowed = new Set([
+    'role_id',
+    'voice_channel_id',
+    'reminder_sent_at',
+    'admin_prompt_sent_at',
+    'started_at',
+    'cleaned_at'
+  ]);
+  const entries = Object.entries(fields).filter(([key]) => allowed.has(key));
+  if (!entries.length) return ensureState();
+  ensureState();
+  const assignments = entries.map(([key]) => `${key} = ?`).join(', ');
+  getDatabase().prepare(`
+    UPDATE hideout_defense_state
+    SET ${assignments}, updated_at = CURRENT_TIMESTAMP
+    WHERE announcement_key = ?
+  `).run(...entries.map(([, value]) => value), ANNOUNCEMENT_KEY);
+  return ensureState();
+}
+
+function registeredUserIds() {
+  return getDatabase().prepare(`
+    SELECT user_id
+    FROM announcement_acknowledgements
+    WHERE announcement_key = ?
+    UNION
+    SELECT user_id
+    FROM announcement_participations
+    WHERE announcement_key = ?
+    ORDER BY user_id
+  `).all(ANNOUNCEMENT_KEY, ANNOUNCEMENT_KEY).map((row) => row.user_id);
+}
 
 function listAcknowledgements() {
   return getDatabase().prepare(`
@@ -126,6 +180,7 @@ function memberListFields(rows, labels) {
 function announcementPayload(options = {}) {
   const acknowledgements = options.acknowledgements || listAcknowledgements();
   const participations = options.participations || listParticipations();
+  const ended = options.ended ?? Date.now() >= DEFENSE_END_AT.getTime();
   const embed = new EmbedBuilder()
     .setColor(0xd97706)
     .setTitle('🛡️ DEFESA DA HO — SUNSTRAND SHOAL')
@@ -177,18 +232,287 @@ function announcementPayload(options = {}) {
           .setCustomId(ACK_BUTTON_ID)
           .setLabel('Eu li')
           .setEmoji('✅')
+          .setDisabled(ended)
           .setStyle(ButtonStyle.Primary),
         new ButtonBuilder()
           .setCustomId(PARTICIPATE_BUTTON_ID)
           .setLabel('Vou lutar')
           .setEmoji('⚔️')
-          .setStyle(ButtonStyle.Success)
+          .setDisabled(ended)
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId(START_BUTTON_ID)
+          .setLabel(ended ? 'Defesa encerrada' : 'Iniciar defesa')
+          .setEmoji('🛡️')
+          .setDisabled(ended)
+          .setStyle(ButtonStyle.Danger)
       )
     ],
     allowedMentions: options.pingMembers
       ? { parse: [], roles: [ids.roles.member] }
       : { parse: [] }
   };
+}
+
+async function fetchGuild(client) {
+  return client.guilds.cache?.get(ids.guildId)
+    || client.guilds.fetch(ids.guildId).catch(() => null);
+}
+
+async function fetchStoredRole(guild) {
+  const roleId = ensureState().role_id;
+  if (!roleId) return null;
+  return guild.roles.cache?.get(roleId)
+    || guild.roles.fetch(roleId).catch(() => null);
+}
+
+async function ensureDefenseRole(guild, now = new Date()) {
+  if (now >= DEFENSE_END_AT) return null;
+  const state = ensureState();
+  if (state.cleaned_at) return null;
+  const existing = await fetchStoredRole(guild);
+  if (existing) return existing;
+  const role = await guild.roles.create({
+    name: DEFENSE_ROLE_NAME,
+    mentionable: true,
+    reason: 'Tag temporaria da defesa da HO em Sunstrand Shoal'
+  });
+  updateState({ role_id: role.id });
+  return role;
+}
+
+async function syncMemberDefenseRole(guild, userId, options = {}) {
+  const now = options.now || new Date();
+  const shouldHaveRole = now < DEFENSE_END_AT && registeredUserIds().includes(String(userId));
+  const role = shouldHaveRole
+    ? await ensureDefenseRole(guild, now)
+    : await fetchStoredRole(guild);
+  if (!role) return { changed: false, hasRole: false, role: null };
+
+  const member = await guild.members.fetch(userId).catch(() => null);
+  if (!member) return { changed: false, hasRole: false, role };
+  const currentlyHasRole = member.roles.cache?.has(role.id);
+  if (shouldHaveRole && !currentlyHasRole) {
+    await member.roles.add(role, 'Inscrito na defesa da HO');
+    return { changed: true, hasRole: true, role };
+  }
+  if (!shouldHaveRole && currentlyHasRole) {
+    await member.roles.remove(role, 'Saiu das listas da defesa da HO');
+    return { changed: true, hasRole: false, role };
+  }
+  return { changed: false, hasRole: Boolean(currentlyHasRole), role };
+}
+
+async function syncAllDefenseRoles(guild, options = {}) {
+  const now = options.now || new Date();
+  const registered = new Set(registeredUserIds());
+  const role = registered.size
+    ? await ensureDefenseRole(guild, now)
+    : await fetchStoredRole(guild);
+  if (!role) return { role: null, added: 0, removed: 0 };
+
+  let added = 0;
+  let removed = 0;
+  for (const userId of registered) {
+    const member = await guild.members.fetch(userId).catch(() => null);
+    if (member && !member.roles.cache?.has(role.id)) {
+      await member.roles.add(role, 'Inscrito na defesa da HO').then(() => { added += 1; }).catch(() => {});
+    }
+  }
+  for (const member of role.members?.values?.() || []) {
+    if (!registered.has(member.id)) {
+      await member.roles.remove(role, 'Nao esta mais inscrito na defesa da HO').then(() => { removed += 1; }).catch(() => {});
+    }
+  }
+  return { role, added, removed };
+}
+
+async function fetchAnnouncementChannel(client) {
+  const channel = await client.channels.fetch(ids.channels.campaignAnnouncements).catch(() => null);
+  return channel?.isTextBased() ? channel : null;
+}
+
+async function sendRegisteredNotice(channel, userIds, text) {
+  const chunks = [];
+  for (let index = 0; index < userIds.length; index += 50) chunks.push(userIds.slice(index, index + 50));
+  if (!chunks.length) chunks.push([]);
+  const messages = [];
+  for (let index = 0; index < chunks.length; index += 1) {
+    const users = chunks[index];
+    const mentions = users.map((userId) => `<@${userId}>`).join(' ');
+    const content = [index === 0 ? text : '**Continuação dos inscritos:**', mentions].filter(Boolean).join('\n\n');
+    messages.push(await channel.send({
+      content,
+      allowedMentions: { parse: [], users }
+    }));
+  }
+  return messages;
+}
+
+async function sendThirtyMinuteReminder(client, now = REMINDER_AT) {
+  const channel = await fetchAnnouncementChannel(client);
+  if (!channel) throw new Error('Canal de avisos da defesa nao encontrado.');
+  const users = registeredUserIds();
+  const minutesUntilDefense = Math.max(0, Math.ceil((DEFENSE_START_AT.getTime() - now.getTime()) / 60000));
+  const movementWarning = now < ADMIN_PROMPT_AT
+    ? 'Em **5 minutos**, a ADM poderá iniciar a organização e mover os inscritos que já estiverem conectados em uma sala de voz.'
+    : 'A ADM já pode iniciar a organização e mover os inscritos que estiverem conectados em uma sala de voz.';
+  await sendRegisteredNotice(channel, users, [
+    `## 🛡️ DEFESA DA HO EM ${minutesUntilDefense} MINUTOS`,
+    movementWarning,
+    '',
+    '**21:45 UTC:** preparação no Bridgewatch Portal / Smuggler Vulcano',
+    '**22:00 UTC:** todos em Sunstrand Shoal',
+    '**22:00–22:15 UTC:** defesa da HO',
+    '**Build:** T8 equivalente — Brawl',
+    '',
+    'Entre em uma call antes da movimentação e deixe sua build pronta.'
+  ].join('\n'));
+  updateState({ reminder_sent_at: now.toISOString() });
+  return { notified: users.length };
+}
+
+function startPromptComponents() {
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(START_BUTTON_ID)
+        .setLabel('Iniciar defesa')
+        .setEmoji('🛡️')
+        .setStyle(ButtonStyle.Danger)
+    )
+  ];
+}
+
+async function sendAdminStartPrompt(client) {
+  const channel = await fetchAnnouncementChannel(client);
+  if (!channel) throw new Error('Canal de avisos da defesa nao encontrado.');
+  const message = await channel.send({
+    content: [
+      `<@&${ids.roles.adm}> **hora de organizar a defesa.**`,
+      'Aperte **Iniciar defesa** para criar a sala temporária e puxar todos os inscritos que já estiverem conectados em voz.',
+      'A preparação começa às **21:45 UTC** e todos devem estar no mapa às **22:00 UTC**.'
+    ].join('\n'),
+    components: startPromptComponents(),
+    allowedMentions: { parse: [], roles: [ids.roles.adm] }
+  });
+  updateState({ admin_prompt_sent_at: new Date().toISOString() });
+  return message;
+}
+
+async function ensureDefenseVoice(guild) {
+  const state = ensureState();
+  if (state.voice_channel_id) {
+    const existing = guild.channels.cache?.get(state.voice_channel_id)
+      || await guild.channels.fetch(state.voice_channel_id).catch(() => null);
+    if (existing) return existing;
+  }
+  const waiting = guild.channels.cache?.get(ids.channels.waitingVoice)
+    || await guild.channels.fetch(ids.channels.waitingVoice).catch(() => null);
+  const voice = await guild.channels.create({
+    name: DEFENSE_VOICE_NAME,
+    type: ChannelType.GuildVoice,
+    parent: waiting?.parentId || undefined,
+    reason: 'Sala temporaria da defesa da HO em Sunstrand Shoal'
+  });
+  updateState({ voice_channel_id: voice.id });
+  return voice;
+}
+
+async function startDefense({ client, guild, actorId, now = new Date() }) {
+  if (now < ADMIN_PROMPT_AT) throw new Error('O botão Iniciar defesa ficará disponível às 21:35 UTC.');
+  if (now >= DEFENSE_END_AT) throw new Error('A janela da defesa terminou às 22:15 UTC.');
+  await syncAllDefenseRoles(guild, { now });
+  const voice = await ensureDefenseVoice(guild);
+  const moved = [];
+  const notConnected = [];
+  const failed = [];
+
+  for (const userId of registeredUserIds()) {
+    const member = await guild.members.fetch(userId).catch(() => null);
+    if (!member?.voice?.channelId) {
+      notConnected.push(userId);
+      continue;
+    }
+    if (member.voice.channelId === voice.id) {
+      moved.push(userId);
+      continue;
+    }
+    await member.voice.setChannel(voice, `Defesa da HO iniciada por ${actorId}`)
+      .then(() => moved.push(userId))
+      .catch(() => failed.push(userId));
+  }
+
+  const state = ensureState();
+  if (!state.started_at) updateState({ started_at: now.toISOString() });
+  const channel = await fetchAnnouncementChannel(client);
+  if (channel) {
+    const missingMentions = [...notConnected, ...failed].map((userId) => `<@${userId}>`).join(' ');
+    await channel.send({
+      content: [
+        `## 🛡️ DEFESA INICIADA — <#${voice.id}>`,
+        `Movidos para a sala: **${moved.length}**`,
+        `Fora da call ou não movidos: **${notConnected.length + failed.length}**`,
+        '',
+        '**Preparação agora:** build T8 equivalente, composição Brawl e saída pelo Bridgewatch Portal / Smuggler Vulcano.',
+        '**21:45 UTC:** preparação | **22:00 UTC:** no mapa | **22:15 UTC:** fim da defesa',
+        missingMentions ? `\nEntrem em uma sala de voz para a organização: ${missingMentions}` : null
+      ].filter(Boolean).join('\n'),
+      allowedMentions: { parse: [], users: [...notConnected, ...failed] }
+    });
+  }
+  return { voice, moved, notConnected, failed };
+}
+
+async function cleanupDefense(client, now = new Date()) {
+  const state = ensureState();
+  if (state.cleaned_at) return { cleaned: false };
+  const guild = await fetchGuild(client);
+  if (!guild) throw new Error('Servidor da guilda nao encontrado para limpar a defesa.');
+
+  const voice = state.voice_channel_id
+    ? guild.channels.cache?.get(state.voice_channel_id) || await guild.channels.fetch(state.voice_channel_id).catch(() => null)
+    : null;
+  if (voice) await voice.delete('Fim da defesa da HO');
+  const role = await fetchStoredRole(guild);
+  if (role) await role.delete('Fim da defesa da HO');
+  updateState({ cleaned_at: now.toISOString() });
+
+  const reminder = getDatabase().prepare(`
+    SELECT message_id, channel_id FROM operation_reminders WHERE reminder_key = ?
+  `).get(ANNOUNCEMENT_KEY);
+  if (reminder?.message_id && reminder?.channel_id) {
+    const channel = await client.channels.fetch(reminder.channel_id).catch(() => null);
+    const message = channel?.isTextBased()
+      ? await channel.messages.fetch(reminder.message_id).catch(() => null)
+      : null;
+    await message?.edit(announcementPayload({ ended: true })).catch(() => {});
+  }
+  return { cleaned: true };
+}
+
+let scheduleRunning = false;
+async function processSchedule(client, now = new Date()) {
+  if (scheduleRunning) return { skipped: true };
+  scheduleRunning = true;
+  try {
+    const state = ensureState();
+    if (now >= DEFENSE_END_AT) return cleanupDefense(client, now);
+    const guild = await fetchGuild(client);
+    if (!guild) throw new Error('Servidor da guilda nao encontrado para preparar a defesa.');
+    await syncAllDefenseRoles(guild, { now });
+    const actions = [];
+    if (now >= REMINDER_AT && now < DEFENSE_START_AT && !state.reminder_sent_at) {
+      actions.push(await sendThirtyMinuteReminder(client, now));
+    }
+    const currentState = ensureState();
+    if (now >= ADMIN_PROMPT_AT && !currentState.admin_prompt_sent_at) {
+      actions.push(await sendAdminStartPrompt(client));
+    }
+    return { actions };
+  } finally {
+    scheduleRunning = false;
+  }
 }
 
 async function postAnnouncementIfNeeded(client) {
@@ -231,11 +555,23 @@ module.exports = {
   ANNOUNCEMENT_KEY,
   ACK_BUTTON_ID,
   BUTTON_ID: ACK_BUTTON_ID,
+  DEFENSE_END_AT,
   PARTICIPATE_BUTTON_ID,
+  START_BUTTON_ID,
   announcementPayload,
+  cleanupDefense,
+  ensureDefenseRole,
+  ensureState,
   listAcknowledgements,
   listParticipations,
   postAnnouncementIfNeeded,
+  processSchedule,
+  registeredUserIds,
+  sendAdminStartPrompt,
+  sendThirtyMinuteReminder,
+  startDefense,
+  syncAllDefenseRoles,
+  syncMemberDefenseRole,
   toggleAcknowledgement,
   toggleParticipation
 };
