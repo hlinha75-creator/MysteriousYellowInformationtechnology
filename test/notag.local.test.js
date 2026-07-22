@@ -31,22 +31,34 @@ const { parseLocalDateTime } = require('../src/utils/timezone');
 
 migrate();
 
-test('aviso da defesa da HO registra e remove membros cientes', () => {
+test('aviso da defesa da HO controla leitura e participação separadamente', () => {
   let result = hideoutDefense.toggleAcknowledgement('member-1');
   assert.equal(result.added, true);
   assert.deepEqual(result.acknowledgements.map((row) => row.user_id), ['member-1']);
 
   result = hideoutDefense.toggleAcknowledgement('member-2');
   assert.equal(result.added, true);
-  const payload = hideoutDefense.announcementPayload({ acknowledgements: result.acknowledgements });
+  let participation = hideoutDefense.toggleParticipation('member-2');
+  assert.equal(participation.added, true);
+
+  const payload = hideoutDefense.announcementPayload({
+    acknowledgements: result.acknowledgements,
+    participations: participation.participations
+  });
   assert.equal(payload.content, '<@&1481251365131911314>');
-  assert.equal(payload.components[0].components[0].data.label, 'Eu li (estou ciente)');
-  assert.match(payload.embeds[0].data.fields.at(-1).value, /<@member-1>/);
-  assert.match(payload.embeds[0].data.fields.at(-1).value, /<@member-2>/);
+  assert.equal(payload.components[0].components[0].data.label, 'Eu li');
+  assert.equal(payload.components[0].components[1].data.label, 'Eu vou participar');
+  const fields = payload.embeds[0].data.fields;
+  assert.match(fields.find((field) => field.name.startsWith('Membros cientes')).value, /<@member-1>/);
+  assert.match(fields.find((field) => field.name.startsWith('Vão participar')).value, /<@member-2>/);
 
   result = hideoutDefense.toggleAcknowledgement('member-1');
   assert.equal(result.added, false);
   assert.deepEqual(result.acknowledgements.map((row) => row.user_id), ['member-2']);
+
+  participation = hideoutDefense.toggleParticipation('member-2');
+  assert.equal(participation.added, false);
+  assert.deepEqual(participation.participations, []);
 });
 
 test.after(() => {

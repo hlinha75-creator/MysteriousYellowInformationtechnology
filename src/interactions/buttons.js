@@ -158,19 +158,30 @@ async function handleButton(interaction) {
 
   if (scope === 'giveaway') return giveaways.handleButton(interaction);
 
-  if (interaction.customId === hideoutDefense.BUTTON_ID) {
+  if ([hideoutDefense.ACK_BUTTON_ID, hideoutDefense.PARTICIPATE_BUTTON_ID].includes(interaction.customId)) {
     if (!hasRole(interaction.member, 'member')) {
       return interaction.reply({
-        content: 'Somente membros da guilda podem confirmar a leitura deste aviso.',
+        content: 'Somente membros da guilda podem responder a este aviso.',
         flags: MessageFlags.Ephemeral
       });
     }
-    const result = hideoutDefense.toggleAcknowledgement(interaction.user.id);
-    await interaction.update(hideoutDefense.announcementPayload({ acknowledgements: result.acknowledgements }));
+
+    const isParticipation = interaction.customId === hideoutDefense.PARTICIPATE_BUTTON_ID;
+    const result = isParticipation
+      ? hideoutDefense.toggleParticipation(interaction.user.id)
+      : hideoutDefense.toggleAcknowledgement(interaction.user.id);
+    const payload = isParticipation
+      ? hideoutDefense.announcementPayload({ participations: result.participations })
+      : hideoutDefense.announcementPayload({ acknowledgements: result.acknowledgements });
+    await interaction.update(payload);
     return interaction.followUp({
-      content: result.added
-        ? 'Leitura confirmada. Você foi adicionado à lista de membros cientes.'
-        : 'Sua confirmação foi removida da lista.',
+      content: isParticipation
+        ? (result.added
+            ? 'Participação confirmada. Você foi adicionado à lista de quem vai participar.'
+            : 'Sua confirmação de participação foi removida.')
+        : (result.added
+            ? 'Leitura confirmada. Você foi adicionado à lista de membros cientes.'
+            : 'Sua confirmação de leitura foi removida.'),
       flags: MessageFlags.Ephemeral
     });
   }

@@ -8,7 +8,8 @@ const ids = require('../../config/ids');
 const { getDatabase, transaction } = require('../../database/connection');
 
 const ANNOUNCEMENT_KEY = 'hideout-defense:sunstrand-shoal:2026-07-22';
-const BUTTON_ID = 'ho_defense:ack:2026-07-22';
+const ACK_BUTTON_ID = 'ho_defense:ack:2026-07-22';
+const PARTICIPATE_BUTTON_ID = 'ho_defense:participate:2026-07-22';
 
 function listAcknowledgements() {
   return getDatabase().prepare(`
@@ -16,6 +17,15 @@ function listAcknowledgements() {
     FROM announcement_acknowledgements
     WHERE announcement_key = ?
     ORDER BY acknowledged_at, user_id
+  `).all(ANNOUNCEMENT_KEY);
+}
+
+function listParticipations() {
+  return getDatabase().prepare(`
+    SELECT user_id, participating_at
+    FROM announcement_participations
+    WHERE announcement_key = ?
+    ORDER BY participating_at, user_id
   `).all(ANNOUNCEMENT_KEY);
 }
 
@@ -42,9 +52,32 @@ const toggleAcknowledgement = transaction((userId) => {
   return { added: true, acknowledgements: listAcknowledgements() };
 });
 
-function acknowledgementFields(rows) {
+const toggleParticipation = transaction((userId) => {
+  const db = getDatabase();
+  const existing = db.prepare(`
+    SELECT 1
+    FROM announcement_participations
+    WHERE announcement_key = ? AND user_id = ?
+  `).get(ANNOUNCEMENT_KEY, userId);
+
+  if (existing) {
+    db.prepare(`
+      DELETE FROM announcement_participations
+      WHERE announcement_key = ? AND user_id = ?
+    `).run(ANNOUNCEMENT_KEY, userId);
+    return { added: false, participations: listParticipations() };
+  }
+
+  db.prepare(`
+    INSERT INTO announcement_participations (announcement_key, user_id)
+    VALUES (?, ?)
+  `).run(ANNOUNCEMENT_KEY, userId);
+  return { added: true, participations: listParticipations() };
+});
+
+function memberListFields(rows, labels) {
   if (!rows.length) {
-    return [{ name: 'Membros cientes (0)', value: '*Nenhum membro confirmou a leitura ainda.*' }];
+    return [{ name: `${labels.title} (0)`, value: labels.empty }];
   }
 
   const chunks = [];
@@ -62,13 +95,14 @@ function acknowledgementFields(rows) {
   if (current) chunks.push(current);
 
   return chunks.map((value, index) => ({
-    name: index === 0 ? `Membros cientes (${rows.length})` : 'Membros cientes (continuação)',
+    name: index === 0 ? `${labels.title} (${rows.length})` : `${labels.title} (continuação)`,
     value
   }));
 }
 
 function announcementPayload(options = {}) {
-  const rows = options.acknowledgements || listAcknowledgements();
+  const acknowledgements = options.acknowledgements || listAcknowledgements();
+  const participations = options.participations || listParticipations();
   const embed = new EmbedBuilder()
     .setColor(0xd97706)
     .setTitle('🛡️ DEFESA DA HO — SUNSTRAND SHOAL')
@@ -100,9 +134,16 @@ function announcementPayload(options = {}) {
           'Ela nos ajudará a pontuar na temporada com **Orbs (Anomalias de Poder)** e permitirá organizar melhor a divisão dos loots dos **World Bosses**, realizados nos finais de semana entre **00:00 e 02:00 UTC**.'
         ].join('\n')
       },
-      ...acknowledgementFields(rows)
+      ...memberListFields(acknowledgements, {
+        title: 'Membros cientes',
+        empty: '*Nenhum membro confirmou a leitura ainda.*'
+      }),
+      ...memberListFields(participations, {
+        title: 'Vão participar',
+        empty: '*Nenhum membro confirmou participação ainda.*'
+      })
     )
-    .setFooter({ text: 'Clique no botão abaixo para confirmar que leu e está ciente. Clique novamente para remover a confirmação.' });
+    .setFooter({ text: 'Use “Eu li” para confirmar a leitura e “Eu vou participar” para confirmar presença. Clique novamente para remover.' });
 
   return {
     content: `<@&${ids.roles.member}>`,
@@ -110,9 +151,14 @@ function announcementPayload(options = {}) {
     components: [
       new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setCustomId(BUTTON_ID)
-          .setLabel('Eu li (estou ciente)')
+          .setCustomId(ACK_BUTTON_ID)
+          .setLabel('Eu li')
           .setEmoji('✅')
+          .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setCustomId(PARTICIPATE_BUTTON_ID)
+          .setLabel('Eu vou participar')
+          .setEmoji('⚔️')
           .setStyle(ButtonStyle.Success)
       )
     ],
@@ -160,9 +206,13 @@ async function postAnnouncementIfNeeded(client) {
 
 module.exports = {
   ANNOUNCEMENT_KEY,
-  BUTTON_ID,
+  ACK_BUTTON_ID,
+  BUTTON_ID: ACK_BUTTON_ID,
+  PARTICIPATE_BUTTON_ID,
   announcementPayload,
   listAcknowledgements,
+  listParticipations,
   postAnnouncementIfNeeded,
-  toggleAcknowledgement
+  toggleAcknowledgement,
+  toggleParticipation
 };

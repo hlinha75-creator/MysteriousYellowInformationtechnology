@@ -1353,6 +1353,23 @@ const migrations = [
         CREATE INDEX IF NOT EXISTS idx_giveaway_winners_giveaway ON giveaway_winners (giveaway_id, status);
       `);
     }
+  },
+  {
+    version: 44,
+    name: 'announcement_participations',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS announcement_participations (
+          announcement_key TEXT NOT NULL,
+          user_id TEXT NOT NULL,
+          participating_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (announcement_key, user_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_announcement_participations_key
+          ON announcement_participations (announcement_key, participating_at);
+      `);
+    }
   }
 ];
 
