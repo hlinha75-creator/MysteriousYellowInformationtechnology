@@ -8,7 +8,6 @@ const { migrate } = require('./database/migrate');
 const { backupDatabase } = require('./database/backup');
 const registration = require('./modules/registration/registration.service');
 const voice = require('./modules/voice/voice.service');
-const idleGame = require('./modules/idleGame/idleGame.service');
 const events = require('./modules/events/events.service');
 const guildVerification = require('./modules/albion/guildVerification.service');
 const dailyPveRanking = require('./modules/albion/dailyPveRanking.service');
@@ -51,7 +50,14 @@ const client = new Client({
 
 client.once('clientReady', () => {
   console.log(`Notag bot online como ${client.user.tag}`);
-  idleGame.start(client).catch((error) => console.error('Falha ao iniciar estacao de foco:', error));
+  for (const guild of client.guilds.cache.values()) {
+    const botVoice = guild.members.me?.voice;
+    if (botVoice?.channelId) {
+      botVoice.disconnect('O bot nao deve permanecer em canais de voz').catch((error) => {
+        console.error(`Falha ao retirar o bot da call no servidor ${guild.id}:`, error);
+      });
+    }
+  }
   events.cleanupExpiredReviewChannels(client).catch((error) => console.error('Falha ao limpar canais de revisao:', error));
   balanceBackup.postDailyBackupIfNeeded(client).catch((error) => console.error('Falha ao postar backup diario de saldos:', error));
   operations.postDailyAdminReportIfNeeded(client).catch((error) => console.error('Falha ao enviar relatorio diario ADM:', error));
@@ -115,12 +121,14 @@ client.on('error', (error) => {
 client.on('guildMemberAdd', registration.handleGuildMemberAdd);
 client.on('guildMemberRemove', registration.handleGuildMemberRemove);
 client.on('voiceStateUpdate', voice.handleVoiceStateUpdate);
-client.on('voiceStateUpdate', (oldState, newState) => {
-  idleGame.handleVoiceStateUpdate(oldState, newState).catch((error) => console.error('Falha na estacao de foco:', error));
+client.on('voiceStateUpdate', (_oldState, newState) => {
+  if (newState.id !== client.user.id || !newState.channelId) return;
+  newState.disconnect('O bot nao deve permanecer em canais de voz').catch((error) => {
+    console.error(`Falha ao retirar o bot da call no servidor ${newState.guild.id}:`, error);
+  });
 });
 client.on('interactionCreate', handleInteraction);
 client.on('messageCreate', (message) => {
-  idleGame.handleMessage(message);
   guildVerification.handleDirectNickReply(message).catch((error) => console.error('Falha ao tratar resposta de nick por DM:', error));
 });
 
