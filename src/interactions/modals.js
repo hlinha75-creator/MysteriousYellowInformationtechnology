@@ -2,6 +2,7 @@ const { can, hasRole, isOwner } = require('../config/permissions');
 const ids = require('../config/ids');
 const events = require('../modules/events/events.service');
 const eventsRepo = require('../modules/events/events.repository');
+const customEventWizard = require('../modules/events/customEventWizard.service');
 const registration = require('../modules/registration/registration.service');
 const finance = require('../modules/finance/finance.service');
 const { parseSilver, formatSilver } = require('../utils/silver');
@@ -105,6 +106,82 @@ async function handleModal(interaction) {
       content: 'Esse recurso foi pausado para simplificar o bot. Use os paineis principais de evento, saldo, registro ou ADM.',
       flags: MessageFlags.Ephemeral
     });
+  }
+
+  if (interaction.customId === 'event:custom_basic') {
+    if (!can(interaction.member, 'createEvent')) {
+      return safeReply(interaction, { content: 'Voce nao tem permissao para criar evento personalizado.', flags: MessageFlags.Ephemeral });
+    }
+    const draft = customEventWizard.createDraft({
+      creatorId: interaction.user.id,
+      title: fieldOrDefault(interaction, 'title', ''),
+      timeRange: fieldOrDefault(interaction, 'timeRange', ''),
+      day: fieldOrDefault(interaction, 'day', ''),
+      description: fieldOrDefault(interaction, 'description', 'Pergunte na Call'),
+      composition: fieldOrDefault(interaction, 'composition', '')
+    });
+    return interaction.reply({
+      content: [
+        `Dados basicos salvos. Composicao: ${draft.composition.tank},${draft.composition.healer},${draft.composition.support},${draft.composition.dps}.`,
+        `Depois dos detalhes, voce preenchera ${draft.slotDefinitions.length} vagas em ${customEventWizard.pageCount(draft)} tela(s).`
+      ].join('\n'),
+      components: [customEventStepRow(
+        `custom_event:details:${draft.id}`,
+        'Continuar: loot e requisitos',
+        draft.id
+      )],
+      flags: MessageFlags.Ephemeral
+    });
+  }
+
+  if (interaction.customId.startsWith('event:custom_details:')) {
+    const draftId = interaction.customId.split(':')[2];
+    const draft = customEventWizard.saveDetails({
+      id: draftId,
+      creatorId: interaction.user.id,
+      lootRules: fieldOrDefault(interaction, 'lootRules', ''),
+      consumables: fieldOrDefault(interaction, 'consumables', ''),
+      mount: fieldOrDefault(interaction, 'mount', '')
+    });
+    return interaction.reply({
+      content: `Detalhes salvos. Preencha agora a composicao (${draft.slotDefinitions.length} vagas).`,
+      components: [customEventStepRow(
+        `custom_event:slots:${draft.id}:0`,
+        `Composicao 1/${customEventWizard.pageCount(draft)}`,
+        draft.id
+      )],
+      flags: MessageFlags.Ephemeral
+    });
+  }
+
+  if (interaction.customId.startsWith('event:custom_slots:')) {
+    const [, , draftId, pageText] = interaction.customId.split(':');
+    const current = customEventWizard.slotPage({ id: draftId, creatorId: interaction.user.id, page: pageText });
+    const values = current.slots.map((_, index) => interaction.fields.getTextInputValue(`slot_${index}`));
+    const saved = customEventWizard.saveSlotPage({
+      id: draftId,
+      creatorId: interaction.user.id,
+      page: pageText,
+      values
+    });
+    const nextPage = saved.page + 1;
+    if (nextPage < saved.totalPages) {
+      return interaction.reply({
+        content: `Composicao ${saved.page + 1}/${saved.totalPages} salva.`,
+        components: [customEventStepRow(
+          `custom_event:slots:${draftId}:${nextPage}`,
+          `Composicao ${nextPage + 1}/${saved.totalPages}`,
+          draftId
+        )],
+        flags: MessageFlags.Ephemeral
+      });
+    }
+
+    const acknowledged = await safeDeferReply(interaction, { flags: MessageFlags.Ephemeral });
+    if (!acknowledged) return null;
+    const event = await events.createCustomEventFromDraft(interaction, saved.draft);
+    customEventWizard.removeDraft(draftId, interaction.user.id);
+    return safeEditReply(interaction, { content: `Evento personalizado ${event.event_code} criado.` });
   }
 
   if (interaction.customId === 'event:create') {
@@ -509,4 +586,11 @@ module.exports = {
 function truncateText(value, max) {
   const text = String(value || '').replace(/\s+/g, ' ').trim();
   return text.length > max ? `${text.slice(0, max - 3)}...` : text;
+}
+
+function customEventStepRow(nextCustomId, nextLabel, draftId) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(nextCustomId).setLabel(nextLabel).setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`custom_event:cancel:${draftId}`).setLabel('Cancelar').setStyle(ButtonStyle.Secondary)
+  );
 }

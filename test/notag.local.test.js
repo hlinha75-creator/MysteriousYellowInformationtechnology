@@ -16,6 +16,7 @@ const { getDatabase } = require('../src/database/connection');
 const { migrate } = require('../src/database/migrate');
 const events = require('../src/modules/events/events.service');
 const eventsRepo = require('../src/modules/events/events.repository');
+const customEventWizard = require('../src/modules/events/customEventWizard.service');
 const finance = require('../src/modules/finance/finance.service');
 const financeRepo = require('../src/modules/finance/finance.repository');
 const deposit = require('../src/modules/deposit/deposit.service');
@@ -337,6 +338,76 @@ test('verificacao da guild le roster TSV e exige 30 minutos de voz com alguma pr
   const endsAt = '2026-07-24T18:00:00.000Z';
   assert.equal(guildReverification.calculateVoiceTime(sessions, startsAt, endsAt).get('player'), 1860);
   assert.equal(guildReverification.calculateStaffOverlap(sessions, ['staff'], startsAt, endsAt).get('player'), 60);
+});
+
+test('evento comum reserva a ultima vaga DPS para o Looter', async () => {
+  const harness = createDiscordHarness();
+  const event = await events.createEventFromFields(harness.interaction('creator-looter'), {
+    creatorId: 'creator-looter',
+    title: 'Evento com looter',
+    description: 'T6 equivalente',
+    location: 'Bridgewatch',
+    scheduledTime: '18:30',
+    tankSlots: 0,
+    healerSlots: 0,
+    supportSlots: 0,
+    dpsSlots: 3,
+    postChannelId: 'test-events'
+  });
+
+  const description = harness.sentMessages[0].payload.embeds[0].data.description;
+  assert.match(description, /DPS 1/);
+  assert.match(description, /DPS 2/);
+  assert.match(description, /Looter/);
+  assert.doesNotMatch(description, /DPS 3/);
+  assert.match(description, /Javali Espectral/);
+  assert.match(description, /sacos do chao/);
+  assert.equal(event.dps_slots, 3);
+});
+
+test('evento personalizado cria telas dinamicas e salva detalhes por vaga', async () => {
+  const harness = createDiscordHarness();
+  const draft = customEventWizard.createDraft({
+    creatorId: 'creator-custom',
+    title: 'Fame Farm Personalizada',
+    timeRange: 'das 18:30 as 20:30',
+    day: '20/07',
+    description: 'T6 equivalente',
+    composition: '2,2,2,14'
+  });
+  customEventWizard.saveDetails({
+    id: draft.id,
+    creatorId: 'creator-custom',
+    lootRules: 'Full loot split; retiramos regear e dividimos o restante em prata',
+    consumables: '4x Giga Pot T7 / 2x Omelete Avaloniano T7',
+    mount: '120%+'
+  });
+
+  assert.equal(draft.slotDefinitions.length, 20);
+  assert.equal(customEventWizard.pageCount(draft), 4);
+  assert.equal(draft.slotDefinitions.at(-1).fieldLabel, 'Looter (ultima vaga DPS)');
+  for (let page = 0; page < customEventWizard.pageCount(draft); page += 1) {
+    const current = customEventWizard.slotPage({ id: draft.id, creatorId: 'creator-custom', page });
+    customEventWizard.saveSlotPage({
+      id: draft.id,
+      creatorId: 'creator-custom',
+      page,
+      values: current.slots.map((slot) => `${slot.fieldLabel} build`)
+    });
+  }
+
+  const event = await events.createCustomEventFromDraft(harness.interaction('creator-custom'), draft);
+  const message = [...harness.messages.values()][0];
+  const description = message.payload.embeds[0].data.description;
+  assert.match(description, /20\/07 das 18:30 as 20:30/);
+  assert.match(description, /Full loot split/);
+  assert.match(description, /Giga Pot T7/);
+  assert.match(description, /Montaria:\*\* 120%\+/);
+  assert.match(description, /Tank 1 build/);
+  assert.match(description, /Looter \(ultima vaga DPS\) build/);
+  assert.equal(eventsRepo.getCustomEventMeta(event.id).mount_requirement, '120%+');
+  assert.equal(eventsRepo.listCustomEventSlots(event.id).length, 20);
+  customEventWizard.removeDraft(draft.id, 'creator-custom');
 });
 
 test('fluxo local cobre evento, voz, loot split, aprovacao, ledger, saque e deposito', async () => {

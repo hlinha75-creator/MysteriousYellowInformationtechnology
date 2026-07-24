@@ -297,27 +297,48 @@ function commonEventAnnouncement(event, participants, options = {}) {
   const totalSlots = eventRoles.reduce((total, role) => total + Number(event[roleConfigs[role].slots] || 0), 0);
   const active = participants.filter((participant) => !participant.is_spectator);
   const spectators = participants.filter((participant) => participant.is_spectator);
+  const customMeta = repo.getCustomEventMeta(event.id);
+  const customSlots = customMeta ? repo.listCustomEventSlots(event.id) : [];
   const filled = active.length;
   const timing = options.running
     ? `em andamento - ${options.elapsed || '0m'}`
-    : eventTimeLabel(event.scheduled_time);
+    : customMeta
+      ? `${customMeta.event_day} ${customMeta.time_range}`
+      : eventTimeLabel(event.scheduled_time);
   const lines = [
     `## ${eventEmoji(event)} ${title}${timing ? ` (${timing})` : ''}`,
     '',
-    `**Local:** ${event.location || 'Nao informado'}`,
-    `**Build:** ${event.description || 'Nao informado'}`,
+    ...(customMeta
+      ? customEventDetailLines(event, customMeta)
+      : [
+          `**Local:** ${event.location || 'Nao informado'}`,
+          `**Build:** ${event.description || 'Nao informado'}`
+        ]),
     '',
     `### Composicao (${filled}/${totalSlots})`,
     '',
-    ...compositionLines(event, active),
+    ...compositionLines(event, active, customSlots),
     '',
+    ...(Number(event.dps_slots || 0) > 0
+      ? ['**Looter:** ultima vaga de DPS - levar Javali Espectral e recolher os sacos do chao.', '']
+      : []),
     `**Espectadores:** ${spectators.length ? spectators.map((participant) => `<@${participant.discord_id}>`).join(', ') : 'Vazio'}`
   ];
   return lines.join('\n').slice(0, 4096);
 }
 
-function compositionLines(event, participants) {
+function customEventDetailLines(event, customMeta) {
+  return [
+    `**Descricao:** ${event.description || 'Nao informado'}`,
+    `**Loot:** ${customMeta.loot_rules || 'Nao informado'}`,
+    `**Consumiveis:** ${customMeta.consumables || 'Nao informado'}`,
+    `**Montaria:** ${customMeta.mount_requirement || 'Nao informado'}`
+  ];
+}
+
+function compositionLines(event, participants, customSlots = []) {
   const remaining = new Map();
+  const labels = new Map(customSlots.map((slot) => [`${slot.role}:${slot.slot_index}`, slot.slot_label]));
   for (const role of eventRoles) {
     remaining.set(role, participants.filter((participant) => participant.role === role));
   }
@@ -326,12 +347,19 @@ function compositionLines(event, participants) {
     const slots = Number(event[roleConfigs[role].slots] || 0);
     return Array.from({ length: slots }, (_, index) => {
       const participant = remaining.get(role).shift();
-      return `${roleLineLabel(role, index, slots)} > ${participant ? `<@${participant.discord_id}>` : 'Vazio'}`;
+      const customLabel = labels.get(`${role}:${index + 1}`);
+      const slotLabel = customLabel
+        ? `${roleLineLabel(role, index, slots)} - ${customLabel}`
+        : roleLineLabel(role, index, slots);
+      return `${slotLabel} > ${participant ? `<@${participant.discord_id}>` : 'Vazio'}`;
     });
   });
 }
 
 function roleLineLabel(role, index, total) {
+  if (role === 'dps' && index === total - 1) {
+    return '\u{1F417} **Looter**';
+  }
   const labels = {
     tank: '\u{1F6E1}\uFE0F **Tank**',
     healer: '\u270B **Healer**',
@@ -541,6 +569,31 @@ async function createEventFromModal(interaction, fields) {
     creatorId: interaction.user.id,
     ...fields
   });
+}
+
+async function createCustomEventFromDraft(interaction, draft) {
+  const event = await createEventFromFields(interaction, {
+    creatorId: draft.creatorId,
+    title: draft.title,
+    description: draft.description,
+    location: 'Pergunte na Call',
+    scheduledTime: `${draft.day} ${draft.timeRange}`,
+    tankSlots: draft.composition.tank,
+    healerSlots: draft.composition.healer,
+    supportSlots: draft.composition.support,
+    dpsSlots: draft.composition.dps
+  });
+  repo.createCustomEventMeta({
+    eventId: event.id,
+    eventDay: draft.day,
+    timeRange: draft.timeRange,
+    lootRules: draft.lootRules,
+    consumables: draft.consumables,
+    mountRequirement: draft.mount,
+    slots: draft.slotDefinitions
+  });
+  await refreshEventMessage(interaction.client, event.id);
+  return repo.getEvent(event.id);
 }
 
 async function createRaidAvalonFullFromModal(interaction, fields) {
@@ -2262,6 +2315,7 @@ module.exports = {
   createPostEventReviewSpace,
   createEventFromFields,
   createEventFromModal,
+  createCustomEventFromDraft,
   createRaidAvalonFullFromModal,
   createWorldBossFromModal,
   deleteEventMessage,

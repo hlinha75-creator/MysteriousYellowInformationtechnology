@@ -32,6 +32,7 @@ const panels = [
     components: [
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('panel:create_event').setLabel('Criar Evento').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('panel:create_custom_event').setLabel('Personalizado').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('panel:create_raid_full').setLabel('Raid Full').setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId('panel:create_world_boss').setLabel('World Boss').setStyle(ButtonStyle.Danger)
       )

@@ -3,6 +3,7 @@ const { can, hasRole, isOwner } = require('../config/permissions');
 const ids = require('../config/ids');
 const eventsRepo = require('../modules/events/events.repository');
 const events = require('../modules/events/events.service');
+const customEventWizard = require('../modules/events/customEventWizard.service');
 const financeRepo = require('../modules/finance/finance.repository');
 const finance = require('../modules/finance/finance.service');
 const audit = require('../modules/audit/audit.repository');
@@ -157,6 +158,35 @@ async function handleButton(interaction) {
   }
 
   if (scope === 'giveaway') return giveaways.handleButton(interaction);
+
+  if (scope === 'custom_event' && action === 'details') {
+    const draft = customEventWizard.getDraft(id, interaction.user.id);
+    return showModal(interaction, `event:custom_details:${draft.id}`, 'Evento personalizado - detalhes', [
+      textInput('lootRules', 'Loot', false, 'Ex: full loot split; retirar regear e dividir o restante', TextInputStyle.Paragraph),
+      textInput('consumables', 'Consumiveis', false, 'Ex: 4x Giga Pot T7 / 2x Omelete Avaloniano T7', TextInputStyle.Paragraph),
+      textInput('mount', 'Montaria', false, 'Ex: 120%+')
+    ]);
+  }
+
+  if (scope === 'custom_event' && action === 'slots') {
+    const slotPage = customEventWizard.slotPage({ id, creatorId: interaction.user.id, page: extra });
+    const inputs = slotPage.slots.map((slot, index) => {
+      const input = textInput(`slot_${index}`, slot.fieldLabel, false, 'Ex: arma, build ou observacao da vaga');
+      if (slot.value) input.setValue(slot.value);
+      return input;
+    });
+    return showModal(
+      interaction,
+      `event:custom_slots:${id}:${slotPage.page}`,
+      `Composicao ${slotPage.page + 1}/${slotPage.totalPages}`,
+      inputs
+    );
+  }
+
+  if (scope === 'custom_event' && action === 'cancel') {
+    customEventWizard.removeDraft(id, interaction.user.id);
+    return interaction.update({ content: 'Criacao do evento personalizado cancelada.', components: [] });
+  }
 
   if (interaction.customId === hideoutDefense.START_BUTTON_ID) {
     if (!isOwner(interaction.member) && !hasRole(interaction.member, 'adm')) {
@@ -337,6 +367,19 @@ async function handleButton(interaction) {
       textInput('scheduledTime', 'Data/Hora', false, 'Ex: 23/06 15:00 utc'),
       textInput('description', 'Tier da Build', false, 'Ex: T8 equivalente + set Skip'),
       textInput('slots', 'Tank, Healer, Suporte, DPS', false, 'Ex: 1,1,1,3')
+    ]);
+  }
+
+  if (interaction.customId === 'panel:create_custom_event') {
+    if (!can(interaction.member, 'createEvent')) {
+      return interaction.reply({ content: 'Voce nao tem permissao para criar evento personalizado.', flags: MessageFlags.Ephemeral });
+    }
+    return showModal(interaction, 'event:custom_basic', 'Evento personalizado - inicio', [
+      textInput('title', 'Titulo', true, 'Ex: Fame Farm T6'),
+      textInput('timeRange', 'Horario', true, 'Ex: das 18:30 as 20:30'),
+      textInput('day', 'Dia', true, 'Ex: 20/07'),
+      textInput('description', 'Descricao', false, 'Ex: T6 equivalente', TextInputStyle.Paragraph),
+      textInput('composition', 'Tank, Healer, Suporte, DPS', true, 'Ex: 2,2,2,14')
     ]);
   }
 

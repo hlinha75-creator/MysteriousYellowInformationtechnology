@@ -288,6 +288,51 @@ function getWorldBossEventMeta(eventId) {
   return getDatabase().prepare('SELECT * FROM world_boss_events WHERE event_id = ?').get(eventId);
 }
 
+function createCustomEventMeta({ eventId, eventDay, timeRange, lootRules, consumables, mountRequirement, slots }) {
+  return transaction(() => {
+    const db = getDatabase();
+    db.prepare(`
+      INSERT INTO custom_events
+        (event_id, event_day, time_range, loot_rules, consumables, mount_requirement)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(event_id) DO UPDATE SET
+        event_day = excluded.event_day,
+        time_range = excluded.time_range,
+        loot_rules = excluded.loot_rules,
+        consumables = excluded.consumables,
+        mount_requirement = excluded.mount_requirement,
+        updated_at = CURRENT_TIMESTAMP
+    `).run(eventId, eventDay, timeRange, lootRules, consumables, mountRequirement);
+
+    db.prepare('DELETE FROM custom_event_slots WHERE event_id = ?').run(eventId);
+    const insertSlot = db.prepare(`
+      INSERT INTO custom_event_slots (event_id, role, slot_index, slot_label)
+      VALUES (?, ?, ?, ?)
+    `);
+    for (const slot of slots || []) {
+      insertSlot.run(eventId, slot.role, slot.index, slot.value || null);
+    }
+    return getCustomEventMeta(eventId);
+  })();
+}
+
+function getCustomEventMeta(eventId) {
+  return getDatabase().prepare('SELECT * FROM custom_events WHERE event_id = ?').get(eventId);
+}
+
+function listCustomEventSlots(eventId) {
+  return getDatabase()
+    .prepare(`
+      SELECT *
+      FROM custom_event_slots
+      WHERE event_id = ?
+      ORDER BY
+        CASE role WHEN 'tank' THEN 1 WHEN 'healer' THEN 2 WHEN 'support' THEN 3 WHEN 'dps' THEN 4 ELSE 99 END,
+        slot_index
+    `)
+    .all(eventId);
+}
+
 function listWorldBossAssignments(eventId) {
   return getDatabase()
     .prepare('SELECT * FROM world_boss_assignments WHERE event_id = ? ORDER BY slot_key')
@@ -545,6 +590,7 @@ module.exports = {
   addCareerPointTransaction,
   clearCareerPointData,
   countCareerPointTransactions,
+  createCustomEventMeta,
   createEvent,
   createRaidAvalonEventMeta,
   createWorldBossEventMeta,
@@ -552,6 +598,7 @@ module.exports = {
   getEvent,
   getEventByCode,
   getEventByVoiceChannel,
+  getCustomEventMeta,
   getOpenVoiceSession,
   getParticipant,
   getPersistentMessage,
@@ -563,6 +610,7 @@ module.exports = {
   listActiveEvents,
   listInteractiveEvents,
   listApprovedEventsForCareer,
+  listCustomEventSlots,
   listEventsWithTempRoles,
   listExpiredReviewChannels,
   listPendingWarningEvents,

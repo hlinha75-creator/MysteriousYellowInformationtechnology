@@ -560,8 +560,17 @@ Interface de eventos:
 - status usa simbolo visual;
 - vagas usam cores por funcao: azul Tank, verde Healer, amarelo Suporte, vermelho DPS;
 - inscricao em evento aberto usa botoes por funcao em vez de menu select;
+- em eventos comuns, a ultima vaga da quantidade informada de DPS aparece como Looter;
+- o Looter ocupa uma vaga DPS e deve levar Javali Espectral e recolher os sacos de prata do chao;
 - Discord nao tem botao amarelo nativo, entao Suporte usa emoji amarelo em botao cinza;
 - ao iniciar evento, a sala de voz usa o titulo do evento como nome.
+- o painel de criar evento possui a opcao `Personalizado`;
+- evento personalizado usa um assistente em etapas: dados basicos, loot/requisitos e composicao;
+- dados basicos do personalizado: titulo, horario inicial/final, dia, descricao e composicao Tank/Healer/Suporte/DPS;
+- requisitos do personalizado: regra de loot, consumiveis e montaria;
+- as telas de composicao sao geradas conforme o total de vagas, com ate 5 vagas por modal por causa do limite do Discord;
+- cada vaga personalizada aceita arma, build ou observacao propria e fica salva no banco;
+- exemplo `2,2,2,14`: 20 vagas distribuidas em 4 telas, de Tank 1 ate DPS 14, sendo a ultima DPS o Looter;
 - para usar imagens no bot real do Discord em botoes/textos, enviar como emojis personalizados do servidor e cadastrar os IDs no codigo.
 - Raid Avalon Full usa botoes por funcao: Tank, Healer, Suporte, DPS;
 - ao clicar numa funcao, abre menu com slots especificos livres daquela funcao;
@@ -599,6 +608,21 @@ Antes de terminar uma alteracao:
 - se mexer em banco, garantir migracao segura;
 - nao alterar `.env`;
 - nao commitar banco real.
+
+## Backlog Futuro
+
+Itens anotados para implementar depois. Estes requisitos ainda nao representam funcionalidade pronta.
+
+### Dashboard Web - Discloud Platinum
+
+- preparar o bot e a arquitetura para usar um dashboard web hospedado com a versao Platinum da Discloud;
+- o dashboard deve facilitar para Staff, Caller e demais cargos autorizados gerenciarem:
+  - saldos;
+  - membros;
+  - eventos;
+  - configuracoes e operacao do bot;
+- definir permissoes por cargo e manter auditoria nas operacoes sensiveis, especialmente alteracoes de saldo;
+- este item e planejamento futuro aprovado e nao deve reativar o dashboard/API antigo sem uma implementacao nova e explicitamente solicitada.
 
 ## Duvidas Pendentes Para Confirmar
 

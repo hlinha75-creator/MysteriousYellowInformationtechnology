@@ -1429,6 +1429,37 @@ const migrations = [
         );
       `);
     }
+  },
+  {
+    version: 48,
+    name: 'custom_events',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS custom_events (
+          event_id INTEGER PRIMARY KEY,
+          event_day TEXT NOT NULL,
+          time_range TEXT NOT NULL,
+          loot_rules TEXT,
+          consumables TEXT,
+          mount_requirement TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS custom_event_slots (
+          event_id INTEGER NOT NULL,
+          role TEXT NOT NULL,
+          slot_index INTEGER NOT NULL,
+          slot_label TEXT,
+          PRIMARY KEY (event_id, role, slot_index),
+          FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_custom_event_slots_event_role
+          ON custom_event_slots (event_id, role, slot_index);
+      `);
+    }
   }
 ];
 
