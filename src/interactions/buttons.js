@@ -551,6 +551,29 @@ async function handleButton(interaction) {
     }
     if (action === 'join_role') {
       const role = extra;
+      if (eventsRepo.getCustomEventMeta(eventId)) {
+        const options = events.customEventSlotOptions(eventId, role, interaction.user.id);
+        if (options.length === 0) {
+          return interaction.reply({ content: `Nao ha vagas livres para ${roleLabel(role)}.`, flags: MessageFlags.Ephemeral });
+        }
+        const selects = [];
+        for (let start = 0; start < options.length; start += 25) {
+          const page = Math.floor(start / 25) + 1;
+          const pageOptions = options.slice(start, start + 25);
+          const pageSuffix = options.length > 25 ? ` (${page}/${Math.ceil(options.length / 25)})` : '';
+          selects.push(new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder()
+              .setCustomId(`event_custom_slot:join:${eventId}:${page}`)
+              .setPlaceholder(`Escolha uma vaga de ${roleLabel(role)}${pageSuffix}`)
+              .addOptions(pageOptions)
+          ));
+        }
+        return interaction.reply({
+          content: `Escolha exatamente qual vaga de **${roleLabel(role)}** voce quer:`,
+          components: selects,
+          flags: MessageFlags.Ephemeral
+        });
+      }
       try {
         await events.joinEvent(interaction, eventId, role);
       } catch (error) {

@@ -89,20 +89,29 @@ function updateEvent(id, patch) {
   return getEvent(id);
 }
 
-function upsertParticipant({ eventId, discordId, role, isSpectator = 0, joinedAt = new Date().toISOString() }) {
+function upsertParticipant({
+  eventId,
+  discordId,
+  role,
+  isSpectator = 0,
+  customSlotIndex = null,
+  joinedAt = new Date().toISOString()
+}) {
   return getDatabase()
     .prepare(`
-      INSERT INTO event_participants (event_id, discord_id, role, is_spectator, joined_at)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO event_participants
+        (event_id, discord_id, role, is_spectator, custom_slot_index, joined_at)
+      VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(event_id, discord_id) DO UPDATE SET
         role = excluded.role,
         is_spectator = excluded.is_spectator,
+        custom_slot_index = excluded.custom_slot_index,
         joined_at = CASE
           WHEN event_participants.is_spectator = 1 AND excluded.is_spectator = 0 THEN excluded.joined_at
           ELSE event_participants.joined_at
         END
     `)
-    .run(eventId, discordId, role, isSpectator ? 1 : 0, joinedAt);
+    .run(eventId, discordId, role, isSpectator ? 1 : 0, customSlotIndex, joinedAt);
 }
 
 function removeParticipant({ eventId, discordId }) {

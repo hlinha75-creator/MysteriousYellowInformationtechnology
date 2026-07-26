@@ -143,14 +143,13 @@ async function handleModal(interaction) {
       consumables: fieldOrDefault(interaction, 'consumables', ''),
       mount: fieldOrDefault(interaction, 'mount', '')
     });
-    return interaction.reply({
+    return updateCustomWizardMessage(interaction, {
       content: `Detalhes salvos. Preencha agora a composicao (${draft.slotDefinitions.length} vagas).`,
       components: [customEventStepRow(
         `custom_event:slots:${draft.id}:0`,
         `Composicao 1/${customEventWizard.pageCount(draft)}`,
         draft.id
-      )],
-      flags: MessageFlags.Ephemeral
+      )]
     });
   }
 
@@ -166,22 +165,24 @@ async function handleModal(interaction) {
     });
     const nextPage = saved.page + 1;
     if (nextPage < saved.totalPages) {
-      return interaction.reply({
+      return updateCustomWizardMessage(interaction, {
         content: `Composicao ${saved.page + 1}/${saved.totalPages} salva.`,
         components: [customEventStepRow(
           `custom_event:slots:${draftId}:${nextPage}`,
           `Composicao ${nextPage + 1}/${saved.totalPages}`,
           draftId
-        )],
-        flags: MessageFlags.Ephemeral
+        )]
       });
     }
 
-    const acknowledged = await safeDeferReply(interaction, { flags: MessageFlags.Ephemeral });
+    const acknowledged = await deferCustomWizardMessage(interaction);
     if (!acknowledged) return null;
     const event = await events.createCustomEventFromDraft(interaction, saved.draft);
     customEventWizard.removeDraft(draftId, interaction.user.id);
-    return safeEditReply(interaction, { content: `Evento personalizado ${event.event_code} criado.` });
+    return safeEditReply(interaction, {
+      content: `Evento personalizado ${event.event_code} criado.`,
+      components: []
+    });
   }
 
   if (interaction.customId === 'event:create') {
@@ -593,4 +594,25 @@ function customEventStepRow(nextCustomId, nextLabel, draftId) {
     new ButtonBuilder().setCustomId(nextCustomId).setLabel(nextLabel).setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(`custom_event:cancel:${draftId}`).setLabel('Cancelar').setStyle(ButtonStyle.Secondary)
   );
+}
+
+function updateCustomWizardMessage(interaction, payload) {
+  if (interaction.isFromMessage?.()) {
+    return interaction.update(payload);
+  }
+  return interaction.reply({ ...payload, flags: MessageFlags.Ephemeral });
+}
+
+async function deferCustomWizardMessage(interaction) {
+  if (!interaction.isFromMessage?.()) {
+    return safeDeferReply(interaction, { flags: MessageFlags.Ephemeral });
+  }
+  if (interaction.deferred || interaction.replied) return true;
+  try {
+    await interaction.deferUpdate();
+    return true;
+  } catch (error) {
+    if (error?.code === 10062 || error?.code === 40060) return false;
+    throw error;
+  }
 }

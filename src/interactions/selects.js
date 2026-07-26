@@ -1,4 +1,13 @@
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  MessageFlags,
+  ModalBuilder,
+  StringSelectMenuBuilder,
+  TextInputBuilder,
+  TextInputStyle
+} = require('discord.js');
 const events = require('../modules/events/events.service');
 const eventsRepo = require('../modules/events/events.repository');
 const deposit = require('../modules/deposit/deposit.service');
@@ -13,6 +22,16 @@ async function handleSelect(interaction) {
 
   if (scope === 'event' && action === 'join') {
     const role = interaction.values[0];
+    if (eventsRepo.getCustomEventMeta(Number(id))) {
+      const options = events.customEventSlotOptions(Number(id), role, interaction.user.id);
+      if (options.length === 0) {
+        return interaction.update({ content: `Nao ha vagas livres para ${roleLabel(role)}.`, components: [] });
+      }
+      return interaction.update({
+        content: `Agora escolha exatamente qual vaga de **${roleLabel(role)}** voce quer:`,
+        components: customSlotSelectRows(Number(id), role, options)
+      });
+    }
     try {
       await events.joinEvent(interaction, Number(id), role);
     } catch (error) {
@@ -22,6 +41,22 @@ async function handleSelect(interaction) {
       throw error;
     }
     return interaction.reply({ content: `Voce entrou como ${roleLabel(role)}.`, flags: MessageFlags.Ephemeral });
+  }
+
+  if (scope === 'event_custom_slot' && action === 'join') {
+    const [role, slotIndex] = interaction.values[0].split('|');
+    try {
+      await events.joinCustomEventSlot(interaction, Number(id), role, Number(slotIndex));
+    } catch (error) {
+      if (String(error.message || '').includes('vaga')) {
+        return interaction.reply({ content: error.message, flags: MessageFlags.Ephemeral });
+      }
+      throw error;
+    }
+    const event = eventsRepo.getEvent(Number(id));
+    const isLooter = role === 'dps' && Number(slotIndex) === Number(event?.dps_slots);
+    const label = isLooter ? 'Looter' : `${roleLabel(role)} ${slotIndex}`;
+    return interaction.update({ content: `Voce entrou na vaga **${label}**.`, components: [] });
   }
 
   if (scope === 'event_raid_weapon_select' && action === 'weapon') {
@@ -229,4 +264,19 @@ function worldBossConfirmationText(slotLabel) {
     '\u2022 O foco e aprender, adaptar o content e criar constancia.',
     '\u2022 Scout Mobile com funcao DPS pode acumular as duas vagas.'
   ].join('\n');
+}
+
+function customSlotSelectRows(eventId, role, options) {
+  const rows = [];
+  for (let start = 0; start < options.length; start += 25) {
+    const page = Math.floor(start / 25) + 1;
+    const pageSuffix = options.length > 25 ? ` (${page}/${Math.ceil(options.length / 25)})` : '';
+    rows.push(new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(`event_custom_slot:join:${eventId}:${page}`)
+        .setPlaceholder(`Escolha uma vaga de ${roleLabel(role)}${pageSuffix}`)
+        .addOptions(options.slice(start, start + 25))
+    ));
+  }
+  return rows;
 }

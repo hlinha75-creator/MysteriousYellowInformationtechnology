@@ -1460,6 +1460,29 @@ const migrations = [
           ON custom_event_slots (event_id, role, slot_index);
       `);
     }
+  },
+  {
+    version: 49,
+    name: 'retire_sunstrand_hideout_defense',
+    up(db) {
+      db.prepare('DELETE FROM operation_reminders WHERE reminder_key = ?')
+        .run('hideout-defense:sunstrand-shoal:2026-07-22');
+    }
+  },
+  {
+    version: 50,
+    name: 'custom_event_participant_slots',
+    up(db) {
+      const columns = db.prepare('PRAGMA table_info(event_participants)').all().map((column) => column.name);
+      if (!columns.includes('custom_slot_index')) {
+        db.exec('ALTER TABLE event_participants ADD COLUMN custom_slot_index INTEGER');
+      }
+      db.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_event_participants_custom_slot
+          ON event_participants (event_id, role, custom_slot_index)
+          WHERE custom_slot_index IS NOT NULL AND is_spectator = 0;
+      `);
+    }
   }
 ];
 

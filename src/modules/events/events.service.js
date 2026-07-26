@@ -340,14 +340,19 @@ function compositionLines(event, participants, customSlots = []) {
   const remaining = new Map();
   const labels = new Map(customSlots.map((slot) => [`${slot.role}:${slot.slot_index}`, slot.slot_label]));
   for (const role of eventRoles) {
-    remaining.set(role, participants.filter((participant) => participant.role === role));
+    remaining.set(role, participants.filter((participant) => (
+      participant.role === role && participant.custom_slot_index == null
+    )));
   }
 
   return eventRoles.flatMap((role) => {
     const slots = Number(event[roleConfigs[role].slots] || 0);
     return Array.from({ length: slots }, (_, index) => {
-      const participant = remaining.get(role).shift();
-      const customLabel = labels.get(`${role}:${index + 1}`);
+      const slotIndex = index + 1;
+      const participant = participants.find((candidate) => (
+        candidate.role === role && Number(candidate.custom_slot_index) === slotIndex
+      )) || remaining.get(role).shift();
+      const customLabel = labels.get(`${role}:${slotIndex}`);
       const slotLabel = customLabel
         ? `${roleLineLabel(role, index, slots)} - ${customLabel}`
         : roleLineLabel(role, index, slots);
@@ -742,6 +747,83 @@ async function joinEvent(interaction, eventId, role) {
     metadata: { voiceResult }
   });
   await refreshEventMessage(interaction.client, eventId);
+}
+
+function customEventSlotOptions(eventId, role, discordId) {
+  const event = repo.getEvent(eventId);
+  if (!event || !repo.getCustomEventMeta(eventId) || !eventRoles.includes(role)) return [];
+  const participants = repo.listParticipants(eventId);
+  const occupied = new Map(
+    participants
+      .filter((participant) => (
+        !participant.is_spectator
+        && participant.role === role
+        && participant.custom_slot_index != null
+      ))
+      .map((participant) => [Number(participant.custom_slot_index), participant.discord_id])
+  );
+  const slots = repo.listCustomEventSlots(eventId).filter((slot) => slot.role === role);
+  return slots
+    .filter((slot) => !occupied.has(slot.slot_index) || occupied.get(slot.slot_index) === discordId)
+    .map((slot) => {
+      const isLooter = role === 'dps' && slot.slot_index === Number(event.dps_slots);
+      const baseLabel = isLooter ? 'Looter' : `${roleButtonLabel(role)} ${slot.slot_index}`;
+      return {
+        label: String(slot.slot_label ? `${baseLabel} - ${slot.slot_label}` : baseLabel).slice(0, 100),
+        value: `${role}|${slot.slot_index}`,
+        description: occupied.get(slot.slot_index) === discordId ? 'Sua vaga atual' : 'Vaga livre'
+      };
+    });
+}
+
+async function joinCustomEventSlot(interaction, eventId, role, slotIndex) {
+  const event = repo.getEvent(eventId);
+  if (!event || !['created', 'running'].includes(event.status)) throw new Error('Evento nao esta aberto.');
+  if (!repo.getCustomEventMeta(eventId)) throw new Error('Esse evento nao e personalizado.');
+  const slot = repo.listCustomEventSlots(eventId).find((candidate) => (
+    candidate.role === role && candidate.slot_index === Number(slotIndex)
+  ));
+  if (!slot) throw new Error('Essa vaga nao existe neste evento.');
+  const occupied = repo.listParticipants(eventId).find((participant) => (
+    !participant.is_spectator
+    && participant.role === role
+    && Number(participant.custom_slot_index) === Number(slotIndex)
+    && participant.discord_id !== interaction.user.id
+  ));
+  if (occupied) throw new Error('Essa vaga acabou de ser ocupada. Escolha outra.');
+
+  const previous = repo.getParticipant({ eventId, discordId: interaction.user.id });
+  try {
+    repo.upsertParticipant({
+      eventId,
+      discordId: interaction.user.id,
+      role,
+      customSlotIndex: Number(slotIndex),
+      isSpectator: 0
+    });
+  } catch (error) {
+    if (String(error.code || '').startsWith('SQLITE_CONSTRAINT')) {
+      throw new Error('Essa vaga acabou de ser ocupada. Escolha outra.');
+    }
+    throw error;
+  }
+  await addEventRoleToMember(interaction.guild, event, interaction.user.id).catch(() => {});
+  let voiceResult = null;
+  if (event.status === 'running') voiceResult = await ensureParticipantVoiceSession(interaction, event);
+  audit.createAuditLog({
+    type: previous?.is_spectator ? 'event_spectator_promoted' : 'event_joined',
+    actorId: interaction.user.id,
+    targetId: String(eventId),
+    beforeValue: previous ? JSON.stringify({
+      role: previous.role,
+      slotIndex: previous.custom_slot_index,
+      isSpectator: previous.is_spectator
+    }) : null,
+    afterValue: JSON.stringify({ role, slotIndex: Number(slotIndex) }),
+    metadata: { voiceResult }
+  });
+  await refreshEventMessage(interaction.client, eventId);
+  return slot;
 }
 
 function canJoinEventRole(event, discordId, role) {
@@ -2323,6 +2405,7 @@ module.exports = {
   finishEvent,
   grantRaidAvalonRewards,
   joinEvent,
+  joinCustomEventSlot,
   joinRaidAvalonHelper,
   joinRaidAvalonRole,
   joinWorldBossSlot,
@@ -2354,5 +2437,6 @@ module.exports = {
   startEvent,
   worldBossMemberSlotOptions,
   worldBossSlot,
-  worldBossSlotOptions
+  worldBossSlotOptions,
+  customEventSlotOptions
 };

@@ -641,7 +641,10 @@ async function processSchedule(client, now = new Date()) {
   }
 }
 
-async function postAnnouncementIfNeeded(client) {
+async function postAnnouncementIfNeeded(client, now = new Date()) {
+  if (now >= DEFENSE_END_AT) {
+    return { message: null, created: false, expired: true };
+  }
   const db = getDatabase();
   const existing = db.prepare(`
     SELECT message_id, channel_id

@@ -19,6 +19,7 @@ Prioridade do projeto:
 
 Para simplificar o bot, nao manter nem recriar sem decisao explicita:
 - dashboard web/local antigo;
+- anuncio e agendamento unico da defesa da HO em Sunstrand Shoal de 22/07/2026;
 - leiloes;
 - enquetes manuais;
 - enquete diaria Black For-Fun;
@@ -569,6 +570,7 @@ Interface de eventos:
 - dados basicos do personalizado: titulo, horario inicial/final, dia, descricao e composicao Tank/Healer/Suporte/DPS;
 - requisitos do personalizado: regra de loot, consumiveis e montaria;
 - as telas de composicao sao geradas conforme o total de vagas, com ate 5 vagas por modal por causa do limite do Discord;
+- o assistente personalizado reutiliza uma unica mensagem efemera, substituindo a etapa anterior para nao acumular botoes antigos;
 - cada vaga personalizada aceita arma, build ou observacao propria e fica salva no banco;
 - exemplo `2,2,2,14`: 20 vagas distribuidas em 4 telas, de Tank 1 ate DPS 14, sendo a ultima DPS o Looter;
 - para usar imagens no bot real do Discord em botoes/textos, enviar como emojis personalizados do servidor e cadastrar os IDs no codigo.

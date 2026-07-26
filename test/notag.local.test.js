@@ -67,6 +67,16 @@ test('aviso da defesa da HO controla leitura e participação separadamente', ()
   assert.deepEqual(participation.participations, []);
 });
 
+test('defesa da HO encerrada nao volta a publicar o anuncio', async () => {
+  const harness = createDiscordHarness();
+  const result = await hideoutDefense.postAnnouncementIfNeeded(
+    harness.client,
+    new Date('2026-07-24T22:19:54.373Z')
+  );
+  assert.deepEqual(result, { message: null, created: false, expired: true });
+  assert.equal(harness.sentMessages.length, 0);
+});
+
 test('defesa da HO cria tag, lembra inscritos, avisa ADM e move conectados', async () => {
   hideoutDefense.toggleAcknowledgement('aware');
   hideoutDefense.toggleParticipation('fighter');
@@ -373,7 +383,7 @@ test('evento personalizado cria telas dinamicas e salva detalhes por vaga', asyn
     timeRange: 'das 18:30 as 20:30',
     day: '20/07',
     description: 'T6 equivalente',
-    composition: '2,2,2,14'
+    composition: '1,1,1,17'
   });
   customEventWizard.saveDetails({
     id: draft.id,
@@ -407,6 +417,20 @@ test('evento personalizado cria telas dinamicas e salva detalhes por vaga', asyn
   assert.match(description, /Looter \(ultima vaga DPS\) build/);
   assert.equal(eventsRepo.getCustomEventMeta(event.id).mount_requirement, '120%+');
   assert.equal(eventsRepo.listCustomEventSlots(event.id).length, 20);
+
+  const dpsOptions = events.customEventSlotOptions(event.id, 'dps', 'custom-dps-7');
+  assert.equal(dpsOptions.length, 17);
+  assert.equal(dpsOptions.at(-1).label.startsWith('Looter'), true);
+
+  await events.joinCustomEventSlot(harness.interaction('custom-dps-7'), event.id, 'dps', 7);
+  await events.joinCustomEventSlot(harness.interaction('custom-looter'), event.id, 'dps', 17);
+  const updatedDescription = message.payload.embeds[0].data.description;
+  assert.match(updatedDescription, /DPS 7.*<@custom-dps-7>/);
+  assert.match(updatedDescription, /Looter.*<@custom-looter>/);
+  await assert.rejects(
+    events.joinCustomEventSlot(harness.interaction('custom-dps-conflict'), event.id, 'dps', 7),
+    /vaga acabou de ser ocupada/
+  );
   customEventWizard.removeDraft(draft.id, 'creator-custom');
 });
 
