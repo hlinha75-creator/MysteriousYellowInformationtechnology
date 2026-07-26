@@ -1,7 +1,6 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const ids = require('../../config/ids');
-const { getDatabase, transaction } = require('../../database/connection');
-const finance = require('../finance/finance.service');
+const { getDatabase } = require('../../database/connection');
 const { estimateCombatValues } = require('./marketValue.service');
 
 const DEFAULT_API_BASE = 'https://gameinfo-ams.albiononline.com/api/gameinfo';
@@ -11,9 +10,7 @@ const PAGE_SIZE = 51;
 const MAX_PAGES = 20;
 const API_TIMEOUT_MS = 45000;
 const API_RETRIES = 3;
-const VENGEANCE_REWARD = 100000;
 const VENGEANCE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
-const MAX_DAILY_VENGEANCE_REWARDS = 3;
 let polling = false;
 let lastHealthLogAt = 0;
 
@@ -136,64 +133,49 @@ function findVengeanceMatches(db, event, now = new Date()) {
   return rows.length ? { avenger, rows } : null;
 }
 
-async function processVengeance(client, channel, db, event, now = new Date()) {
+async function processVengeance(client, _channel, db, event, now = new Date()) {
   if (db.prepare('SELECT 1 FROM albion_vengeance_rewards WHERE vengeance_event_id = ?').get(event.EventId)) return null;
   const match = findVengeanceMatches(db, event, now);
   if (!match) return null;
-  const rewardedLastDay = db.prepare(`
-    SELECT COUNT(*) AS total FROM albion_vengeance_rewards
-    WHERE avenger_discord_id = ? AND rewarded_at >= datetime('now', '-1 day')
-  `).get(match.avenger.discord_id).total;
-  if (Number(rewardedLastDay) >= MAX_DAILY_VENGEANCE_REWARDS) return null;
 
   const originalIds = match.rows.map((row) => row.original_event_id);
-  awardVengeance(event, match, originalIds);
-
   const mentions = [...new Set(match.rows.map((row) => `<@${row.victim_discord_id}>`))].join(', ');
   const oldest = Math.min(...match.rows.map((row) => new Date(row.occurred_at).getTime()));
   const days = Math.max(0, Math.floor((now.getTime() - oldest) / 86400000));
-  const message = await channel.send({
-    content: mentions,
+  const notagChannel = await client.channels.fetch(ids.channels.notagChat);
+  if (!notagChannel?.isTextBased()) throw new Error(`Canal chat-notag indisponivel: ${ids.channels.notagChat}`);
+  const message = await notagChannel.send({
+    content: `<@${match.avenger.discord_id}> ${mentions}`,
     embeds: [new EmbedBuilder()
       .setColor(0xf1c40f)
       .setTitle('⚔️ Morte vingada!')
       .setDescription(`**${event.Killer.Name}** vingou ${mentions}, eliminando **${event.Victim.Name}**.`)
       .addFields(
         { name: 'Quando foi a morte', value: days === 0 ? 'Hoje' : `Há ${days} dia${days === 1 ? '' : 's'}`, inline: true },
-        { name: 'Recompensa', value: '100k de saldo', inline: true },
+        { name: 'Reconhecimento', value: 'Parabéns pela vingança!', inline: true },
         { name: 'Vingador', value: `<@${match.avenger.discord_id}>`, inline: true }
       )]
   });
-  await finance.notifyPositiveTransactions({
-    client,
-    transactions: [{ userId: match.avenger.discord_id, amount: VENGEANCE_REWARD, reason: `Vingança contra ${event.Victim.Name}` }]
-  });
-  return { messageId: message.id, rewardedUserId: match.avenger.discord_id, originalIds };
+  recordVengeance(db, event, match, originalIds);
+  return { messageId: message.id, recognizedUserId: match.avenger.discord_id, originalIds };
 }
 
-const awardVengeance = transaction((event, match, originalIds) => {
-  finance.applyManyTransactions([{
-    type: 'vengeance_reward',
-    userId: match.avenger.discord_id,
-    amount: VENGEANCE_REWARD,
-    reason: `Recompensa por vinganca no evento Albion #${event.EventId}`,
-    referenceType: 'albion_vengeance',
-    referenceId: String(event.EventId),
-    createdBy: 'system'
-  }]);
-  const db = getDatabase();
-  db.prepare(`
-    INSERT INTO albion_vengeance_rewards
-      (vengeance_event_id, avenger_discord_id, amount, original_events_json)
-    VALUES (?, ?, ?, ?)
-  `).run(event.EventId, match.avenger.discord_id, VENGEANCE_REWARD, JSON.stringify(originalIds));
-  const mark = db.prepare(`
-    UPDATE albion_vengeance_deaths
-    SET avenged_event_id = ?, avenger_discord_id = ?, avenged_at = CURRENT_TIMESTAMP
-    WHERE original_event_id = ? AND avenged_event_id IS NULL
-  `);
-  match.rows.forEach((row) => mark.run(event.EventId, match.avenger.discord_id, row.original_event_id));
-});
+function recordVengeance(db, event, match, originalIds) {
+  const commit = db.transaction(() => {
+    db.prepare(`
+      INSERT INTO albion_vengeance_rewards
+        (vengeance_event_id, avenger_discord_id, amount, original_events_json)
+      VALUES (?, ?, ?, ?)
+    `).run(event.EventId, match.avenger.discord_id, 0, JSON.stringify(originalIds));
+    const mark = db.prepare(`
+      UPDATE albion_vengeance_deaths
+      SET avenged_event_id = ?, avenger_discord_id = ?, avenged_at = CURRENT_TIMESTAMP
+      WHERE original_event_id = ? AND avenged_event_id IS NULL
+    `);
+    match.rows.forEach((row) => mark.run(event.EventId, match.avenger.discord_id, row.original_event_id));
+  });
+  commit();
+}
 
 function eventEmbed(event, type, apiBase = DEFAULT_API_BASE, valuations = null) {
   const death = type === 'death';
@@ -364,6 +346,7 @@ module.exports = {
   findVengeanceMatches,
   participantLines,
   pollKillFeed,
+  processVengeance,
   recordVengeanceDeath,
   weaponImageUrl
 };

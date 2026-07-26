@@ -8,6 +8,7 @@ const {
   fetchRecentEvents,
   findVengeanceMatches,
   participantLines,
+  processVengeance,
   recordVengeanceDeath
 } = require('../src/modules/albion/killFeed.service');
 
@@ -137,5 +138,56 @@ test('não considera auto-vingança nem morte vencida há mais de sete dias', ()
   const now = new Date('2026-07-12T12:00:00Z');
   assert.equal(findVengeanceMatches(db, { EventId: 3, Killer: { Name: 'MesmoJogador' }, Victim: { Id: 'enemy' } }, now), null);
   assert.equal(findVengeanceMatches(db, { EventId: 4, Killer: { Name: 'MesmoJogador' }, Victim: { Id: 'old-enemy' } }, now), null);
+  db.close();
+});
+
+test('parabeniza a vingança no chat-notag sem creditar saldo', async () => {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE users (discord_id TEXT, albion_name TEXT, registration_status TEXT);
+    CREATE TABLE albion_vengeance_deaths (
+      original_event_id INTEGER PRIMARY KEY, victim_discord_id TEXT, victim_albion_name TEXT,
+      enemy_player_id TEXT, enemy_player_name TEXT, occurred_at TEXT,
+      avenged_event_id INTEGER, avenger_discord_id TEXT, avenged_at TEXT
+    );
+    CREATE TABLE albion_vengeance_rewards (
+      vengeance_event_id INTEGER PRIMARY KEY, avenger_discord_id TEXT,
+      amount INTEGER, original_events_json TEXT, rewarded_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    INSERT INTO users VALUES ('discord-victim', 'MembroMorto', 'member');
+    INSERT INTO users VALUES ('discord-avenger', 'Vingador', 'member');
+    INSERT INTO albion_vengeance_deaths VALUES
+      (10, 'discord-victim', 'MembroMorto', 'enemy-x', 'Inimigo', '2026-07-10T12:00:00Z', NULL, NULL, NULL);
+  `);
+  const sent = [];
+  let requestedChannelId;
+  const channel = {
+    isTextBased: () => true,
+    send: async (payload) => {
+      sent.push(payload);
+      return { id: 'message-1' };
+    }
+  };
+  const client = { channels: { fetch: async (channelId) => {
+    requestedChannelId = channelId;
+    return channel;
+  } } };
+  const event = {
+    EventId: 20,
+    Killer: { Id: 'avenger', Name: 'Vingador', GuildName: 'NoTag' },
+    Victim: { Id: 'enemy-x', Name: 'Inimigo' }
+  };
+
+  const result = await processVengeance(client, null, db, event, new Date('2026-07-12T12:00:00Z'));
+
+  assert.equal(result.recognizedUserId, 'discord-avenger');
+  assert.equal(requestedChannelId, '1481363760110243910');
+  assert.equal(sent.length, 1);
+  assert.match(sent[0].content, /<@discord-avenger>/);
+  assert.match(sent[0].embeds[0].data.fields[1].value, /Parabéns/);
+  assert.equal(db.prepare('SELECT amount FROM albion_vengeance_rewards WHERE vengeance_event_id = 20').get().amount, 0);
+  assert.equal(db.prepare('SELECT avenged_event_id FROM albion_vengeance_deaths WHERE original_event_id = 10').get().avenged_event_id, 20);
+  assert.equal(await processVengeance(client, null, db, event, new Date('2026-07-12T12:00:00Z')), null);
+  assert.equal(sent.length, 1);
   db.close();
 });
