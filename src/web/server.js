@@ -6,6 +6,7 @@ const env = require('../config/env');
 const fame = require('../modules/albion/fame.service');
 const { baseEmbed, safeSend } = require('../utils/discord');
 const { getDashboardData } = require('./dashboard.repository');
+const { getPortalData } = require('./portal.repository');
 const { completeOnboarding, ensureGuestMember, handleOnboardingIssue, onboardingConfigured } = require('./onboarding');
 const {
   JOIN_OAUTH_STATE_COOKIE,
@@ -13,21 +14,33 @@ const {
   JOIN_SESSION_MAX_AGE_SECONDS,
   OAUTH_STATE_COOKIE,
   OAUTH_STATE_MAX_AGE_SECONDS,
+  PORTAL_MEMBER_MAX_AGE_SECONDS,
+  PORTAL_PRIVILEGED_MAX_AGE_SECONDS,
+  PORTAL_SESSION_COOKIE,
   SESSION_COOKIE,
   SESSION_MAX_AGE_SECONDS,
   clearCookie,
   cookie,
   createJoinSession,
   createOAuthState,
+  createPortalSession,
   createSession,
   parseCookies,
   readJoinSession,
+  readPortalSession,
   readSession,
   validateOAuthState
 } = require('./auth');
 
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const ALLOWED_STAFF_ROLES = new Set([ids.roles.adm, ids.roles.staff].filter(Boolean));
+const PRIVILEGED_PORTAL_ROLES = new Set([
+  ids.roles.adm,
+  ids.roles.staff,
+  ids.roles.treasurer,
+  ids.roles.caller,
+  ids.roles.recruiter
+].filter(Boolean));
 const MIME_TYPES = {
   '.css': 'text/css; charset=utf-8',
   '.html': 'text/html; charset=utf-8',
@@ -59,10 +72,11 @@ function redirect(res, location, headers = {}, isProduction = false) {
   send(res, 302, '', { Location: location, ...headers }, isProduction);
 }
 
-function json(res, status, value, isProduction) {
+function json(res, status, value, isProduction, headers = {}) {
   send(res, status, JSON.stringify(value), {
     'Cache-Control': 'private, no-store',
-    'Content-Type': 'application/json; charset=utf-8'
+    'Content-Type': 'application/json; charset=utf-8',
+    ...headers
   }, isProduction);
 }
 
@@ -139,6 +153,17 @@ async function sessionStillAuthorized(client, session) {
   return member.id === guild.ownerId || [...member.roles.cache.keys()].some((roleId) => ALLOWED_STAFF_ROLES.has(roleId));
 }
 
+async function portalAccess(client, discordId) {
+  if (!discordId || !client?.guilds) return null;
+  const guild = client.guilds.cache?.get(ids.guildId) || await client.guilds.fetch(ids.guildId);
+  const member = guild.members.cache?.get(discordId) || await guild.members.fetch(discordId).catch(() => null);
+  if (!member) return null;
+  const roles = [...member.roles.cache.keys()];
+  const privileged = member.id === guild.ownerId || roles.some((roleId) => PRIVILEGED_PORTAL_ROLES.has(roleId));
+  const accessLevel = member.roles.cache.has(ids.roles.member) || privileged ? 'member' : 'guest';
+  return { accessLevel, privileged, roles };
+}
+
 function configuredForOAuth() {
   return Boolean(env.discordClientId && env.discordClientSecret && env.dashboardSessionSecret && env.dashboardBaseUrl);
 }
@@ -172,6 +197,7 @@ function createRequestHandler(client, options = {}) {
     const cookies = parseCookies(req.headers.cookie);
     const session = readSession(cookies[SESSION_COOKIE], env.dashboardSessionSecret);
     const joinSession = readJoinSession(cookies[JOIN_SESSION_COOKIE], env.dashboardSessionSecret);
+    const portalSession = readPortalSession(cookies[PORTAL_SESSION_COOKIE], env.dashboardSessionSecret);
 
     try {
       if (req.method === 'POST' && url.pathname === '/api/join/complete') {
@@ -265,6 +291,14 @@ function createRequestHandler(client, options = {}) {
         }
         return serveFile(res, 'dashboard.html', isProduction, 'private, no-store');
       }
+      if (url.pathname === '/portal') {
+        if (!portalSession) return redirect(res, '/?portal=required', {}, isProduction);
+        const access = await portalAccess(client, portalSession.id);
+        if (!access) {
+          return redirect(res, '/?portal=forbidden', { 'Set-Cookie': clearCookie(PORTAL_SESSION_COOKIE, secureCookie) }, isProduction);
+        }
+        return serveFile(res, 'member.html', isProduction, 'private, no-store');
+      }
       if (url.pathname === '/auth/discord') {
         if (!configuredForOAuth()) return redirect(res, '/?auth=unavailable', {}, isProduction);
         const state = createOAuthState(env.dashboardSessionSecret);
@@ -326,16 +360,26 @@ function createRequestHandler(client, options = {}) {
         if (!code) return redirect(res, '/?join=cancelled', { 'Set-Cookie': clearCookie(JOIN_OAUTH_STATE_COOKIE, secureCookie) }, isProduction);
         const { token, user: discordUser } = await exchangeDiscordCode(code, `${env.dashboardBaseUrl}/join/discord/callback`, fetchImpl);
         await ensureGuestMember(client, discordUser, token.access_token);
+        const access = await portalAccess(client, discordUser.id);
         const joinToken = createJoinSession(discordUser, env.dashboardSessionSecret);
-        return redirect(res, '/join', {
+        const portalToken = createPortalSession(discordUser, env.dashboardSessionSecret, access || {});
+        const portalMaxAge = access?.privileged ? PORTAL_PRIVILEGED_MAX_AGE_SECONDS : PORTAL_MEMBER_MAX_AGE_SECONDS;
+        const existingProfile = getPortalData(discordUser.id, access?.accessLevel || 'guest').profile;
+        const destination = access?.accessLevel === 'member' || existingProfile.albionName ? '/portal' : '/join';
+        return redirect(res, destination, {
           'Set-Cookie': [
             cookie(JOIN_SESSION_COOKIE, joinToken, { maxAge: JOIN_SESSION_MAX_AGE_SECONDS, secure: secureCookie }),
+            cookie(PORTAL_SESSION_COOKIE, portalToken, { maxAge: portalMaxAge, secure: secureCookie }),
             clearCookie(JOIN_OAUTH_STATE_COOKIE, secureCookie)
           ]
         }, isProduction);
       }
       if (url.pathname === '/auth/logout') {
-        return redirect(res, '/', { 'Set-Cookie': clearCookie(SESSION_COOKIE, secureCookie) }, isProduction);
+        return redirect(res, '/', { 'Set-Cookie': [
+          clearCookie(SESSION_COOKIE, secureCookie),
+          clearCookie(PORTAL_SESSION_COOKIE, secureCookie),
+          clearCookie(JOIN_SESSION_COOKIE, secureCookie)
+        ] }, isProduction);
       }
       if (url.pathname === '/api/join-session') {
         if (!joinSession) return json(res, 401, { error: 'Sessão de entrada necessária.' }, isProduction);
@@ -349,17 +393,50 @@ function createRequestHandler(client, options = {}) {
       if (url.pathname === '/api/session') {
         if (!session) return json(res, 401, { error: 'Sessão necessária.' }, isProduction);
         if (!await sessionStillAuthorized(client, session)) return json(res, 403, { error: 'Acesso de staff necessário.' }, isProduction);
+        const renewedSession = createSession(session, env.dashboardSessionSecret);
         return json(res, 200, { user: {
           id: session.id,
           name: session.globalName || session.username,
           username: session.username,
           avatarUrl: avatarUrl(session)
-        }, csrf: session.csrf || null }, isProduction);
+        }, csrf: session.csrf || null }, isProduction, {
+          'Set-Cookie': cookie(SESSION_COOKIE, renewedSession, { maxAge: SESSION_MAX_AGE_SECONDS, secure: secureCookie })
+        });
+      }
+      if (url.pathname === '/api/portal/session') {
+        if (!portalSession) return json(res, 401, { error: 'Entre com o Discord para acessar seu portal.' }, isProduction);
+        const access = await portalAccess(client, portalSession.id);
+        if (!access) return json(res, 403, { error: 'Você precisa estar no Discord da Notag.' }, isProduction);
+        const renewedPortal = createPortalSession(portalSession, env.dashboardSessionSecret, access);
+        const renewedMaxAge = access.privileged ? PORTAL_PRIVILEGED_MAX_AGE_SECONDS : PORTAL_MEMBER_MAX_AGE_SECONDS;
+        return json(res, 200, { user: {
+          id: portalSession.id,
+          name: portalSession.globalName || portalSession.username,
+          username: portalSession.username,
+          avatarUrl: avatarUrl(portalSession),
+          accessLevel: access.accessLevel,
+          privileged: access.privileged
+        }, csrf: portalSession.csrf }, isProduction, {
+          'Set-Cookie': cookie(PORTAL_SESSION_COOKIE, renewedPortal, { maxAge: renewedMaxAge, secure: secureCookie })
+        });
+      }
+      if (url.pathname === '/api/portal') {
+        if (!portalSession) return json(res, 401, { error: 'Entre com o Discord para acessar seu portal.' }, isProduction);
+        const access = await portalAccess(client, portalSession.id);
+        if (!access) return json(res, 403, { error: 'Você precisa estar no Discord da Notag.' }, isProduction);
+        const renewedPortal = createPortalSession(portalSession, env.dashboardSessionSecret, access);
+        const renewedMaxAge = access.privileged ? PORTAL_PRIVILEGED_MAX_AGE_SECONDS : PORTAL_MEMBER_MAX_AGE_SECONDS;
+        return json(res, 200, getPortalData(portalSession.id, access.accessLevel), isProduction, {
+          'Set-Cookie': cookie(PORTAL_SESSION_COOKIE, renewedPortal, { maxAge: renewedMaxAge, secure: secureCookie })
+        });
       }
       if (url.pathname === '/api/dashboard') {
         if (!session) return json(res, 401, { error: 'Sessão necessária.' }, isProduction);
         if (!await sessionStillAuthorized(client, session)) return json(res, 403, { error: 'Acesso de staff necessário.' }, isProduction);
-        return json(res, 200, getDashboardData(), isProduction);
+        const renewedSession = createSession(session, env.dashboardSessionSecret);
+        return json(res, 200, getDashboardData(), isProduction, {
+          'Set-Cookie': cookie(SESSION_COOKIE, renewedSession, { maxAge: SESSION_MAX_AGE_SECONDS, secure: secureCookie })
+        });
       }
       if (url.pathname === '/health') return json(res, 200, { status: 'ok', service: 'notag-dashboard' }, isProduction);
       if (url.pathname.startsWith('/assets/')) return serveFile(res, url.pathname.slice(1), isProduction);

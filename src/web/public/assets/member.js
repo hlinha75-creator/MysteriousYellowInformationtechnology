@@ -1,0 +1,180 @@
+const state = { data: null, session: null, view: 'overview', rankingCategory: 'overall', lastLoadedAt: 0 };
+const compact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
+const integer = new Intl.NumberFormat('pt-BR');
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[character]));
+}
+
+function formatSilver(value) {
+  return `${compact.format(Number(value || 0)).toLowerCase()} prata`;
+}
+
+function formatDate(value) {
+  if (!value) return '—';
+  const date = new Date(String(value).includes('T') ? value : `${String(value).replace(' ', 'T')}Z`);
+  return Number.isNaN(date.getTime()) ? escapeHtml(value) : date.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'UTC' }) + ' UTC';
+}
+
+function formatDuration(seconds) {
+  const total = Math.max(0, Number(seconds || 0));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  return hours ? `${hours}h ${minutes}min` : `${minutes}min`;
+}
+
+function statusLabel(status) {
+  const labels = { member: 'Membro', guest: 'Convidado', pending: 'Em análise', unregistered: 'Sem cadastro', created: 'Aberto', running: 'Em andamento', review: 'Em revisão', pending_payment: 'Financeiro', approved: 'Finalizado', cancelled: 'Cancelado', requested: 'Pendente', paid: 'Pago', refused: 'Recusado' };
+  return labels[status] || status || 'Pendente';
+}
+
+function badge(status) {
+  return `<span class="badge ${escapeHtml(status || 'pending')}">${escapeHtml(statusLabel(status))}</span>`;
+}
+
+function empty(message) {
+  return `<div class="portal-empty">${escapeHtml(message)}</div>`;
+}
+
+function metric(label, value, note, color = '#5865f2') {
+  return `<article class="metric-card" style="--metric-color:${color}"><span class="metric-label">${escapeHtml(label)}</span><strong class="metric-value">${escapeHtml(value)}</strong><small class="metric-note">${escapeHtml(note)}</small></article>`;
+}
+
+async function fetchJson(url) {
+  const response = await fetch(url, { headers: { Accept: 'application/json' }, cache: 'no-store' });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error || 'Não foi possível carregar os dados.');
+  return body;
+}
+
+function renderSession() {
+  const user = state.session.user;
+  document.querySelector('#session-name').textContent = user.name || user.username;
+  if (user.avatarUrl) document.querySelector('#session-avatar').src = user.avatarUrl;
+  document.querySelector('#access-label').textContent = user.accessLevel === 'member' ? 'Acesso de Membro' : 'Acesso limitado de Convidado';
+  document.querySelectorAll('.member-only').forEach((element) => { element.hidden = user.accessLevel !== 'member'; });
+}
+
+function renderOverview(data) {
+  const profile = data.profile;
+  document.querySelector('#welcome-title').textContent = `Olá, ${profile.albionName || profile.discordName || 'jogador'}`;
+  document.querySelector('#overview-access').textContent = statusLabel(profile.accessLevel);
+  document.querySelector('#welcome-copy').textContent = profile.accessLevel === 'member'
+    ? 'Seu perfil de Membro está ativo. Acompanhe atividades, desempenho e financeiro.'
+    : 'Seu acesso é de Convidado. Você pode acompanhar cadastro, eventos públicos e financeiro.';
+  document.querySelector('#member-metrics').innerHTML = [
+    metric('Saldo atual', formatSilver(data.overview.balance), `${data.overview.pendingWithdraws} saque(s) pendente(s)`, '#23a55a'),
+    metric('Eventos', integer.format(data.overview.events), 'Participações registradas'),
+    metric('Tempo ativo', formatDuration(data.overview.activeSeconds), 'Somente como participante', '#d99a43'),
+    metric('Loot recebido', formatSilver(data.overview.lootReceived), 'Eventos aprovados', '#33a7d8')
+  ].join('');
+  document.querySelector('#overview-events').innerHTML = data.events.length ? data.events.slice(0, 5).map(eventCard).join('') : empty('Nenhum evento aberto agora.');
+  document.querySelector('#overview-transactions').innerHTML = data.finance.transactions.length ? data.finance.transactions.slice(0, 6).map((row) => `
+    <div class="portal-list-row"><div><strong>${escapeHtml(row.reason)}</strong><small>${formatDate(row.created_at)}</small></div><b class="${row.amount >= 0 ? 'positive' : 'negative'}">${row.amount >= 0 ? '+' : ''}${escapeHtml(formatSilver(row.amount))}</b></div>`).join('') : empty('Nenhuma movimentação financeira.');
+}
+
+function renderRegistration(data) {
+  const profile = data.profile;
+  document.querySelector('#registration-status').textContent = statusLabel(profile.registrationStatus);
+  const registration = data.registration;
+  document.querySelector('#registration-card').innerHTML = `
+    <div class="panel-head"><div><span>Personagem Albion</span><h3>${escapeHtml(profile.albionName || 'Ainda não informado')}</h3></div>${badge(profile.registrationStatus)}</div>
+    <dl class="portal-details"><div><dt>Status da análise</dt><dd>${escapeHtml(statusLabel(registration?.status || profile.registrationStatus))}</dd></div><div><dt>Solicitado em</dt><dd>${formatDate(registration?.created_at)}</dd></div><div><dt>Observação</dt><dd>${escapeHtml(registration?.review_note || 'Nenhuma observação da Staff.')}</dd></div></dl>`;
+  document.querySelector('#linked-accounts').innerHTML = profile.linkedAccounts.length ? profile.linkedAccounts.map((account) => `
+    <div class="portal-list-row"><div><strong>${escapeHtml(account.discordName || account.discordId)}</strong><small>${escapeHtml(account.discordId)}</small></div>${account.primary ? '<span class="access-chip">Principal</span>' : '<span class="access-chip subtle">Vinculada</span>'}</div>`).join('') : empty('Nenhuma conta vinculada encontrada.');
+}
+
+function eventCard(event) {
+  const total = Number(event.tank_slots || 0) + Number(event.healer_slots || 0) + Number(event.support_slots || 0) + Number(event.dps_slots || 0);
+  return `<article class="event-mini-card"><div><span>${escapeHtml(event.event_code)}</span>${badge(event.status)}</div><h4>${escapeHtml(event.title)}</h4><p>${escapeHtml(event.location || 'Local a confirmar')}</p><footer><span>${escapeHtml(event.scheduled_time || 'Horário a confirmar')}</span><strong>${integer.format(event.participants || 0)}/${integer.format(total)} vagas</strong></footer></article>`;
+}
+
+function renderEvents(data) {
+  document.querySelector('#portal-events').innerHTML = data.events.length ? data.events.map(eventCard).join('') : empty('Nenhum evento disponível.');
+  document.querySelector('#event-history').innerHTML = data.eventHistory.length ? data.eventHistory.map((row) => `<tr><td class="primary-cell">${escapeHtml(row.title)}<span class="secondary-text">${escapeHtml(row.event_code)}</span></td><td>${escapeHtml(row.is_spectator ? 'Espectador' : row.role)}</td><td>${badge(row.status)}</td><td>${escapeHtml(formatDuration(row.seconds))}</td><td class="number-cell">${escapeHtml(formatSilver(row.payout_amount))}</td></tr>`).join('') : '<tr><td colspan="5" class="empty-cell">Nenhuma participação registrada.</td></tr>';
+}
+
+const rankingConfig = {
+  overall: { rank: 'overall_rank', value: 'overall_score', label: 'Geral', suffix: ' pts' },
+  pve: { rank: 'pve_fame_rank', value: 'pve_fame', label: 'PvE' },
+  pvp: { rank: 'pvp_fame_rank', value: 'pvp_fame', label: 'PvP' },
+  gathering: { rank: 'gathering_fame_rank', value: 'gathering_fame', label: 'Coleta' },
+  crafting: { rank: 'crafting_fame_rank', value: 'crafting_fame', label: 'Craft' }
+};
+
+function renderRankings(data) {
+  if (data.profile.accessLevel !== 'member') return;
+  const own = data.rankings.own || {};
+  document.querySelector('#personal-ranks').innerHTML = Object.entries(rankingConfig).map(([, config]) => metric(config.label, own[config.rank] ? `#${own[config.rank]}` : '—', own[config.value] ? compact.format(own[config.value]).toLowerCase() : 'Sem pontuação')).join('');
+  const config = rankingConfig[state.rankingCategory];
+  const query = document.querySelector('#ranking-search').value.trim().toLowerCase();
+  const rows = data.rankings.rows.filter((row) => row[config.rank] && (!query || row.albion_name.toLowerCase().includes(query))).sort((a, b) => a[config.rank] - b[config.rank]);
+  document.querySelector('#member-ranking-table').innerHTML = rows.length ? rows.map((row) => `<tr class="${row.discord_id === data.profile.primaryDiscordId ? 'own-ranking-row' : ''}"><td>#${row[config.rank]}</td><td class="primary-cell">${escapeHtml(row.albion_name)}</td><td class="number-cell">${escapeHtml(compact.format(row[config.value]).toLowerCase())}${config.suffix || ''}</td></tr>`).join('') : '<tr><td colspan="3" class="empty-cell">Nenhum jogador encontrado.</td></tr>';
+}
+
+function requestRow(row, title) {
+  return `<div class="portal-list-row"><div><strong>${escapeHtml(title)}</strong><small>${formatDate(row.created_at)}</small></div><div class="request-value"><b>${escapeHtml(formatSilver(row.amount))}</b>${badge(row.status)}</div></div>`;
+}
+
+function renderFinance(data) {
+  const finance = data.finance;
+  document.querySelector('#finance-metrics').innerHTML = [
+    metric('Saldo', formatSilver(finance.balance), 'Disponível na conta', '#23a55a'),
+    metric('Saques', integer.format(finance.withdraws.length), 'Últimos pedidos'),
+    metric('Pagamentos', integer.format(finance.paymentRequests.length), 'Serviços solicitados', '#d99a43')
+  ].join('');
+  document.querySelector('#withdraw-list').innerHTML = finance.withdraws.length ? finance.withdraws.map((row) => requestRow(row, `Saque #${row.id}`)).join('') : empty('Nenhum saque solicitado.');
+  document.querySelector('#payment-list').innerHTML = finance.paymentRequests.length ? finance.paymentRequests.map((row) => requestRow(row, row.service || `Pagamento #${row.id}`)).join('') : empty('Nenhum pagamento solicitado.');
+  document.querySelector('#transaction-history').innerHTML = finance.transactions.length ? finance.transactions.map((row) => `<tr><td>${formatDate(row.created_at)}</td><td class="primary-cell">${escapeHtml(row.reason)}</td><td class="number-cell ${row.amount >= 0 ? 'positive' : 'negative'}">${row.amount >= 0 ? '+' : ''}${escapeHtml(formatSilver(row.amount))}</td><td class="number-cell">${escapeHtml(formatSilver(row.after_balance))}</td></tr>`).join('') : '<tr><td colspan="4" class="empty-cell">Nenhuma movimentação.</td></tr>';
+}
+
+function render(data) {
+  renderOverview(data);
+  renderRegistration(data);
+  renderEvents(data);
+  renderRankings(data);
+  renderFinance(data);
+  document.querySelector('#freshness-label').textContent = `Atualizado ${new Date(data.generatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+  document.querySelector('#portal-loading').hidden = true;
+}
+
+async function loadPortal() {
+  try {
+    const data = await fetchJson('/api/portal');
+    state.data = data;
+    state.lastLoadedAt = Date.now();
+    render(data);
+  } catch (error) {
+    const toast = document.querySelector('#portal-error');
+    toast.textContent = error.message;
+    toast.hidden = false;
+    document.querySelector('#portal-loading').hidden = true;
+  }
+}
+
+function setView(name) {
+  if (name === 'rankings' && state.session?.user.accessLevel !== 'member') name = 'overview';
+  state.view = name;
+  document.querySelectorAll('.view').forEach((view) => view.classList.toggle('active', view.id === `view-${name}`));
+  document.querySelectorAll('.nav-item').forEach((button) => button.classList.toggle('active', button.dataset.view === name));
+  const active = document.querySelector(`#view-${name}`);
+  document.querySelector('#page-title').textContent = active?.dataset.title || 'Meu portal';
+  document.querySelector('#page-kicker').textContent = active?.dataset.kicker || 'Notag';
+}
+
+document.querySelectorAll('.nav-item').forEach((button) => button.addEventListener('click', () => setView(button.dataset.view)));
+document.querySelector('#refresh-button').addEventListener('click', loadPortal);
+document.querySelector('#ranking-search').addEventListener('input', () => state.data && renderRankings(state.data));
+document.querySelectorAll('#member-ranking-tabs button').forEach((button) => button.addEventListener('click', () => {
+  state.rankingCategory = button.dataset.category;
+  document.querySelectorAll('#member-ranking-tabs button').forEach((item) => item.classList.toggle('active', item === button));
+  if (state.data) renderRankings(state.data);
+}));
+document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - state.lastLoadedAt >= 30000) loadPortal(); });
+window.setInterval(() => { if (!document.hidden) loadPortal(); }, 30000);
+
+Promise.all([fetchJson('/api/portal/session'), loadPortal()]).then(([session]) => {
+  state.session = session;
+  renderSession();
+  setView('overview');
+}).catch(() => {});

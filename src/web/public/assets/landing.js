@@ -18,8 +18,13 @@ const joinMessages = {
 const query = new URLSearchParams(window.location.search);
 const authStatus = query.get('auth') || (query.has('login') ? 'required' : null);
 const joinStatus = query.get('join');
+const portalMessages = {
+  required: 'Entre com o Discord para acessar seu portal.',
+  forbidden: 'Você precisa estar no Discord da Notag para acessar o portal.'
+};
+const portalStatus = query.get('portal');
 const toast = document.querySelector('#auth-message');
-const message = joinStatus ? joinMessages[joinStatus] : messages[authStatus];
+const message = portalStatus ? portalMessages[portalStatus] : (joinStatus ? joinMessages[joinStatus] : messages[authStatus]);
 if (message) {
   toast.textContent = message;
   toast.hidden = false;

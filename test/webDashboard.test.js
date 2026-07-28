@@ -15,11 +15,14 @@ const { getDashboardData } = require('../src/web/dashboard.repository');
 const { createRequestHandler } = require('../src/web/server');
 const {
   JOIN_SESSION_COOKIE,
+  PORTAL_SESSION_COOKIE,
   SESSION_COOKIE,
   createJoinSession,
   createOAuthState,
+  createPortalSession,
   createSession,
   readJoinSession,
+  readPortalSession,
   readSession,
   validateOAuthState
 } = require('../src/web/auth');
@@ -32,7 +35,8 @@ test('sessão do dashboard é assinada e expira', () => {
   const token = createSession({ id: 'staff-1', username: 'Staff', global_name: 'Equipe', roles: ['adm'] }, secret, now);
   assert.equal(readSession(token, secret, now + 1000).id, 'staff-1');
   assert.equal(readSession(`${token}x`, secret, now + 1000), null);
-  assert.equal(readSession(token, secret, now + (9 * 60 * 60 * 1000)), null);
+  assert.equal(readSession(token, secret, now + (6 * 24 * 60 * 60 * 1000)).id, 'staff-1');
+  assert.equal(readSession(token, secret, now + (8 * 24 * 60 * 60 * 1000)), null);
 });
 
 test('state OAuth é verificável e expira', () => {
@@ -51,6 +55,18 @@ test('sessão pública de entrada é separada da sessão da staff', () => {
   assert.equal(readJoinSession(token, secret, now + 1000).id, 'visitante-1');
   assert.equal(readSession(token, secret, now + 1000), null);
   assert.equal(readJoinSession(token, secret, now + (31 * 60 * 1000)), null);
+});
+
+test('sessão do portal usa 30 dias para membro e 7 dias para acesso privilegiado', () => {
+  const secret = 'segredo-do-portal-de-teste';
+  const now = Date.parse('2026-07-28T12:00:00Z');
+  const memberToken = createPortalSession({ id: 'member-session', username: 'Membro' }, secret, { accessLevel: 'member' }, now);
+  const staffToken = createPortalSession({ id: 'staff-session', username: 'Staff' }, secret, { accessLevel: 'member', privileged: true }, now);
+  assert.equal(readPortalSession(memberToken, secret, now + (29 * 24 * 60 * 60 * 1000)).id, 'member-session');
+  assert.equal(readPortalSession(memberToken, secret, now + (31 * 24 * 60 * 60 * 1000)), null);
+  assert.equal(readPortalSession(staffToken, secret, now + (6 * 24 * 60 * 60 * 1000)).id, 'staff-session');
+  assert.equal(readPortalSession(staffToken, secret, now + (8 * 24 * 60 * 60 * 1000)), null);
+  assert.equal(readSession(memberToken, secret, now + 1000), null);
 });
 
 test('dashboard reconcilia membros, saldos, campanha e rankings', () => {
@@ -102,6 +118,34 @@ test('servidor publica landing e protege a API do dashboard', async (t) => {
 
   const dashboard = await fetch(`${base}/api/dashboard`);
   assert.equal(dashboard.status, 401);
+
+  const portal = await fetch(`${base}/portal`, { redirect: 'manual' });
+  assert.equal(portal.status, 302);
+  assert.equal(portal.headers.get('location'), '/?portal=required');
+});
+
+test('portal entrega somente os dados pessoais e oculta rankings de convidado', async (t) => {
+  const db = getDatabase();
+  const discordId = 'portal-guest-web';
+  db.prepare("INSERT OR REPLACE INTO users (discord_id, discord_name, albion_name, registration_status) VALUES (?, 'Convidado Web', 'HeroiPortal', 'guest')").run(discordId);
+  db.prepare('INSERT OR REPLACE INTO balances (discord_id, balance) VALUES (?, 4321)').run(discordId);
+  db.prepare("INSERT INTO balance_transactions (type, user_id, amount, before_balance, after_balance, reason, created_by) VALUES ('portal_test', ?, 4321, 0, 4321, 'Crédito pessoal', 'staff')").run(discordId);
+  const member = { id: discordId, roles: { cache: new Map([['1481251365857525782', {}]]) } };
+  const guild = { ownerId: 'owner', members: { async fetch() { return member; } } };
+  const client = { guilds: { cache: new Map(), async fetch() { return guild; } } };
+  const server = require('node:http').createServer(createRequestHandler(client));
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const token = createPortalSession({ id: discordId, username: 'Convidado Web' }, process.env.DASHBOARD_SESSION_SECRET, { accessLevel: 'guest' });
+
+  const response = await fetch(`${base}/api/portal`, { headers: { Cookie: `${PORTAL_SESSION_COOKIE}=${token}` } });
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.profile.albionName, 'HeroiPortal');
+  assert.equal(body.finance.balance, 4321);
+  assert.equal(body.finance.transactions[0].reason, 'Crédito pessoal');
+  assert.deepEqual(body.rankings.rows, []);
 });
 
 test('staff autenticada gera prévia de tabela com proteção CSRF', async (t) => {

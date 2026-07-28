@@ -4,8 +4,11 @@ const SESSION_COOKIE = 'notag_session';
 const OAUTH_STATE_COOKIE = 'notag_oauth_state';
 const JOIN_SESSION_COOKIE = 'notag_join_session';
 const JOIN_OAUTH_STATE_COOKIE = 'notag_join_oauth_state';
-const SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
+const PORTAL_SESSION_COOKIE = 'notag_portal_session';
+const SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 const JOIN_SESSION_MAX_AGE_SECONDS = 30 * 60;
+const PORTAL_MEMBER_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
+const PORTAL_PRIVILEGED_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 const OAUTH_STATE_MAX_AGE_SECONDS = 10 * 60;
 
 function base64url(value) {
@@ -43,10 +46,10 @@ function createSession(user, secret, now = Date.now()) {
     purpose: 'staff',
     id: user.id,
     username: user.username,
-    globalName: user.global_name || user.username,
+    globalName: user.global_name || user.globalName || user.username,
     avatar: user.avatar || null,
     roles: user.roles || [],
-    csrf: crypto.randomBytes(24).toString('base64url'),
+    csrf: user.csrf || crypto.randomBytes(24).toString('base64url'),
     exp: now + SESSION_MAX_AGE_SECONDS * 1000
   }, secret);
 }
@@ -64,7 +67,7 @@ function createJoinSession(user, secret, now = Date.now()) {
     username: user.username,
     globalName: user.global_name || user.username,
     avatar: user.avatar || null,
-    csrf: crypto.randomBytes(24).toString('base64url'),
+    csrf: user.csrf || crypto.randomBytes(24).toString('base64url'),
     exp: now + JOIN_SESSION_MAX_AGE_SECONDS * 1000
   }, secret);
 }
@@ -72,6 +75,29 @@ function createJoinSession(user, secret, now = Date.now()) {
 function readJoinSession(token, secret, now = Date.now()) {
   const session = readSignedValue(token, secret);
   if (session?.purpose !== 'join' || !session.id || !session.csrf || !session.exp || session.exp <= now) return null;
+  return session;
+}
+
+function createPortalSession(user, secret, options = {}, now = Date.now()) {
+  const privileged = Boolean(options.privileged);
+  const maxAgeSeconds = privileged ? PORTAL_PRIVILEGED_MAX_AGE_SECONDS : PORTAL_MEMBER_MAX_AGE_SECONDS;
+  return createSignedValue({
+    purpose: 'portal',
+    id: user.id,
+    username: user.username,
+    globalName: user.global_name || user.globalName || user.username,
+    avatar: user.avatar || null,
+    roles: options.roles || user.roles || [],
+    accessLevel: options.accessLevel || 'guest',
+    privileged,
+    csrf: user.csrf || crypto.randomBytes(24).toString('base64url'),
+    exp: now + maxAgeSeconds * 1000
+  }, secret);
+}
+
+function readPortalSession(token, secret, now = Date.now()) {
+  const session = readSignedValue(token, secret);
+  if (session?.purpose !== 'portal' || !session.id || !session.csrf || !session.exp || session.exp <= now) return null;
   return session;
 }
 
@@ -109,6 +135,9 @@ module.exports = {
   JOIN_OAUTH_STATE_COOKIE,
   JOIN_SESSION_COOKIE,
   JOIN_SESSION_MAX_AGE_SECONDS,
+  PORTAL_MEMBER_MAX_AGE_SECONDS,
+  PORTAL_PRIVILEGED_MAX_AGE_SECONDS,
+  PORTAL_SESSION_COOKIE,
   OAUTH_STATE_COOKIE,
   OAUTH_STATE_MAX_AGE_SECONDS,
   SESSION_COOKIE,
@@ -117,9 +146,11 @@ module.exports = {
   cookie,
   createJoinSession,
   createOAuthState,
+  createPortalSession,
   createSession,
   parseCookies,
   readJoinSession,
+  readPortalSession,
   readSession,
   validateOAuthState
 };

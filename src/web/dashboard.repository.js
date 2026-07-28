@@ -314,4 +314,4 @@ function getDashboardData() {
   };
 }
 
-module.exports = { getDashboardData, latestPveRanking, participationRanking };
+module.exports = { fameDashboard, getDashboardData, latestPveRanking, participationRanking };
