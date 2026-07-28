@@ -43,6 +43,17 @@ A documentacao principal fica em `docs/`:
    NODE_ENV=development
    ```
 
+   Para ativar o dashboard e o login da staff, preencha tambem:
+
+   ```env
+   DISCORD_CLIENT_SECRET=
+   DASHBOARD_BASE_URL=http://localhost:8080
+   DASHBOARD_SESSION_SECRET=
+   DASHBOARD_PORT=8080
+   ```
+
+   O `DISCORD_CLIENT_SECRET` vem do Discord Developer Portal. Use uma chave longa e aleatoria em `DASHBOARD_SESSION_SECRET`. Nunca compartilhe esses dois valores nem os adicione ao Git.
+
 4. Registre os comandos slash no Discord:
 
    ```bash
@@ -56,6 +67,16 @@ A documentacao principal fica em `docs/`:
    ```
 
 No VS Code tambem existe uma configuracao de debug chamada `Iniciar bot`.
+
+## Dashboard Web
+
+- A pagina publica abre em `/` e nao expoe dados do banco.
+- O dashboard da staff abre em `/dashboard` apos o login com Discord.
+- O acesso e permitido apenas ao dono do servidor e aos cargos `ADM` ou `Staff` configurados em `src/config/ids.js`.
+- Todas as telas da primeira versao sao somente leitura.
+- Os dados atualizam a cada 30 segundos enquanto a aba esta visivel e tambem podem ser atualizados manualmente.
+- Cadastre `https://notag.discloud.app/auth/discord/callback` como Redirect URI no Discord Developer Portal antes da publicacao.
+- Na Discloud, o projeto roda como `TYPE=site`, subdominio `notag`, escutando `0.0.0.0:8080`; o bot e o dashboard continuam no mesmo processo e compartilham o SQLite.
 
 ## Scripts Uteis
 

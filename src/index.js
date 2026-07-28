@@ -19,6 +19,7 @@ const campaigns = require('./modules/campaigns/campaigns.service');
 const guildReverification = require('./modules/members/guildReverification.service');
 const lochMarket = require('./modules/community/lochMarket.service');
 const giveaways = require('./modules/giveaways/giveaways.service');
+const { startWebServer } = require('./web/server');
 const { handleInteraction } = require('./interactions/router');
 const { isExpiredOrDuplicateInteraction } = require('./utils/interactions');
 
@@ -116,6 +117,8 @@ client.on('error', (error) => {
   console.error('Erro no client Discord:', error);
 });
 
+const webServer = startWebServer(client);
+
 client.on('guildMemberAdd', registration.handleGuildMemberAdd);
 client.on('guildMemberRemove', registration.handleGuildMemberRemove);
 client.on('voiceStateUpdate', voice.handleVoiceStateUpdate);
@@ -148,6 +151,7 @@ function handleShutdownSignal(signal) {
   shuttingDown = true;
   console.warn(`[PROCESSO] Sinal ${signal} recebido; encerrando conexao com o Discord.`);
   const forceExit = setTimeout(() => process.exit(0), 1500);
+  webServer.close();
   Promise.resolve(client.destroy())
     .catch((error) => console.error('[PROCESSO] Falha no encerramento do client Discord:', error))
     .finally(() => {

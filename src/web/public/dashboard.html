@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Central da staff — Notag</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+  <script src="/assets/dashboard.js" defer></script>
+</head>
+<body class="dashboard-body">
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-top">
+        <a class="app-brand" href="/dashboard"><img src="/assets/notag-logo.jpeg" alt="Brasão da Notag"><span>NOTAG<small>Central da staff</small></span></a>
+        <button class="icon-button sidebar-close" id="sidebar-close" aria-label="Fechar menu">×</button>
+      </div>
+      <nav class="app-nav" aria-label="Navegação do dashboard">
+        <button class="nav-item active" data-view="overview"><span class="nav-symbol">⌂</span>Visão geral</button>
+        <div class="nav-group">
+          <p>Gestão</p>
+          <button class="nav-item" data-view="members"><span class="nav-symbol">◎</span>Membros</button>
+          <button class="nav-item" data-view="registrations"><span class="nav-symbol">✓</span>Cadastros</button>
+        </div>
+        <div class="nav-group">
+          <p>Atividades</p>
+          <button class="nav-item" data-view="events"><span class="nav-symbol">◇</span>Eventos</button>
+          <button class="nav-item" data-view="operations"><span class="nav-symbol">⚑</span>Operações</button>
+        </div>
+        <div class="nav-group">
+          <p>Financeiro</p>
+          <button class="nav-item" data-view="finance"><span class="nav-symbol">$</span>Saldos e campanha</button>
+          <button class="nav-item" data-view="deposits"><span class="nav-symbol">↓</span>Depósitos</button>
+        </div>
+        <div class="nav-group">
+          <p>Desempenho</p>
+          <button class="nav-item" data-view="rankings"><span class="nav-symbol">↗</span>Rankings</button>
+        </div>
+        <div class="nav-group">
+          <p>Sistema</p>
+          <button class="nav-item" data-view="audit"><span class="nav-symbol">≡</span>Auditoria</button>
+        </div>
+      </nav>
+      <div class="sidebar-footer"><span class="status-dot"></span><span>Dados somente leitura</span></div>
+    </aside>
+
+    <div class="app-main">
+      <header class="app-header">
+        <button class="icon-button menu-toggle" id="menu-toggle" aria-label="Abrir menu">☰</button>
+        <div class="header-title"><p id="page-kicker">Central da staff</p><h1 id="page-title">Visão geral</h1></div>
+        <div class="header-actions">
+          <div class="refresh-state"><span class="status-dot"></span><span id="freshness">Carregando dados…</span></div>
+          <button class="icon-button" id="refresh-button" aria-label="Atualizar dados" title="Atualizar dados">↻</button>
+          <div class="user-menu">
+            <img id="user-avatar" alt="" hidden>
+            <span id="user-name">Staff</span>
+            <a href="/auth/logout">Sair</a>
+          </div>
+        </div>
+      </header>
+
+      <main class="dashboard-content" id="dashboard-content">
+        <div class="loading-panel" id="loading-panel"><span class="loader"></span><p>Organizando os dados da guilda…</p></div>
+        <section class="view active" id="view-overview" data-title="Visão geral" data-kicker="Central da staff">
+          <div class="welcome-row"><div><h2>Panorama da guilda</h2><p>Os indicadores que a staff precisa acompanhar agora.</p></div><span class="readonly-badge">Somente leitura</span></div>
+          <div class="metric-grid" id="overview-metrics"></div>
+          <div class="dashboard-grid two-one">
+            <article class="panel"><div class="panel-head"><div><span>Atividade</span><h3>Participações nos últimos 7 dias</h3></div></div><div class="bar-chart" id="activity-chart"></div></article>
+            <article class="panel"><div class="panel-head"><div><span>Campanha ativa</span><h3 id="campaign-title">Meta da guilda</h3></div></div><div id="campaign-card"></div></article>
+          </div>
+          <div class="dashboard-grid equal">
+            <article class="panel"><div class="panel-head"><div><span>Ranking semanal</span><h3>Fama PvE</h3></div><button class="text-button" data-go="rankings">Ver ranking</button></div><div class="ranking-list" id="pve-ranking-mini"></div></article>
+            <article class="panel"><div class="panel-head"><div><span>Ranking semanal</span><h3>Participação em eventos</h3></div><button class="text-button" data-go="rankings">Ver ranking</button></div><div class="ranking-list" id="participation-ranking-mini"></div></article>
+          </div>
+          <article class="panel"><div class="panel-head"><div><span>Movimentação</span><h3>Depósitos recentes</h3></div><button class="text-button" data-go="deposits">Ver todos</button></div><div class="table-wrap"><table><thead><tr><th>Jogador</th><th>Motivo</th><th>Data</th><th class="number-cell">Valor</th></tr></thead><tbody id="recent-deposits-table"></tbody></table></div></article>
+        </section>
+
+        <section class="view" id="view-members" data-title="Membros" data-kicker="Gestão"><div class="view-heading"><div><h2>Membros da guilda</h2><p>Cadastro, saldo e participação de cada jogador.</p></div><input class="search-input" id="member-search" type="search" placeholder="Buscar jogador…" aria-label="Buscar membro"></div><article class="panel"><div class="table-wrap"><table><thead><tr><th>Jogador</th><th>Status</th><th>Discord</th><th>Eventos</th><th class="number-cell">Saldo</th></tr></thead><tbody id="members-table"></tbody></table></div></article></section>
+        <section class="view" id="view-registrations" data-title="Cadastros" data-kicker="Gestão"><div class="view-heading"><div><h2>Cadastros</h2><p>Visão dos vínculos entre Discord e Albion.</p></div></div><div class="metric-grid compact" id="registration-metrics"></div><article class="panel"><div class="table-wrap"><table><thead><tr><th>Jogador</th><th>Discord</th><th>Status</th><th>Atualizado</th></tr></thead><tbody id="registrations-table"></tbody></table></div></article></section>
+        <section class="view" id="view-events" data-title="Eventos" data-kicker="Atividades"><div class="view-heading"><div><h2>Eventos</h2><p>Histórico recente, participação e revisão financeira.</p></div></div><article class="panel"><div class="table-wrap"><table><thead><tr><th>Evento</th><th>Local</th><th>Status</th><th>Participantes</th><th>Revisão</th><th>Data</th></tr></thead><tbody id="events-table"></tbody></table></div></article></section>
+        <section class="view" id="view-operations" data-title="Operações" data-kicker="Atividades"><div class="view-heading"><div><h2>Fila operacional</h2><p>Itens que merecem atenção da staff.</p></div></div><div class="metric-grid" id="operations-metrics"></div><article class="panel empty-guidance"><span class="empty-icon">✓</span><h3>Acompanhamento centralizado</h3><p>Esta primeira versão reúne os totais. As ações administrativas serão adicionadas na próxima etapa.</p></article></section>
+        <section class="view" id="view-finance" data-title="Saldos e campanha" data-kicker="Financeiro"><div class="view-heading"><div><h2>Financeiro</h2><p>Saldos dos membros, campanha ativa e movimentações.</p></div></div><div class="metric-grid compact" id="finance-metrics"></div><article class="panel"><div class="panel-head"><div><span>Extrato</span><h3>Movimentações recentes</h3></div></div><div class="table-wrap"><table><thead><tr><th>Jogador</th><th>Tipo</th><th>Motivo</th><th>Data</th><th class="number-cell">Valor</th></tr></thead><tbody id="transactions-table"></tbody></table></div></article></section>
+        <section class="view" id="view-deposits" data-title="Depósitos" data-kicker="Financeiro"><div class="view-heading"><div><h2>Depósitos recentes</h2><p>Créditos identificados no histórico financeiro.</p></div></div><article class="panel"><div class="table-wrap"><table><thead><tr><th>Jogador</th><th>Tipo</th><th>Motivo</th><th>Data</th><th class="number-cell">Valor</th></tr></thead><tbody id="deposits-table"></tbody></table></div></article></section>
+        <section class="view" id="view-rankings" data-title="Rankings" data-kicker="Desempenho"><div class="view-heading"><div><h2>Destaques da semana</h2><p>Nome do personagem no Albion como referência principal.</p></div></div><div class="dashboard-grid equal"><article class="panel"><div class="panel-head"><div><span id="pve-period">Semana</span><h3>Fama PvE</h3></div></div><div class="ranking-list large" id="pve-ranking-full"></div></article><article class="panel"><div class="panel-head"><div><span id="participation-period">Últimos 7 dias</span><h3>Participação em eventos</h3></div></div><div class="ranking-list large" id="participation-ranking-full"></div></article></div></section>
+        <section class="view" id="view-audit" data-title="Auditoria" data-kicker="Sistema"><div class="view-heading"><div><h2>Auditoria</h2><p>Registro das ações recentes executadas pelo bot e pela equipe.</p></div></div><article class="panel"><div class="table-wrap"><table><thead><tr><th>Ação</th><th>Responsável</th><th>Alvo</th><th>Motivo</th><th>Data</th></tr></thead><tbody id="audit-table"></tbody></table></div></article></section>
+      </main>
+    </div>
+  </div>
+  <div class="mobile-scrim" id="mobile-scrim"></div>
+  <div class="error-toast" id="error-toast" role="alert" hidden></div>
+</body>
+</html>

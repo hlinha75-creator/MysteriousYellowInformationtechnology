@@ -10,9 +10,15 @@ function requireEnv(name) {
 
 module.exports = {
   token: process.env.DISCORD_TOKEN,
+  discordClientId: process.env.CLIENT_ID,
+  discordClientSecret: process.env.DISCORD_CLIENT_SECRET,
   requireEnv,
   databasePath: process.env.DATABASE_PATH || './data/notag.sqlite',
   nodeEnv: process.env.NODE_ENV || 'development',
+  dashboardBaseUrl: (process.env.DASHBOARD_BASE_URL || 'http://localhost:8080').replace(/\/$/, ''),
+  dashboardHost: process.env.DASHBOARD_HOST || '0.0.0.0',
+  dashboardPort: Number(process.env.PORT || process.env.DASHBOARD_PORT || 8080),
+  dashboardSessionSecret: process.env.DASHBOARD_SESSION_SECRET,
   giveawayTimeZone: process.env.GIVEAWAY_TIME_ZONE || 'America/Sao_Paulo',
   giveawayMaxActivePerUser: Number(process.env.GIVEAWAY_MAX_ACTIVE_PER_USER || 2),
   giveawayCooldownMinutes: Number(process.env.GIVEAWAY_COOLDOWN_MINUTES || 60),
