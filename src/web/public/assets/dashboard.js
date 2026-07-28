@@ -1,7 +1,23 @@
 const state = { data: null, lastLoadedAt: 0, currentView: 'overview' };
 const number = new Intl.NumberFormat('pt-BR');
-const compact = new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 });
-const silver = new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 });
+const collator = new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base' });
+
+function formatCompact(value) {
+  const numeric = Number(value || 0);
+  const absolute = Math.abs(numeric);
+  const formatScaled = (divisor, suffix) => {
+    const scaled = numeric / divisor;
+    const decimals = Math.abs(scaled) >= 100 ? 0 : 1;
+    return `${scaled.toFixed(decimals).replace(/\.0$/, '')}${suffix}`;
+  };
+  if (absolute >= 1_000_000_000) return formatScaled(1_000_000_000, 'b');
+  if (absolute >= 1_000_000) return formatScaled(1_000_000, 'm');
+  if (absolute >= 1_000) return formatScaled(1_000, 'k');
+  return String(Math.round(numeric));
+}
+
+const compact = { format: formatCompact };
+const silver = { format: formatCompact };
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
@@ -24,6 +40,33 @@ function formatDate(value, includeTime = true) {
   return new Intl.DateTimeFormat('pt-BR', {
     day: '2-digit', month: 'short', ...(includeTime ? { hour: '2-digit', minute: '2-digit' } : {})
   }).format(date);
+}
+
+function normalizeText(value) {
+  return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR');
+}
+
+function controlValue(id, fallback = '') {
+  return document.querySelector(`#${id}`)?.value ?? fallback;
+}
+
+function includesQuery(row, query, fields) {
+  const normalized = normalizeText(query).trim();
+  return !normalized || fields.some((field) => normalizeText(row[field]).includes(normalized));
+}
+
+function dateValue(value) {
+  return parseDatabaseDate(value)?.getTime() || 0;
+}
+
+function sortRows(rows, sort, options) {
+  const compare = options[sort] || options.default;
+  return [...rows].sort(compare);
+}
+
+function setSummary(id, shown, total) {
+  const target = document.querySelector(`#${id}`);
+  if (target) target.textContent = `Exibindo ${number.format(shown)} de ${number.format(total)} registros`;
 }
 
 function badge(status) {
@@ -111,10 +154,21 @@ function renderOverview(data) {
     : emptyRow(4, 'Nenhum depósito recente encontrado.');
 }
 
-function renderMembers(members, query = '') {
-  const normalized = query.trim().toLocaleLowerCase('pt-BR');
-  const filtered = normalized ? members.filter((row) => [row.albion_name, row.discord_name, row.registration_status].some((value) => String(value || '').toLocaleLowerCase('pt-BR').includes(normalized))) : members;
-  document.querySelector('#members-table').innerHTML = filtered.length ? filtered.map((row) => `<tr><td class="primary-cell">${escapeHtml(row.albion_name || 'Sem nome Albion')}</td><td>${badge(row.registration_status)}</td><td>${escapeHtml(row.discord_name || '—')}</td><td>${number.format(row.events_total)}</td><td class="number-cell">${escapeHtml(formatSilver(row.balance))}</td></tr>`).join('') : emptyRow(5);
+function renderMembers(members) {
+  const query = controlValue('member-search');
+  const status = controlValue('member-status');
+  const filtered = members.filter((row) => (!status || row.registration_status === status) && includesQuery(row, query, ['albion_name', 'discord_name', 'registration_status']));
+  const sorted = sortRows(filtered, controlValue('member-sort', 'name-asc'), {
+    'name-asc': (a, b) => collator.compare(a.albion_name || '', b.albion_name || ''),
+    'name-desc': (a, b) => collator.compare(b.albion_name || '', a.albion_name || ''),
+    'balance-desc': (a, b) => Number(b.balance || 0) - Number(a.balance || 0),
+    'balance-asc': (a, b) => Number(a.balance || 0) - Number(b.balance || 0),
+    'events-desc': (a, b) => Number(b.events_total || 0) - Number(a.events_total || 0),
+    'events-asc': (a, b) => Number(a.events_total || 0) - Number(b.events_total || 0),
+    default: (a, b) => collator.compare(a.albion_name || '', b.albion_name || '')
+  });
+  setSummary('members-summary', sorted.length, members.length);
+  document.querySelector('#members-table').innerHTML = sorted.length ? sorted.map((row) => `<tr><td class="primary-cell">${escapeHtml(row.albion_name || 'Sem nome Albion')}</td><td>${badge(row.registration_status)}</td><td>${escapeHtml(row.discord_name || '—')}</td><td>${number.format(row.events_total)}</td><td class="number-cell">${escapeHtml(formatSilver(row.balance))}</td></tr>`).join('') : emptyRow(5);
 }
 
 function renderRegistrations(members, pending) {
@@ -127,11 +181,36 @@ function renderRegistrations(members, pending) {
     metricCard('Pendentes', number.format(pending), 'Aguardando análise', '#f0b232'),
     metricCard('Outros status', number.format(members.length - (counts.member || 0)), 'Convidados e não cadastrados', '#5865f2')
   ].join('');
-  document.querySelector('#registrations-table').innerHTML = members.length ? members.map((row) => `<tr><td class="primary-cell">${escapeHtml(row.albion_name || 'Sem nome Albion')}</td><td>${escapeHtml(row.discord_name || '—')}</td><td>${badge(row.registration_status)}</td><td>${formatDate(row.updated_at)}</td></tr>`).join('') : emptyRow(4);
+  const query = controlValue('registration-search');
+  const status = controlValue('registration-status');
+  const filtered = members.filter((row) => (!status || row.registration_status === status) && includesQuery(row, query, ['albion_name', 'discord_name', 'registration_status']));
+  const sorted = sortRows(filtered, controlValue('registration-sort', 'updated-desc'), {
+    'updated-desc': (a, b) => dateValue(b.updated_at) - dateValue(a.updated_at),
+    'updated-asc': (a, b) => dateValue(a.updated_at) - dateValue(b.updated_at),
+    'name-asc': (a, b) => collator.compare(a.albion_name || '', b.albion_name || ''),
+    'name-desc': (a, b) => collator.compare(b.albion_name || '', a.albion_name || ''),
+    default: (a, b) => dateValue(b.updated_at) - dateValue(a.updated_at)
+  });
+  setSummary('registrations-summary', sorted.length, members.length);
+  document.querySelector('#registrations-table').innerHTML = sorted.length ? sorted.map((row) => `<tr><td class="primary-cell">${escapeHtml(row.albion_name || 'Sem nome Albion')}</td><td>${escapeHtml(row.discord_name || '—')}</td><td>${badge(row.registration_status)}</td><td>${formatDate(row.updated_at)}</td></tr>`).join('') : emptyRow(4);
 }
 
 function renderEvents(events) {
-  document.querySelector('#events-table').innerHTML = events.length ? events.map((row) => `<tr><td class="primary-cell">${escapeHtml(row.title)}<span class="secondary-text">${escapeHtml(row.event_code)}</span></td><td>${escapeHtml(row.location || '—')}</td><td>${badge(row.status)}</td><td>${number.format(row.participants)}</td><td>${row.review_status ? badge(row.review_status) : '—'}</td><td>${formatDate(row.ended_at || row.started_at || row.created_at)}</td></tr>`).join('') : emptyRow(6);
+  const query = controlValue('event-search');
+  const status = controlValue('event-status');
+  const eventDate = (row) => row.ended_at || row.started_at || row.created_at;
+  const filtered = events.filter((row) => (!status || row.status === status) && includesQuery(row, query, ['title', 'event_code', 'location', 'status', 'review_status']));
+  const sorted = sortRows(filtered, controlValue('event-sort', 'date-desc'), {
+    'date-desc': (a, b) => dateValue(eventDate(b)) - dateValue(eventDate(a)),
+    'date-asc': (a, b) => dateValue(eventDate(a)) - dateValue(eventDate(b)),
+    'participants-desc': (a, b) => Number(b.participants || 0) - Number(a.participants || 0),
+    'participants-asc': (a, b) => Number(a.participants || 0) - Number(b.participants || 0),
+    'name-asc': (a, b) => collator.compare(a.title || '', b.title || ''),
+    'name-desc': (a, b) => collator.compare(b.title || '', a.title || ''),
+    default: (a, b) => dateValue(eventDate(b)) - dateValue(eventDate(a))
+  });
+  setSummary('events-summary', sorted.length, events.length);
+  document.querySelector('#events-table').innerHTML = sorted.length ? sorted.map((row) => `<tr><td class="primary-cell">${escapeHtml(row.title)}<span class="secondary-text">${escapeHtml(row.event_code)}</span></td><td>${escapeHtml(row.location || '—')}</td><td>${badge(row.status)}</td><td>${number.format(row.participants)}</td><td>${row.review_status ? badge(row.review_status) : '—'}</td><td>${formatDate(eventDate(row))}</td></tr>`).join('') : emptyRow(6);
 }
 
 function renderOperations(operations) {
@@ -150,19 +229,67 @@ function renderFinance(finance, totalBalance) {
     metricCard('Campanha arrecadada', campaign ? formatSilver(campaign.raised) : '—', campaign?.title || 'Sem campanha ativa', '#f0b232'),
     metricCard('Movimentações exibidas', number.format(finance.transactions.length), 'Registros mais recentes', '#5865f2')
   ].join('');
-  document.querySelector('#transactions-table').innerHTML = transactionRows(finance.transactions);
-  document.querySelector('#deposits-table').innerHTML = transactionRows(finance.transactions, true);
+  const transactionQuery = controlValue('transaction-search');
+  const kind = controlValue('transaction-kind');
+  const transactionFiltered = finance.transactions.filter((row) => {
+    const amount = Number(row.amount || 0);
+    return (!kind || (kind === 'credit' ? amount >= 0 : amount < 0)) && includesQuery(row, transactionQuery, ['albion_name', 'type', 'reason']);
+  });
+  const transactionSorted = sortTransactions(transactionFiltered, controlValue('transaction-sort', 'date-desc'));
+  setSummary('transactions-summary', transactionSorted.length, finance.transactions.length);
+  document.querySelector('#transactions-table').innerHTML = transactionRows(transactionSorted);
+
+  const allDeposits = finance.transactions.filter((row) => Number(row.amount) > 0 && String(row.type).toLowerCase().includes('deposit'));
+  const depositQuery = controlValue('deposit-search');
+  const depositFiltered = allDeposits.filter((row) => includesQuery(row, depositQuery, ['albion_name', 'type', 'reason']));
+  const depositSorted = sortTransactions(depositFiltered, controlValue('deposit-sort', 'date-desc'));
+  setSummary('deposits-summary', depositSorted.length, allDeposits.length);
+  document.querySelector('#deposits-table').innerHTML = transactionRows(depositSorted, true);
+}
+
+function sortTransactions(rows, sort) {
+  return sortRows(rows, sort, {
+    'date-desc': (a, b) => dateValue(b.created_at) - dateValue(a.created_at),
+    'date-asc': (a, b) => dateValue(a.created_at) - dateValue(b.created_at),
+    'amount-desc': (a, b) => Number(b.amount || 0) - Number(a.amount || 0),
+    'amount-asc': (a, b) => Number(a.amount || 0) - Number(b.amount || 0),
+    'name-asc': (a, b) => collator.compare(a.albion_name || '', b.albion_name || ''),
+    'name-desc': (a, b) => collator.compare(b.albion_name || '', a.albion_name || ''),
+    default: (a, b) => dateValue(b.created_at) - dateValue(a.created_at)
+  });
 }
 
 function renderRankings(rankings) {
   document.querySelector('#pve-period').textContent = rankings.pve.label;
   document.querySelector('#participation-period').textContent = rankings.participation.label;
-  renderRanking('pve-ranking-full', rankings.pve.rows, 'pve');
-  renderRanking('participation-ranking-full', rankings.participation.rows, 'participation');
+  const query = controlValue('ranking-search');
+  const sort = controlValue('ranking-sort', 'value-desc');
+  const prepare = (rows, valueField) => {
+    const filtered = rows.filter((row) => includesQuery(row, query, ['albion_name']));
+    return sortRows(filtered, sort, {
+      'value-desc': (a, b) => Number(b[valueField] || 0) - Number(a[valueField] || 0),
+      'value-asc': (a, b) => Number(a[valueField] || 0) - Number(b[valueField] || 0),
+      'name-asc': (a, b) => collator.compare(a.albion_name || '', b.albion_name || ''),
+      'name-desc': (a, b) => collator.compare(b.albion_name || '', a.albion_name || ''),
+      default: (a, b) => Number(b[valueField] || 0) - Number(a[valueField] || 0)
+    });
+  };
+  renderRanking('pve-ranking-full', prepare(rankings.pve.rows, 'amount'), 'pve');
+  renderRanking('participation-ranking-full', prepare(rankings.participation.rows, 'events'), 'participation');
 }
 
 function renderAudit(rows) {
-  document.querySelector('#audit-table').innerHTML = rows.length ? rows.map((row) => `<tr><td class="primary-cell">${escapeHtml(row.type)}</td><td>${escapeHtml(row.actor_id || 'Sistema')}</td><td>${escapeHtml(row.target_id || '—')}</td><td>${escapeHtml(row.reason || '—')}</td><td>${formatDate(row.created_at)}</td></tr>`).join('') : emptyRow(5);
+  const query = controlValue('audit-search');
+  const filtered = rows.filter((row) => includesQuery(row, query, ['type', 'actor_id', 'target_id', 'reason']));
+  const sorted = sortRows(filtered, controlValue('audit-sort', 'date-desc'), {
+    'date-desc': (a, b) => dateValue(b.created_at) - dateValue(a.created_at),
+    'date-asc': (a, b) => dateValue(a.created_at) - dateValue(b.created_at),
+    'type-asc': (a, b) => collator.compare(a.type || '', b.type || ''),
+    'type-desc': (a, b) => collator.compare(b.type || '', a.type || ''),
+    default: (a, b) => dateValue(b.created_at) - dateValue(a.created_at)
+  });
+  setSummary('audit-summary', sorted.length, rows.length);
+  document.querySelector('#audit-table').innerHTML = sorted.length ? sorted.map((row) => `<tr><td class="primary-cell">${escapeHtml(row.type)}</td><td>${escapeHtml(row.actor_id || 'Sistema')}</td><td>${escapeHtml(row.target_id || '—')}</td><td>${escapeHtml(row.reason || '—')}</td><td>${formatDate(row.created_at)}</td></tr>`).join('') : emptyRow(5);
 }
 
 function render(data) {
@@ -247,8 +374,16 @@ document.querySelector('#menu-toggle').addEventListener('click', openSidebar);
 document.querySelector('#sidebar-close').addEventListener('click', closeSidebar);
 document.querySelector('#mobile-scrim').addEventListener('click', closeSidebar);
 document.querySelector('#refresh-button').addEventListener('click', () => loadDashboard({ manual: true }));
-document.querySelector('#member-search').addEventListener('input', (event) => {
-  if (state.data) renderMembers(state.data.members, event.target.value);
+document.querySelectorAll('.table-controls input, .table-controls select').forEach((control) => {
+  control.addEventListener(control.matches('input') ? 'input' : 'change', () => {
+    if (!state.data) return;
+    renderMembers(state.data.members);
+    renderRegistrations(state.data.members, state.data.operations.registrationsPending);
+    renderEvents(state.data.events);
+    renderFinance(state.data.finance, state.data.overview.totalMemberBalance);
+    renderRankings(state.data.rankings);
+    renderAudit(state.data.audit);
+  });
 });
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && Date.now() - state.lastLoadedAt >= 30000) loadDashboard();
