@@ -15,6 +15,7 @@ const {
   previewCategoryFame,
   undoLatestCategoryImport
 } = require('../src/modules/albion/fame.service');
+const { getDashboardData } = require('../src/web/dashboard.repository');
 
 migrate();
 
@@ -82,6 +83,35 @@ test('prévia identifica jogadores duplicados e valores inválidos', () => {
   assert.equal(preview.summary.errors, 2);
   assert.match(preview.errors[0].message, /mais de uma vez/);
   assert.match(preview.errors[1].message, /valor inválido/);
+});
+
+test('dashboard classifica vinculados e não vinculados sem duplicar personagem', () => {
+  const db = getDatabase();
+  const insertUser = db.prepare('INSERT INTO users (discord_id, discord_name, albion_name, registration_status) VALUES (?, ?, ?, ?)');
+  insertUser.run('ranking-alpha-member', 'Alpha membro', 'RankingAlpha', 'member');
+  db.prepare(`
+    INSERT INTO albion_fame_totals
+      (albion_key, albion_name, pve_fame, pvp_fame, gathering_fame, crafting_fame)
+    VALUES
+      ('rankingalpha', 'RankingAlpha', 500, 500, 500, 500),
+      ('rankingbeta', 'RankingBeta', 400, 400, 400, 400),
+      ('rankinggamma', 'RankingGamma', 0, 0, 0, 0)
+  `).run();
+
+  const rows = getDashboardData().rankings.fame.rows;
+  const alphaRows = rows.filter((row) => row.albion_name === 'RankingAlpha');
+  const alpha = alphaRows[0];
+  const beta = rows.find((row) => row.albion_name === 'RankingBeta');
+  const gamma = rows.find((row) => row.albion_name === 'RankingGamma');
+
+  assert.equal(alphaRows.length, 1);
+  assert.equal(alpha.discord_id, 'ranking-alpha-member');
+  assert.equal(alpha.linked, true);
+  assert.equal(beta.linked, false);
+  assert.ok(alpha.pve_fame_rank < beta.pve_fame_rank);
+  assert.ok(alpha.overall_rank < beta.overall_rank);
+  assert.equal(gamma.pve_fame_rank, null);
+  assert.equal(gamma.overall_rank, null);
 });
 
 after(() => {

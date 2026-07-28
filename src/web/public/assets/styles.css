@@ -219,6 +219,22 @@ tbody tr:hover td { background: #222429; }
 .search-input { width: min(260px, 100%); padding-right: 13px; }
 .table-controls select { cursor: pointer; }
 .table-controls select:focus, .search-input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(88,101,242,.12); }
+.ranking-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; padding: 5px; border: 1px solid var(--line); border-radius: 11px; background: #191a1e; }
+.ranking-tab { min-width: 90px; padding: 10px 16px; border: 0; border-radius: 8px; color: #949aa5; background: transparent; cursor: pointer; font-size: 11px; font-weight: 750; }
+.ranking-tab:hover { color: #e5e7eb; background: #24262b; }
+.ranking-tab.active { color: #fff; background: var(--blue); box-shadow: 0 5px 16px rgba(88,101,242,.25); }
+.metric-grid.compact.ranking-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 14px; }
+.ranking-panel .table-wrap { max-height: 680px; }
+.ranking-panel thead { position: sticky; z-index: 2; top: 0; background: var(--surface); }
+.ranking-table-position { width: 74px; color: #8f95a1; font-weight: 850; text-align: center; }
+.fame-ranking-table tbody tr:nth-child(1) .ranking-table-position { color: #f0b232; }
+.fame-ranking-table tbody tr:nth-child(2) .ranking-table-position { color: #c1c5ce; }
+.fame-ranking-table tbody tr:nth-child(3) .ranking-table-position { color: #bd805b; }
+.ranking-primary-value { color: #f1f2f5; font-size: 12px; font-weight: 800; }
+.no-points { color: #666c77; font-size: 9px; }
+.view-subheading { margin: 30px 0 14px; }
+.view-subheading h2 { margin: 0 0 5px; font-size: 18px; }
+.view-subheading p { margin: 0; color: var(--muted); font-size: 11px; }
 .fame-category-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
 .fame-category { padding: 14px; border: 1px solid #373a42; border-radius: 10px; color: #e9eaed; background: #202126; cursor: pointer; text-align: left; }
 .fame-category:hover { border-color: #555a66; }
@@ -307,6 +323,8 @@ tbody tr:hover td { background: #222429; }
   .table-controls { display: grid; max-width: none; grid-template-columns: 1fr; }
   .table-controls select { width: 100%; }
   .search-input { width: 100%; }
+  .ranking-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .ranking-tab { min-width: 0; padding-inline: 8px; }
   .bar-chart { gap: 7px; }
   .fame-category-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .fame-actions { align-items: stretch; flex-direction: column; }

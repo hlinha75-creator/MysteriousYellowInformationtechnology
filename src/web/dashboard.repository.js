@@ -97,35 +97,50 @@ function fameDashboard() {
            ft.gathering_fame, ft.crafting_fame, ft.updated_at,
            u.discord_id, u.discord_name, u.registration_status
     FROM albion_fame_totals ft
-    LEFT JOIN users u ON lower(u.albion_name) = lower(ft.albion_name)
+    LEFT JOIN users u ON u.discord_id = (
+      SELECT candidate.discord_id
+      FROM users candidate
+      WHERE lower(candidate.albion_name) = lower(ft.albion_name)
+      ORDER BY CASE WHEN candidate.registration_status = 'member' THEN 0 ELSE 1 END,
+               candidate.updated_at DESC,
+               candidate.discord_id ASC
+      LIMIT 1
+    )
   `).all().map((row) => ({ ...row, linked: Boolean(row.discord_id) }));
-  const linkedRows = rows.filter((row) => row.linked);
 
   for (const [, , column] of categories) {
-    const values = [...new Set(linkedRows.map((row) => Number(row[column] || 0)).filter((value) => value > 0))].sort((a, b) => b - a);
+    const values = [...new Set(rows.map((row) => Number(row[column] || 0)).filter((value) => value > 0))].sort((a, b) => b - a);
     const scoreByValue = new Map(values.map((value, index) => [value, values.length <= 1 ? 100 : ((values.length - 1 - index) / (values.length - 1)) * 100]));
-    const rankByValue = new Map(values.map((value, index) => [value, index + 1]));
     for (const row of rows) {
       const value = Number(row[column] || 0);
-      row[`${column}_score`] = row.linked && value > 0 ? Number(scoreByValue.get(value).toFixed(2)) : 0;
-      row[`${column}_rank`] = row.linked && value > 0 ? rankByValue.get(value) : null;
+      row[`${column}_score`] = value > 0 ? Number(scoreByValue.get(value).toFixed(2)) : 0;
+      row[`${column}_rank`] = null;
     }
   }
 
   for (const row of rows) {
-    row.overall_score = row.linked
+    const totalFame = Number(row.pve_fame || 0) + Number(row.pvp_fame || 0)
+      + Number(row.gathering_fame || 0) + Number(row.crafting_fame || 0);
+    row.overall_score = totalFame > 0
       ? Number(((row.pve_fame_score + row.pvp_fame_score + row.gathering_fame_score + row.crafting_fame_score) / 4).toFixed(2))
       : null;
+    row.overall_rank = null;
   }
-  const ordered = linkedRows.sort((a, b) => b.overall_score - a.overall_score || a.albion_name.localeCompare(b.albion_name));
-  let previousScore = null;
-  let previousRank = 0;
-  ordered.forEach((row, index) => {
-    const rank = previousScore === row.overall_score ? previousRank : index + 1;
-    row.overall_rank = rank;
-    previousScore = row.overall_score;
-    previousRank = rank;
+
+  const overallOrdered = rows.filter((row) => row.overall_score !== null)
+    .sort((a, b) => b.overall_score - a.overall_score || a.albion_name.localeCompare(b.albion_name));
+  overallOrdered.forEach((row, index) => {
+    row.overall_rank = index + 1;
   });
+
+  for (const [, , column] of categories) {
+    rows.filter((row) => Number(row[column] || 0) > 0)
+      .sort((a, b) => Number(b[column]) - Number(a[column])
+        || Number(b.overall_score || 0) - Number(a.overall_score || 0)
+        || a.albion_name.localeCompare(b.albion_name))
+      .forEach((row, index) => { row[`${column}_rank`] = index + 1; });
+  }
+
   rows.sort((a, b) => (a.overall_rank || Number.MAX_SAFE_INTEGER) - (b.overall_rank || Number.MAX_SAFE_INTEGER) || a.albion_name.localeCompare(b.albion_name));
   return { imports, rows };
 }

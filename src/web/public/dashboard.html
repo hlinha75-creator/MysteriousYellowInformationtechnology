@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Central da staff — Notag</title>
-  <link rel="stylesheet" href="/assets/styles.css?v=20260728-2">
-  <script src="/assets/dashboard.js?v=20260728-2" defer></script>
+  <link rel="stylesheet" href="/assets/styles.css?v=20260728-6">
+  <script src="/assets/dashboard.js?v=20260728-6" defer></script>
 </head>
 <body class="dashboard-body">
   <div class="app-shell">
@@ -82,7 +82,31 @@
         <section class="view" id="view-operations" data-title="Operações" data-kicker="Atividades"><div class="view-heading"><div><h2>Fila operacional</h2><p>Itens que merecem atenção da staff.</p></div></div><div class="metric-grid" id="operations-metrics"></div><article class="panel empty-guidance"><span class="empty-icon">✓</span><h3>Acompanhamento centralizado</h3><p>Esta primeira versão reúne os totais. As ações administrativas serão adicionadas na próxima etapa.</p></article></section>
         <section class="view" id="view-finance" data-title="Saldos e campanha" data-kicker="Financeiro"><div class="view-heading"><div><h2>Financeiro</h2><p>Saldos dos membros, campanha ativa e movimentações.</p></div><div class="table-controls"><input class="search-input" id="transaction-search" type="search" placeholder="Buscar movimentação…" aria-label="Buscar movimentação"><select id="transaction-kind" aria-label="Filtrar movimentações"><option value="">Créditos e débitos</option><option value="credit">Somente créditos</option><option value="debit">Somente débitos</option></select><select id="transaction-sort" aria-label="Classificar movimentações"><option value="date-desc">Data: recente</option><option value="date-asc">Data: antiga</option><option value="amount-desc">Valor: maior–menor</option><option value="amount-asc">Valor: menor–maior</option><option value="name-asc">Nome: A–Z</option><option value="name-desc">Nome: Z–A</option></select></div></div><div class="metric-grid compact" id="finance-metrics"></div><article class="panel"><div class="panel-head"><div><span>Extrato</span><h3>Movimentações recentes</h3></div></div><div class="result-summary" id="transactions-summary"></div><div class="table-wrap"><table><thead><tr><th>Jogador</th><th>Tipo</th><th>Motivo</th><th>Data</th><th class="number-cell">Valor</th></tr></thead><tbody id="transactions-table"></tbody></table></div></article></section>
         <section class="view" id="view-deposits" data-title="Depósitos" data-kicker="Financeiro"><div class="view-heading"><div><h2>Depósitos recentes</h2><p>Créditos identificados no histórico financeiro.</p></div><div class="table-controls"><input class="search-input" id="deposit-search" type="search" placeholder="Buscar depósito…" aria-label="Buscar depósito"><select id="deposit-sort" aria-label="Classificar depósitos"><option value="date-desc">Data: recente</option><option value="date-asc">Data: antiga</option><option value="amount-desc">Valor: maior–menor</option><option value="amount-asc">Valor: menor–maior</option><option value="name-asc">Nome: A–Z</option><option value="name-desc">Nome: Z–A</option></select></div></div><article class="panel"><div class="result-summary" id="deposits-summary"></div><div class="table-wrap"><table><thead><tr><th>Jogador</th><th>Tipo</th><th>Motivo</th><th>Data</th><th class="number-cell">Valor</th></tr></thead><tbody id="deposits-table"></tbody></table></div></article></section>
-        <section class="view" id="view-rankings" data-title="Rankings" data-kicker="Desempenho"><div class="view-heading"><div><h2>Destaques da semana</h2><p>Nome do personagem no Albion como referência principal.</p></div><div class="table-controls"><input class="search-input" id="ranking-search" type="search" placeholder="Buscar jogador…" aria-label="Buscar nos rankings"><select id="ranking-sort" aria-label="Classificar rankings"><option value="value-desc">Resultado: maior–menor</option><option value="value-asc">Resultado: menor–maior</option><option value="name-asc">Nome: A–Z</option><option value="name-desc">Nome: Z–A</option></select></div></div><div class="dashboard-grid equal"><article class="panel"><div class="panel-head"><div><span id="pve-period">Semana</span><h3>Fama PvE</h3></div></div><div class="ranking-list large" id="pve-ranking-full"></div></article><article class="panel"><div class="panel-head"><div><span id="participation-period">Últimos 7 dias</span><h3>Participação em eventos</h3></div></div><div class="ranking-list large" id="participation-ranking-full"></div></article></div></section>
+        <section class="view" id="view-rankings" data-title="Rankings" data-kicker="Desempenho">
+          <div class="view-heading">
+            <div><h2>Classificações All-time</h2><p>Desempenho acumulado dos jogadores nas quatro categorias importadas.</p></div>
+            <div class="table-controls">
+              <input class="search-input" id="ranking-search" type="search" placeholder="Buscar jogador…" aria-label="Buscar nos rankings">
+              <select id="ranking-link" aria-label="Filtrar rankings por vínculo"><option value="">Todos os jogadores</option><option value="linked">Vinculados ao Discord</option><option value="unlinked">Aguardando vínculo</option></select>
+              <select id="ranking-sort" aria-label="Classificar rankings"><option value="rank">Posição oficial</option><option value="value-desc">Pontos: maior–menor</option><option value="value-asc">Pontos: menor–maior</option><option value="name-asc">Nome: A–Z</option><option value="name-desc">Nome: Z–A</option></select>
+            </div>
+          </div>
+          <div class="ranking-tabs" id="ranking-tabs" role="tablist" aria-label="Categorias de classificação">
+            <button class="ranking-tab active" type="button" role="tab" aria-selected="true" data-ranking-category="overall">Geral</button>
+            <button class="ranking-tab" type="button" role="tab" aria-selected="false" data-ranking-category="pve">PvE</button>
+            <button class="ranking-tab" type="button" role="tab" aria-selected="false" data-ranking-category="pvp">PvP</button>
+            <button class="ranking-tab" type="button" role="tab" aria-selected="false" data-ranking-category="gathering">Coleta</button>
+            <button class="ranking-tab" type="button" role="tab" aria-selected="false" data-ranking-category="crafting">Craft</button>
+          </div>
+          <div class="metric-grid compact ranking-metrics" id="fame-ranking-metrics"></div>
+          <article class="panel ranking-panel">
+            <div class="panel-head"><div><span id="fame-ranking-period">All-time</span><h3 id="fame-ranking-title">Classificação geral</h3></div><span class="badge" id="fame-ranking-scope">Geral</span></div>
+            <div class="result-summary" id="fame-ranking-summary"></div>
+            <div class="table-wrap"><table class="fame-ranking-table"><thead id="fame-ranking-head"></thead><tbody id="fame-ranking-table"></tbody></table></div>
+          </article>
+          <div class="view-subheading"><div><h2>Atividade recente</h2><p>Rankings semanais mantidos para acompanhamento operacional.</p></div></div>
+          <div class="dashboard-grid equal"><article class="panel"><div class="panel-head"><div><span id="pve-period">Semana</span><h3>Fama PvE</h3></div></div><div class="ranking-list large" id="pve-ranking-full"></div></article><article class="panel"><div class="panel-head"><div><span id="participation-period">Últimos 7 dias</span><h3>Participação em eventos</h3></div></div><div class="ranking-list large" id="participation-ranking-full"></div></article></div>
+        </section>
         <section class="view" id="view-ranking-import" data-title="Importar tabelas" data-kicker="Desempenho">
           <div class="view-heading"><div><h2>Importar classificações</h2><p>Envie uma categoria All-time por vez. Nada será salvo antes da confirmação.</p></div><button class="button button-ghost import-undo" id="fame-undo" type="button">Desfazer última importação</button></div>
           <div class="fame-category-grid" id="fame-categories">

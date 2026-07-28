@@ -1,4 +1,4 @@
-const state = { data: null, lastLoadedAt: 0, currentView: 'overview', csrf: null, famePreview: null, fameCategory: 'pve', fameSourceName: null };
+const state = { data: null, lastLoadedAt: 0, currentView: 'overview', csrf: null, famePreview: null, fameCategory: 'pve', fameSourceName: null, rankingCategory: 'overall' };
 const number = new Intl.NumberFormat('pt-BR');
 const collator = new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base' });
 
@@ -262,23 +262,84 @@ function sortTransactions(rows, sort) {
 function renderRankings(rankings) {
   document.querySelector('#pve-period').textContent = rankings.pve.label;
   document.querySelector('#participation-period').textContent = rankings.participation.label;
-  const query = controlValue('ranking-search');
-  const sort = controlValue('ranking-sort', 'value-desc');
-  const prepare = (rows, valueField) => {
-    const filtered = rows.filter((row) => includesQuery(row, query, ['albion_name']));
-    return sortRows(filtered, sort, {
-      'value-desc': (a, b) => Number(b[valueField] || 0) - Number(a[valueField] || 0),
-      'value-asc': (a, b) => Number(a[valueField] || 0) - Number(b[valueField] || 0),
-      'name-asc': (a, b) => collator.compare(a.albion_name || '', b.albion_name || ''),
-      'name-desc': (a, b) => collator.compare(b.albion_name || '', a.albion_name || ''),
-      default: (a, b) => Number(b[valueField] || 0) - Number(a[valueField] || 0)
-    });
-  };
-  renderRanking('pve-ranking-full', prepare(rankings.pve.rows, 'amount'), 'pve');
-  renderRanking('participation-ranking-full', prepare(rankings.participation.rows, 'events'), 'participation');
+  renderRanking('pve-ranking-full', rankings.pve.rows, 'pve');
+  renderRanking('participation-ranking-full', rankings.participation.rows, 'participation');
+  renderFameRankings(rankings.fame);
 }
 
 const fameCategoryLabels = { pve: 'PvE', pvp: 'PvP', gathering: 'Coleta', crafting: 'Craft' };
+const fameRankingConfigs = {
+  overall: { label: 'Geral', title: 'Classificação geral', valueField: 'overall_score', rankField: 'overall_rank', score: true },
+  pve: { label: 'PvE', title: 'Classificação PvE', valueField: 'pve_fame', rankField: 'pve_fame_rank' },
+  pvp: { label: 'PvP', title: 'Classificação PvP', valueField: 'pvp_fame', rankField: 'pvp_fame_rank' },
+  gathering: { label: 'Coleta', title: 'Classificação de coleta', valueField: 'gathering_fame', rankField: 'gathering_fame_rank' },
+  crafting: { label: 'Craft', title: 'Classificação de craft', valueField: 'crafting_fame', rankField: 'crafting_fame_rank' }
+};
+
+function fameValue(row, config) {
+  const value = row[config.valueField];
+  if (value === null || value === undefined || (!config.score && Number(value) <= 0)) return 'Sem pontos';
+  return config.score ? `${Number(value).toFixed(1)} pts` : compact.format(value);
+}
+
+function renderFameRankings(fameData) {
+  const rows = fameData?.rows || [];
+  const config = fameRankingConfigs[state.rankingCategory] || fameRankingConfigs.overall;
+  const query = controlValue('ranking-search');
+  const linkFilter = controlValue('ranking-link');
+  const sort = controlValue('ranking-sort', 'rank');
+  const hasValue = (row) => row[config.rankField] !== null && row[config.rankField] !== undefined;
+  const filtered = rows.filter((row) => includesQuery(row, query, ['albion_name', 'discord_name'])
+    && (!linkFilter || (linkFilter === 'linked' ? row.linked : !row.linked)));
+  const positiveFirst = (a, b, direction) => {
+    if (hasValue(a) !== hasValue(b)) return hasValue(a) ? -1 : 1;
+    const difference = (Number(a[config.valueField] || 0) - Number(b[config.valueField] || 0)) * direction;
+    return difference || Number(a[config.rankField] || Number.MAX_SAFE_INTEGER) - Number(b[config.rankField] || Number.MAX_SAFE_INTEGER)
+      || collator.compare(a.albion_name || '', b.albion_name || '');
+  };
+  const sorted = sortRows(filtered, sort, {
+    rank: (a, b) => Number(a[config.rankField] || Number.MAX_SAFE_INTEGER) - Number(b[config.rankField] || Number.MAX_SAFE_INTEGER)
+      || collator.compare(a.albion_name || '', b.albion_name || ''),
+    'value-desc': (a, b) => positiveFirst(a, b, -1),
+    'value-asc': (a, b) => positiveFirst(a, b, 1),
+    'name-asc': (a, b) => collator.compare(a.albion_name || '', b.albion_name || ''),
+    'name-desc': (a, b) => collator.compare(b.albion_name || '', a.albion_name || ''),
+    default: (a, b) => Number(a[config.rankField] || Number.MAX_SAFE_INTEGER) - Number(b[config.rankField] || Number.MAX_SAFE_INTEGER)
+  });
+
+  const imports = fameData?.imports || [];
+  const latestImports = state.rankingCategory === 'overall'
+    ? imports.map((item) => item.latest).filter(Boolean)
+    : imports.filter((item) => item.category === state.rankingCategory).map((item) => item.latest).filter(Boolean);
+  const latest = latestImports.sort((a, b) => dateValue(b.created_at) - dateValue(a.created_at))[0] || null;
+  const classified = rows.filter(hasValue).length;
+  const linked = rows.filter((row) => row.linked).length;
+  document.querySelector('#fame-ranking-metrics').innerHTML = [
+    metricCard('Jogadores no histórico', number.format(rows.length), 'Inclui ausentes preservados', '#5865f2'),
+    metricCard('Classificados', number.format(classified), 'Jogadores com pontuação', '#23a55a'),
+    metricCard('Vinculados', number.format(linked), `${number.format(Math.max(0, rows.length - linked))} aguardando Discord`, '#37c9ef'),
+    metricCard('Última atualização', latest ? formatDate(latest.created_at) : '—', config.label, '#f0b232')
+  ].join('');
+  document.querySelector('#fame-ranking-title').textContent = config.title;
+  document.querySelector('#fame-ranking-scope').textContent = config.label;
+  document.querySelector('#fame-ranking-period').textContent = latest ? `All-time · ${formatDate(latest.created_at)}` : 'All-time · sem importação';
+  setSummary('fame-ranking-summary', sorted.length, rows.length);
+
+  const generalColumns = '<tr><th>Posição</th><th>Jogador</th><th>Vínculo</th><th class="number-cell">Índice geral</th><th class="number-cell">PvE</th><th class="number-cell">PvP</th><th class="number-cell">Coleta</th><th class="number-cell">Craft</th></tr>';
+  const categoryColumns = `<tr><th>Posição</th><th>Jogador</th><th>Vínculo</th><th class="number-cell">Pontos ${escapeHtml(config.label)}</th><th class="number-cell">Índice geral</th></tr>`;
+  document.querySelector('#fame-ranking-head').innerHTML = state.rankingCategory === 'overall' ? generalColumns : categoryColumns;
+  document.querySelector('#fame-ranking-table').innerHTML = sorted.length ? sorted.map((row) => {
+    const position = row[config.rankField] ? `#${number.format(row[config.rankField])}` : '—';
+    const discordLabel = row.discord_name || (row.linked ? 'Discord vinculado' : 'Sem Discord');
+    const player = `<td class="primary-cell">${escapeHtml(row.albion_name)}<span class="secondary-text">${escapeHtml(discordLabel)}</span></td>`;
+    const link = `<td>${row.linked ? '<span class="badge member">Vinculado</span>' : '<span class="badge pending">Aguardando vínculo</span>'}</td>`;
+    if (state.rankingCategory === 'overall') {
+      return `<tr><td class="ranking-table-position">${position}</td>${player}${link}<td class="number-cell ranking-primary-value">${escapeHtml(fameValue(row, config))}</td><td class="number-cell">${Number(row.pve_fame || 0) > 0 ? escapeHtml(compact.format(row.pve_fame)) : '<span class="no-points">Sem pontos</span>'}</td><td class="number-cell">${Number(row.pvp_fame || 0) > 0 ? escapeHtml(compact.format(row.pvp_fame)) : '<span class="no-points">Sem pontos</span>'}</td><td class="number-cell">${Number(row.gathering_fame || 0) > 0 ? escapeHtml(compact.format(row.gathering_fame)) : '<span class="no-points">Sem pontos</span>'}</td><td class="number-cell">${Number(row.crafting_fame || 0) > 0 ? escapeHtml(compact.format(row.crafting_fame)) : '<span class="no-points">Sem pontos</span>'}</td></tr>`;
+    }
+    const overall = row.overall_score === null ? 'Sem pontos' : `${Number(row.overall_score).toFixed(1)} pts`;
+    return `<tr><td class="ranking-table-position">${position}</td>${player}${link}<td class="number-cell ranking-primary-value">${escapeHtml(fameValue(row, config))}</td><td class="number-cell">${escapeHtml(overall)}</td></tr>`;
+  }).join('') : emptyRow(state.rankingCategory === 'overall' ? 8 : 5, 'Nenhum jogador encontrado com estes filtros.');
+}
 
 function resetFamePreview() {
   state.famePreview = null;
@@ -524,6 +585,15 @@ document.querySelector('#fame-file').addEventListener('change', async (event) =>
 document.querySelector('#fame-analyze').addEventListener('click', analyzeFameTable);
 document.querySelector('#fame-confirm').addEventListener('click', confirmFameImport);
 document.querySelector('#fame-undo').addEventListener('click', undoFameImport);
+document.querySelectorAll('.ranking-tab').forEach((button) => button.addEventListener('click', () => {
+  state.rankingCategory = button.dataset.rankingCategory;
+  document.querySelectorAll('.ranking-tab').forEach((item) => {
+    const selected = item === button;
+    item.classList.toggle('active', selected);
+    item.setAttribute('aria-selected', String(selected));
+  });
+  if (state.data) renderFameRankings(state.data.rankings.fame);
+}));
 document.querySelectorAll('.table-controls input, .table-controls select').forEach((control) => {
   control.addEventListener(control.matches('input') ? 'input' : 'change', () => {
     if (!state.data) return;
