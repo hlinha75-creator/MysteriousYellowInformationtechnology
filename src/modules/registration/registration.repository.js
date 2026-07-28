@@ -44,6 +44,12 @@ function getRegistration(id) {
   return getDatabase().prepare('SELECT * FROM registrations WHERE id = ?').get(id);
 }
 
+function getPendingRegistrationForDiscord(discordId) {
+  return getDatabase()
+    .prepare("SELECT * FROM registrations WHERE discord_id = ? AND status = 'pending' ORDER BY id DESC LIMIT 1")
+    .get(discordId);
+}
+
 function listPendingRegistrations() {
   return getDatabase()
     .prepare(`
@@ -88,6 +94,7 @@ function logGuildMemberEvent({ eventType, discordId, discordName, displayName })
 module.exports = {
   createRegistration,
   findUserByAlbionName,
+  getPendingRegistrationForDiscord,
   getRegistration,
   getUser,
   listPendingRegistrations,

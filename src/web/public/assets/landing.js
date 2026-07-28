@@ -7,11 +7,21 @@ const messages = {
   error: 'Não foi possível concluir o login. Tente novamente.'
 };
 
+const joinMessages = {
+  required: 'Entre com o Discord para iniciar seu cadastro.',
+  unavailable: 'A entrada automática ainda está sendo configurada.',
+  invalid: 'A autorização expirou. Tente entrar novamente.',
+  cancelled: 'A entrada pelo Discord foi cancelada.',
+  error: 'Não foi possível concluir sua entrada. Tente novamente ou procure a staff.'
+};
+
 const query = new URLSearchParams(window.location.search);
-const status = query.get('auth') || (query.has('login') ? 'required' : null);
+const authStatus = query.get('auth') || (query.has('login') ? 'required' : null);
+const joinStatus = query.get('join');
 const toast = document.querySelector('#auth-message');
-if (status && messages[status]) {
-  toast.textContent = messages[status];
+const message = joinStatus ? joinMessages[joinStatus] : messages[authStatus];
+if (message) {
+  toast.textContent = message;
   toast.hidden = false;
   window.setTimeout(() => { toast.hidden = true; }, 7000);
 }

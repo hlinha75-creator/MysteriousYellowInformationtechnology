@@ -29,6 +29,7 @@ module.exports = {
     archive: '1499357332231163924',
     register: '1492707388552253525',
     registrationRequests: '1482334949540626462',
+    guestVoice: '1492707387700674600',
     memberExit: '1482334950639534110',
     memberList: '1482334951637516289',
     memberPanel: '1515255057971548261',

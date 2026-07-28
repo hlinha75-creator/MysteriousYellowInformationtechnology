@@ -8,6 +8,53 @@ function timestamp() {
   return new Date().toISOString().replace(/[:.]/g, '-');
 }
 
+const MANAGED_BACKUP_PATTERN = /^notag-\d{4}-\d{2}-\d{2}T[0-9TZ-]+-[a-z0-9_-]+\.sqlite$/i;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function listManagedBackups(backupDir) {
+  if (!fs.existsSync(backupDir)) return [];
+  const resolvedDir = path.resolve(backupDir);
+  return fs.readdirSync(resolvedDir)
+    .filter((name) => MANAGED_BACKUP_PATTERN.test(name))
+    .map((name) => {
+      const filePath = path.resolve(resolvedDir, name);
+      if (path.dirname(filePath) !== resolvedDir) return null;
+      const stat = fs.lstatSync(filePath);
+      if (!stat.isFile() || stat.isSymbolicLink()) return null;
+      return { name, path: filePath, modifiedAt: stat.mtime };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.modifiedAt.getTime() - a.modifiedAt.getTime());
+}
+
+function pruneBackups(backupDir, options = {}) {
+  const recentCount = Math.max(1, Number(options.recentCount || 30));
+  const dailyDays = Math.max(1, Number(options.dailyDays || 30));
+  const now = options.now instanceof Date ? options.now : new Date();
+  const cutoff = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) - ((dailyDays - 1) * DAY_MS);
+  const files = listManagedBackups(backupDir);
+  const keep = new Set(files.slice(0, recentCount).map((file) => file.path));
+  const keptDays = new Set();
+
+  for (const file of files) {
+    const modifiedAt = file.modifiedAt.getTime();
+    if (modifiedAt < cutoff || modifiedAt > now.getTime()) continue;
+    const day = file.modifiedAt.toISOString().slice(0, 10);
+    if (keptDays.has(day)) continue;
+    keptDays.add(day);
+    keep.add(file.path);
+  }
+
+  const removed = [];
+  for (const file of files) {
+    if (keep.has(file.path)) continue;
+    fs.rmSync(file.path);
+    removed.push(file.path);
+  }
+
+  return { total: files.length, kept: files.length - removed.length, removed };
+}
+
 function backupDatabase(reason = 'manual') {
   const databasePath = path.resolve(env.databasePath);
   if (!fs.existsSync(databasePath)) {
@@ -20,6 +67,11 @@ function backupDatabase(reason = 'manual') {
   const safeReason = reason.replace(/[^a-z0-9_-]/gi, '_').slice(0, 50);
   const backupPath = path.join(backupDir, `notag-${timestamp()}-${safeReason}.sqlite`);
   fs.copyFileSync(databasePath, backupPath);
+  try {
+    pruneBackups(backupDir);
+  } catch (error) {
+    console.warn(`[BACKUP] Cópia criada, mas a retenção falhou: ${error.message}`);
+  }
   return backupPath;
 }
 
@@ -92,5 +144,6 @@ function tableCountCheck(db, tableName) {
 module.exports = {
   backupDatabase,
   latestBackupFile,
+  pruneBackups,
   testLatestBackupRestore
 };

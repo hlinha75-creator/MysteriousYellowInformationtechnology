@@ -13,8 +13,11 @@ const { migrate } = require('../src/database/migrate');
 const { getDashboardData } = require('../src/web/dashboard.repository');
 const { createRequestHandler } = require('../src/web/server');
 const {
+  JOIN_SESSION_COOKIE,
+  createJoinSession,
   createOAuthState,
   createSession,
+  readJoinSession,
   readSession,
   validateOAuthState
 } = require('../src/web/auth');
@@ -37,6 +40,15 @@ test('state OAuth é verificável e expira', () => {
   assert.equal(validateOAuthState(state, secret, now + 1000), true);
   assert.equal(validateOAuthState(state, 'segredo-incorreto', now + 1000), false);
   assert.equal(validateOAuthState(state, secret, now + (11 * 60 * 1000)), false);
+});
+
+test('sessão pública de entrada é separada da sessão da staff', () => {
+  const secret = 'segredo-publico-de-teste';
+  const now = Date.parse('2026-07-28T12:00:00Z');
+  const token = createJoinSession({ id: 'visitante-1', username: 'Visitante', global_name: 'Novo jogador' }, secret, now);
+  assert.equal(readJoinSession(token, secret, now + 1000).id, 'visitante-1');
+  assert.equal(readSession(token, secret, now + 1000), null);
+  assert.equal(readJoinSession(token, secret, now + (31 * 60 * 1000)), null);
 });
 
 test('dashboard reconcilia membros, saldos, campanha e rankings', () => {
@@ -75,7 +87,16 @@ test('servidor publica landing e protege a API do dashboard', async (t) => {
 
   const landing = await fetch(`${base}/`);
   assert.equal(landing.status, 200);
-  assert.match(await landing.text(), /PvE, economia e conquistas/);
+  assert.match(await landing.text(), /PvE, Farm de World Boss e Roaming/);
+
+  const joinToken = createJoinSession({ id: 'visitante-web', username: 'Visitante' }, process.env.DASHBOARD_SESSION_SECRET);
+  const joinPage = await fetch(`${base}/join`, { headers: { Cookie: `${JOIN_SESSION_COOKIE}=${joinToken}` } });
+  assert.equal(joinPage.status, 200);
+  assert.match(await joinPage.text(), /Qual é o seu personagem no Albion/);
+
+  const joinOAuth = await fetch(`${base}/join/discord`, { redirect: 'manual' });
+  assert.equal(joinOAuth.status, 302);
+  assert.match(joinOAuth.headers.get('location'), /scope=identify(?:\+|%20)guilds\.join/);
 
   const dashboard = await fetch(`${base}/api/dashboard`);
   assert.equal(dashboard.status, 401);

@@ -2,7 +2,10 @@ const crypto = require('node:crypto');
 
 const SESSION_COOKIE = 'notag_session';
 const OAUTH_STATE_COOKIE = 'notag_oauth_state';
+const JOIN_SESSION_COOKIE = 'notag_join_session';
+const JOIN_OAUTH_STATE_COOKIE = 'notag_join_oauth_state';
 const SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
+const JOIN_SESSION_MAX_AGE_SECONDS = 30 * 60;
 const OAUTH_STATE_MAX_AGE_SECONDS = 10 * 60;
 
 function base64url(value) {
@@ -37,6 +40,7 @@ function readSignedValue(token, secret) {
 
 function createSession(user, secret, now = Date.now()) {
   return createSignedValue({
+    purpose: 'staff',
     id: user.id,
     username: user.username,
     globalName: user.global_name || user.username,
@@ -48,7 +52,25 @@ function createSession(user, secret, now = Date.now()) {
 
 function readSession(token, secret, now = Date.now()) {
   const session = readSignedValue(token, secret);
-  if (!session?.id || !session.exp || session.exp <= now) return null;
+  if (session?.purpose !== 'staff' || !session.id || !session.exp || session.exp <= now) return null;
+  return session;
+}
+
+function createJoinSession(user, secret, now = Date.now()) {
+  return createSignedValue({
+    purpose: 'join',
+    id: user.id,
+    username: user.username,
+    globalName: user.global_name || user.username,
+    avatar: user.avatar || null,
+    csrf: crypto.randomBytes(24).toString('base64url'),
+    exp: now + JOIN_SESSION_MAX_AGE_SECONDS * 1000
+  }, secret);
+}
+
+function readJoinSession(token, secret, now = Date.now()) {
+  const session = readSignedValue(token, secret);
+  if (session?.purpose !== 'join' || !session.id || !session.csrf || !session.exp || session.exp <= now) return null;
   return session;
 }
 
@@ -83,15 +105,20 @@ function clearCookie(name, secure = true) {
 }
 
 module.exports = {
+  JOIN_OAUTH_STATE_COOKIE,
+  JOIN_SESSION_COOKIE,
+  JOIN_SESSION_MAX_AGE_SECONDS,
   OAUTH_STATE_COOKIE,
   OAUTH_STATE_MAX_AGE_SECONDS,
   SESSION_COOKIE,
   SESSION_MAX_AGE_SECONDS,
   clearCookie,
   cookie,
+  createJoinSession,
   createOAuthState,
   createSession,
   parseCookies,
+  readJoinSession,
   readSession,
   validateOAuthState
 };
