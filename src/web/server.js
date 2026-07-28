@@ -3,6 +3,8 @@ const http = require('node:http');
 const path = require('node:path');
 const ids = require('../config/ids');
 const env = require('../config/env');
+const fame = require('../modules/albion/fame.service');
+const { baseEmbed, safeSend } = require('../utils/discord');
 const { getDashboardData } = require('./dashboard.repository');
 const { completeOnboarding, ensureGuestMember, handleOnboardingIssue, onboardingConfigured } = require('./onboarding');
 const {
@@ -141,6 +143,25 @@ function configuredForOAuth() {
   return Boolean(env.discordClientId && env.discordClientSecret && env.dashboardSessionSecret && env.dashboardBaseUrl);
 }
 
+async function notifyFameImport(client, session, result) {
+  const summary = result.summary;
+  const embed = baseEmbed(`Ranking de ${result.categoryLabel} atualizado`)
+    .setColor(0x5865f2)
+    .setDescription([
+      `**${summary.players}** jogadores processados`,
+      `**${summary.withPoints}** com pontuação`,
+      `**${summary.unmatched}** aguardando vínculo`,
+      `**${summary.missing}** ausentes nesta importação`,
+      `**${summary.reductions}** reduções confirmadas`,
+      '',
+      `Importado por <@${session.id}>`
+    ].join('\n'));
+  return safeSend(client, ids.channels.staff, {
+    embeds: [embed],
+    allowedMentions: { parse: [], users: [session.id], roles: [] }
+  });
+}
+
 function createRequestHandler(client, options = {}) {
   const isProduction = env.nodeEnv === 'production';
   const secureCookie = isProduction || env.dashboardBaseUrl.startsWith('https://');
@@ -169,6 +190,63 @@ function createRequestHandler(client, options = {}) {
           console.error('[ONBOARDING] Falha ao concluir cadastro:', error);
           const fallback = await handleOnboardingIssue(client, joinSession, form.get('albionName'), error);
           return json(res, 202, fallback, isProduction);
+        }
+      }
+      if (req.method === 'POST' && url.pathname.startsWith('/api/fame/')) {
+        if (!session) return json(res, 401, { error: 'Sessão da staff necessária.' }, isProduction);
+        if (!await sessionStillAuthorized(client, session)) return json(res, 403, { error: 'Acesso de staff necessário.' }, isProduction);
+        const expectedOrigin = new URL(env.dashboardBaseUrl).origin;
+        if (req.headers.origin !== expectedOrigin) return json(res, 403, { error: 'Origem inválida.' }, isProduction);
+        if (!String(req.headers['content-type'] || '').startsWith('application/x-www-form-urlencoded')) {
+          return json(res, 415, { error: 'Formato de formulário inválido.' }, isProduction);
+        }
+        const form = await readFormBody(req, 512 * 1024);
+        if (!session.csrf || form.get('csrf') !== session.csrf) {
+          return json(res, 403, { error: 'Sua sessão precisa ser renovada. Saia e entre novamente.' }, isProduction);
+        }
+
+        if (url.pathname === '/api/fame/import/preview') {
+          try {
+            const preview = fame.previewCategoryFame(form.get('text'), {
+              category: form.get('category'),
+              sourceName: form.get('sourceName'),
+              actorId: session.id
+            });
+            const previewId = fame.savePreview(preview);
+            return json(res, 200, {
+              previewId,
+              category: preview.category,
+              categoryLabel: preview.categoryLabel,
+              summary: preview.summary,
+              errors: preview.errors.slice(0, 30),
+              missing: preview.missing.slice(0, 30),
+              rows: preview.rows.slice(0, 250)
+            }, isProduction);
+          } catch (error) {
+            return json(res, 400, { error: error.message || 'Não foi possível analisar a tabela.' }, isProduction);
+          }
+        }
+
+        if (url.pathname === '/api/fame/import/confirm') {
+          try {
+            const preview = fame.getPreview(form.get('previewId'));
+            if (preview.actorId !== session.id) return json(res, 403, { error: 'Esta prévia pertence a outra sessão.' }, isProduction);
+            const result = fame.applyCategoryPreview(preview, { confirmReductions: form.get('confirmReductions') === 'true' });
+            fame.cancelPreview(form.get('previewId'));
+            await notifyFameImport(client, session, result);
+            return json(res, 200, result, isProduction);
+          } catch (error) {
+            return json(res, 400, { error: error.message || 'Não foi possível confirmar a importação.' }, isProduction);
+          }
+        }
+
+        if (url.pathname === '/api/fame/import/undo') {
+          try {
+            const result = fame.undoLatestCategoryImport(form.get('category'), session.id);
+            return json(res, 200, result, isProduction);
+          } catch (error) {
+            return json(res, 400, { error: error.message || 'Não foi possível desfazer a importação.' }, isProduction);
+          }
         }
       }
       if (req.method !== 'GET') {
@@ -276,7 +354,7 @@ function createRequestHandler(client, options = {}) {
           name: session.globalName || session.username,
           username: session.username,
           avatarUrl: avatarUrl(session)
-        } }, isProduction);
+        }, csrf: session.csrf || null }, isProduction);
       }
       if (url.pathname === '/api/dashboard') {
         if (!session) return json(res, 401, { error: 'Sessão necessária.' }, isProduction);

@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Central da staff — Notag</title>
-  <link rel="stylesheet" href="/assets/styles.css">
-  <script src="/assets/dashboard.js" defer></script>
+  <link rel="stylesheet" href="/assets/styles.css?v=20260728-2">
+  <script src="/assets/dashboard.js?v=20260728-2" defer></script>
 </head>
 <body class="dashboard-body">
   <div class="app-shell">
@@ -35,6 +35,7 @@
         <div class="nav-group">
           <p>Desempenho</p>
           <button class="nav-item" data-view="rankings"><span class="nav-symbol">↗</span>Rankings</button>
+          <button class="nav-item" data-view="ranking-import"><span class="nav-symbol">↑</span>Importar tabelas</button>
         </div>
         <div class="nav-group">
           <p>Sistema</p>
@@ -82,6 +83,36 @@
         <section class="view" id="view-finance" data-title="Saldos e campanha" data-kicker="Financeiro"><div class="view-heading"><div><h2>Financeiro</h2><p>Saldos dos membros, campanha ativa e movimentações.</p></div><div class="table-controls"><input class="search-input" id="transaction-search" type="search" placeholder="Buscar movimentação…" aria-label="Buscar movimentação"><select id="transaction-kind" aria-label="Filtrar movimentações"><option value="">Créditos e débitos</option><option value="credit">Somente créditos</option><option value="debit">Somente débitos</option></select><select id="transaction-sort" aria-label="Classificar movimentações"><option value="date-desc">Data: recente</option><option value="date-asc">Data: antiga</option><option value="amount-desc">Valor: maior–menor</option><option value="amount-asc">Valor: menor–maior</option><option value="name-asc">Nome: A–Z</option><option value="name-desc">Nome: Z–A</option></select></div></div><div class="metric-grid compact" id="finance-metrics"></div><article class="panel"><div class="panel-head"><div><span>Extrato</span><h3>Movimentações recentes</h3></div></div><div class="result-summary" id="transactions-summary"></div><div class="table-wrap"><table><thead><tr><th>Jogador</th><th>Tipo</th><th>Motivo</th><th>Data</th><th class="number-cell">Valor</th></tr></thead><tbody id="transactions-table"></tbody></table></div></article></section>
         <section class="view" id="view-deposits" data-title="Depósitos" data-kicker="Financeiro"><div class="view-heading"><div><h2>Depósitos recentes</h2><p>Créditos identificados no histórico financeiro.</p></div><div class="table-controls"><input class="search-input" id="deposit-search" type="search" placeholder="Buscar depósito…" aria-label="Buscar depósito"><select id="deposit-sort" aria-label="Classificar depósitos"><option value="date-desc">Data: recente</option><option value="date-asc">Data: antiga</option><option value="amount-desc">Valor: maior–menor</option><option value="amount-asc">Valor: menor–maior</option><option value="name-asc">Nome: A–Z</option><option value="name-desc">Nome: Z–A</option></select></div></div><article class="panel"><div class="result-summary" id="deposits-summary"></div><div class="table-wrap"><table><thead><tr><th>Jogador</th><th>Tipo</th><th>Motivo</th><th>Data</th><th class="number-cell">Valor</th></tr></thead><tbody id="deposits-table"></tbody></table></div></article></section>
         <section class="view" id="view-rankings" data-title="Rankings" data-kicker="Desempenho"><div class="view-heading"><div><h2>Destaques da semana</h2><p>Nome do personagem no Albion como referência principal.</p></div><div class="table-controls"><input class="search-input" id="ranking-search" type="search" placeholder="Buscar jogador…" aria-label="Buscar nos rankings"><select id="ranking-sort" aria-label="Classificar rankings"><option value="value-desc">Resultado: maior–menor</option><option value="value-asc">Resultado: menor–maior</option><option value="name-asc">Nome: A–Z</option><option value="name-desc">Nome: Z–A</option></select></div></div><div class="dashboard-grid equal"><article class="panel"><div class="panel-head"><div><span id="pve-period">Semana</span><h3>Fama PvE</h3></div></div><div class="ranking-list large" id="pve-ranking-full"></div></article><article class="panel"><div class="panel-head"><div><span id="participation-period">Últimos 7 dias</span><h3>Participação em eventos</h3></div></div><div class="ranking-list large" id="participation-ranking-full"></div></article></div></section>
+        <section class="view" id="view-ranking-import" data-title="Importar tabelas" data-kicker="Desempenho">
+          <div class="view-heading"><div><h2>Importar classificações</h2><p>Envie uma categoria All-time por vez. Nada será salvo antes da confirmação.</p></div><button class="button button-ghost import-undo" id="fame-undo" type="button">Desfazer última importação</button></div>
+          <div class="fame-category-grid" id="fame-categories">
+            <button class="fame-category active" type="button" data-category="pve"><strong>PvE</strong><small>Sem importação</small></button>
+            <button class="fame-category" type="button" data-category="pvp"><strong>PvP</strong><small>Sem importação</small></button>
+            <button class="fame-category" type="button" data-category="gathering"><strong>Coleta</strong><small>Sem importação</small></button>
+            <button class="fame-category" type="button" data-category="crafting"><strong>Craft</strong><small>Sem importação</small></button>
+          </div>
+          <div class="dashboard-grid equal fame-import-grid">
+            <article class="panel">
+              <div class="panel-head"><div><span>Nova tabela</span><h3 id="fame-import-title">Importar PvE</h3></div></div>
+              <label class="fame-upload" for="fame-file"><span class="fame-upload-icon">↑</span><strong>Selecionar arquivo</strong><small>.txt, .tsv ou .csv · máximo 512 KB</small></label>
+              <input id="fame-file" type="file" accept=".txt,.tsv,.csv,text/plain,text/csv" hidden>
+              <div class="fame-divider"><span>ou cole a tabela copiada do jogo</span></div>
+              <textarea class="fame-textarea" id="fame-text" spellcheck="false" placeholder="&quot;Rank&quot;&#9;&quot;Player&quot;&#9;&quot;Guild Role&quot;&#9;&quot;Amount&quot;"></textarea>
+              <div class="fame-actions"><span id="fame-source-name">Nenhum arquivo selecionado</span><button class="button button-primary" id="fame-analyze" type="button">Analisar tabela</button></div>
+            </article>
+            <article class="panel fame-preview" id="fame-preview">
+              <div class="panel-head"><div><span>Validação</span><h3>Prévia da importação</h3></div><span class="badge" id="fame-preview-status">Aguardando tabela</span></div>
+              <div class="fame-preview-empty" id="fame-preview-empty"><span>⌁</span><p>Escolha uma categoria e envie a tabela para ver jogadores, vínculos e alterações.</p></div>
+              <div id="fame-preview-content" hidden>
+                <div class="metric-grid compact fame-preview-metrics" id="fame-preview-metrics"></div>
+                <div class="fame-warning" id="fame-reduction-warning" hidden><label><input id="fame-confirm-reductions" type="checkbox"> Confirmo que revisei os valores All-time menores.</label></div>
+                <div class="result-summary" id="fame-preview-summary"></div>
+                <div class="table-wrap"><table><thead><tr><th>Jogador</th><th>Vínculo</th><th class="number-cell">Anterior</th><th class="number-cell">Novo</th><th class="number-cell">Alteração</th></tr></thead><tbody id="fame-preview-table"></tbody></table></div>
+                <div class="fame-actions confirm"><span id="fame-preview-errors"></span><button class="button button-primary" id="fame-confirm" type="button">Confirmar importação</button></div>
+              </div>
+            </article>
+          </div>
+        </section>
         <section class="view" id="view-audit" data-title="Auditoria" data-kicker="Sistema"><div class="view-heading"><div><h2>Auditoria</h2><p>Registro das ações recentes executadas pelo bot e pela equipe.</p></div><div class="table-controls"><input class="search-input" id="audit-search" type="search" placeholder="Buscar auditoria…" aria-label="Buscar auditoria"><select id="audit-sort" aria-label="Classificar auditoria"><option value="date-desc">Data: recente</option><option value="date-asc">Data: antiga</option><option value="type-asc">Ação: A–Z</option><option value="type-desc">Ação: Z–A</option></select></div></div><article class="panel"><div class="result-summary" id="audit-summary"></div><div class="table-wrap"><table><thead><tr><th>Ação</th><th>Responsável</th><th>Alvo</th><th>Motivo</th><th>Data</th></tr></thead><tbody id="audit-table"></tbody></table></div></article></section>
       </main>
     </div>

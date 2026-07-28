@@ -6,6 +6,20 @@ const { formatSilver } = require('../../utils/silver');
 
 const previews = new Map();
 
+const categoryColumns = {
+  pve: 'pve_fame',
+  pvp: 'pvp_fame',
+  gathering: 'gathering_fame',
+  crafting: 'crafting_fame'
+};
+
+const categoryLabels = {
+  pve: 'PvE',
+  pvp: 'PvP',
+  gathering: 'Coleta',
+  crafting: 'Craft'
+};
+
 const fameColumns = {
   total_fame: 'total_fame',
   pve_fame: 'pve_fame',
@@ -78,6 +92,202 @@ function previewPveFame(text, { sourceName = null, actorId = null } = {}) {
       top: uniqueRows.slice(0, 8)
     }
   };
+}
+
+function previewCategoryFame(text, { category, sourceName = null, actorId = null } = {}) {
+  const column = categoryColumns[category];
+  if (!column) throw new Error('Categoria de fama inválida.');
+  const sourceRows = parseDelimitedRows(text);
+  if (!sourceRows.length) throw new Error('A tabela não possui jogadores para importar.');
+
+  const db = getDatabase();
+  const currentRows = new Map(db.prepare(`SELECT albion_key, albion_name, ${column} AS amount FROM albion_fame_totals`).all()
+    .map((row) => [row.albion_key, row]));
+  const users = new Map(db.prepare(`
+    SELECT lower(albion_name) AS albion_key, discord_id
+    FROM users
+    WHERE albion_name IS NOT NULL AND trim(albion_name) <> ''
+  `).all().map((row) => [normalizeName(row.albion_key), row.discord_id]));
+
+  const parsed = [];
+  const errors = [];
+  const seen = new Map();
+  for (let index = 0; index < sourceRows.length; index += 1) {
+    const sourceRow = sourceRows[index];
+    const albionName = clean(firstByAliases(sourceRow, ['player', 'character name', 'character_name', 'nome', 'nick', 'albion', 'albion_name', 'jogador']));
+    const albionKey = normalizeName(albionName);
+    const amountRaw = firstByAliases(sourceRow, ['amount', 'valor', 'fame', 'fama']);
+    const sourceRank = parseOptionalInteger(firstByAliases(sourceRow, ['rank', 'posição', 'posicao']));
+    const guildRole = clean(firstByAliases(sourceRow, ['guild role', 'guild_role', 'role', 'cargo']));
+    if (!albionKey) {
+      errors.push({ line: index + 2, message: 'Jogador não informado.' });
+      continue;
+    }
+    if (seen.has(albionKey)) {
+      errors.push({ line: index + 2, message: `${albionName} aparece mais de uma vez.` });
+      continue;
+    }
+    let amount;
+    try {
+      amount = parseCategoryAmount(amountRaw);
+    } catch (error) {
+      errors.push({ line: index + 2, message: `${albionName}: ${error.message}` });
+      continue;
+    }
+    seen.set(albionKey, true);
+    const previousAmount = Number(currentRows.get(albionKey)?.amount || 0);
+    parsed.push({
+      albionKey,
+      albionName,
+      guildRole: guildRole || null,
+      sourceRank,
+      amount,
+      previousAmount,
+      delta: amount - previousAmount,
+      discordId: users.get(albionKey) || null,
+      reduction: amount < previousAmount
+    });
+  }
+
+  parsed.sort((a, b) => b.amount - a.amount || a.albionName.localeCompare(b.albionName));
+  const importedKeys = new Set(parsed.map((row) => row.albionKey));
+  const missing = [...currentRows.values()]
+    .filter((row) => Number(row.amount || 0) > 0 && !importedKeys.has(row.albion_key))
+    .map((row) => ({ albionKey: row.albion_key, albionName: row.albion_name, amount: Number(row.amount || 0) }));
+  const reductions = parsed.filter((row) => row.reduction);
+  const unmatched = parsed.filter((row) => !row.discordId);
+
+  return {
+    type: 'fame_category',
+    category,
+    categoryLabel: categoryLabels[category],
+    sourceName,
+    actorId,
+    rows: parsed,
+    errors,
+    missing,
+    summary: {
+      players: parsed.length,
+      withPoints: parsed.filter((row) => row.amount > 0).length,
+      zero: parsed.filter((row) => row.amount === 0).length,
+      linked: parsed.length - unmatched.length,
+      unmatched: unmatched.length,
+      missing: missing.length,
+      reductions: reductions.length,
+      totalAmount: parsed.reduce((total, row) => total + row.amount, 0),
+      errors: errors.length
+    }
+  };
+}
+
+const applyCategoryPreviewTransaction = transaction((preview) => {
+  if (preview.type !== 'fame_category' || !categoryColumns[preview.category]) throw new Error('Prévia de categoria inválida.');
+  if (preview.errors.length) throw new Error('Corrija os erros da tabela antes de confirmar.');
+  const db = getDatabase();
+  const result = db.prepare(`
+    INSERT INTO albion_fame_category_imports
+      (category, source_name, rows_count, linked_count, unmatched_count, missing_count, reductions_count, imported_by, summary_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    preview.category,
+    preview.sourceName || null,
+    preview.rows.length,
+    preview.summary.linked,
+    preview.summary.unmatched,
+    preview.summary.missing,
+    preview.summary.reductions,
+    preview.actorId || null,
+    JSON.stringify(preview.summary)
+  );
+  const importId = Number(result.lastInsertRowid);
+  const insertRow = db.prepare(`
+    INSERT INTO albion_fame_category_rows
+      (import_id, albion_key, albion_name, guild_role, source_rank, amount, previous_amount, discord_id)
+    VALUES (@importId, @albionKey, @albionName, @guildRole, @sourceRank, @amount, @previousAmount, @discordId)
+  `);
+  const updateTotal = db.prepare(`
+    INSERT INTO albion_fame_totals (albion_key, albion_name, ${categoryColumns[preview.category]}, updated_at)
+    VALUES (@albionKey, @albionName, @amount, CURRENT_TIMESTAMP)
+    ON CONFLICT(albion_key) DO UPDATE SET
+      albion_name = excluded.albion_name,
+      ${categoryColumns[preview.category]} = excluded.${categoryColumns[preview.category]},
+      updated_at = CURRENT_TIMESTAMP
+  `);
+  for (const row of preview.rows) {
+    insertRow.run({ ...row, importId });
+    updateTotal.run(row);
+  }
+  db.exec(`
+    UPDATE albion_fame_totals
+    SET total_fame = pve_fame + pvp_fame + gathering_fame + crafting_fame
+  `);
+  audit.createAuditLog({
+    type: 'albion_fame_category_imported',
+    actorId: preview.actorId,
+    reason: `Importação manual de ${categoryLabels[preview.category]} All-time`,
+    metadata: { importId, category: preview.category, sourceName: preview.sourceName, ...preview.summary }
+  });
+  return { importId, category: preview.category, categoryLabel: categoryLabels[preview.category], summary: preview.summary };
+});
+
+function applyCategoryPreview(preview, { confirmReductions = false } = {}) {
+  if (preview.summary.reductions > 0 && !confirmReductions) {
+    throw new Error('Confirme as reduções All-time antes de importar.');
+  }
+  return applyCategoryPreviewTransaction(preview);
+}
+
+const undoLatestCategoryImportTransaction = transaction(({ category, actorId }) => {
+  const column = categoryColumns[category];
+  if (!column) throw new Error('Categoria de fama inválida.');
+  const db = getDatabase();
+  const latest = db.prepare(`
+    SELECT * FROM albion_fame_category_imports
+    WHERE category = ? AND undone_at IS NULL
+    ORDER BY id DESC LIMIT 1
+  `).get(category);
+  if (!latest) throw new Error(`Não há importação de ${categoryLabels[category]} para desfazer.`);
+  const rows = db.prepare('SELECT * FROM albion_fame_category_rows WHERE import_id = ?').all(latest.id);
+  const previous = db.prepare(`
+    SELECT r.amount
+    FROM albion_fame_category_rows r
+    JOIN albion_fame_category_imports i ON i.id = r.import_id
+    WHERE i.category = ? AND i.undone_at IS NULL AND i.id < ? AND r.albion_key = ?
+    ORDER BY i.id DESC LIMIT 1
+  `);
+  const update = db.prepare(`UPDATE albion_fame_totals SET ${column} = ?, updated_at = CURRENT_TIMESTAMP WHERE albion_key = ?`);
+  for (const row of rows) {
+    const prior = previous.get(category, latest.id, row.albion_key);
+    update.run(Number(prior?.amount || 0), row.albion_key);
+  }
+  db.prepare(`UPDATE albion_fame_category_imports SET undone_at = CURRENT_TIMESTAMP, undone_by = ? WHERE id = ?`)
+    .run(actorId || null, latest.id);
+  db.exec('UPDATE albion_fame_totals SET total_fame = pve_fame + pvp_fame + gathering_fame + crafting_fame');
+  audit.createAuditLog({
+    type: 'albion_fame_category_import_undone',
+    actorId,
+    reason: `Última importação de ${categoryLabels[category]} desfeita`,
+    metadata: { importId: latest.id, category }
+  });
+  return { importId: latest.id, category, categoryLabel: categoryLabels[category], restoredRows: rows.length };
+});
+
+function undoLatestCategoryImport(category, actorId) {
+  return undoLatestCategoryImportTransaction({ category, actorId });
+}
+
+function listCategoryImportStatus() {
+  const db = getDatabase();
+  return Object.keys(categoryColumns).map((category) => {
+    const latest = db.prepare(`
+      SELECT id, category, source_name, rows_count, linked_count, unmatched_count, missing_count,
+             reductions_count, imported_by, created_at
+      FROM albion_fame_category_imports
+      WHERE category = ? AND undone_at IS NULL
+      ORDER BY id DESC LIMIT 1
+    `).get(category);
+    return { category, categoryLabel: categoryLabels[category], latest: latest || null };
+  });
 }
 
 const applyPreview = transaction((preview) => {
@@ -202,6 +412,12 @@ function takePreview(id) {
   const preview = previews.get(id);
   previews.delete(id);
   if (!preview) throw new Error('Previa expirada. Envie o arquivo novamente.');
+  return preview;
+}
+
+function getPreview(id) {
+  const preview = previews.get(id);
+  if (!preview) throw new Error('Prévia expirada. Envie a tabela novamente.');
   return preview;
 }
 
@@ -416,6 +632,21 @@ function parseFameNumber(value) {
   return Number.isFinite(number) ? Math.round(number * multiplier) : 0;
 }
 
+function parseCategoryAmount(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) throw new Error('valor não informado.');
+  if (raw.startsWith('-')) throw new Error('o valor não pode ser negativo.');
+  const parsed = parseFameNumber(raw);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) throw new Error('valor inválido.');
+  if (parsed === 0 && !/^['"\s]*0(?:[.,]0+)?['"\s]*$/i.test(raw)) throw new Error('valor inválido.');
+  return parsed;
+}
+
+function parseOptionalInteger(value) {
+  const parsed = Number(String(value || '').replace(/[^\d]/g, ''));
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
 function formatFame(value) {
   const number = Number(value || 0);
   if (number >= 1000000000) return `${trimDecimal(number / 1000000000)}b`;
@@ -452,19 +683,24 @@ function normalizeName(value) {
 }
 
 module.exports = {
+  applyCategoryPreview,
   applyPreview,
   cancelPreview,
   confirmComponents,
   formatFame,
+  getPreview,
   getFameByAlbionName,
   latestImport,
   listFameTotals,
+  listCategoryImportStatus,
   previewAttachment,
+  previewCategoryFame,
   previewFameTotals,
   previewPveFame,
   previewText,
   rankFor,
   rankRowsAttachment,
   savePreview,
-  takePreview
+  takePreview,
+  undoLatestCategoryImport
 };

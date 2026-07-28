@@ -46,6 +46,7 @@ function createSession(user, secret, now = Date.now()) {
     globalName: user.global_name || user.username,
     avatar: user.avatar || null,
     roles: user.roles || [],
+    csrf: crypto.randomBytes(24).toString('base64url'),
     exp: now + SESSION_MAX_AGE_SECONDS * 1000
   }, secret);
 }

@@ -9,11 +9,13 @@ process.env.NODE_ENV = 'test';
 process.env.DATABASE_PATH = path.join(tempRoot, 'dashboard.sqlite');
 
 const { getDatabase } = require('../src/database/connection');
+const env = require('../src/config/env');
 const { migrate } = require('../src/database/migrate');
 const { getDashboardData } = require('../src/web/dashboard.repository');
 const { createRequestHandler } = require('../src/web/server');
 const {
   JOIN_SESSION_COOKIE,
+  SESSION_COOKIE,
   createJoinSession,
   createOAuthState,
   createSession,
@@ -100,4 +102,47 @@ test('servidor publica landing e protege a API do dashboard', async (t) => {
 
   const dashboard = await fetch(`${base}/api/dashboard`);
   assert.equal(dashboard.status, 401);
+});
+
+test('staff autenticada gera prévia de tabela com proteção CSRF', async (t) => {
+  const staffId = 'staff-fame-web';
+  const member = { id: staffId, roles: { cache: new Map([['1481251363013791754', {}]]) } };
+  const guild = { ownerId: 'owner', members: { async fetch() { return member; } } };
+  const client = { guilds: { cache: new Map(), async fetch() { return guild; } } };
+  const server = require('node:http').createServer(createRequestHandler(client));
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const token = createSession({ id: staffId, username: 'Staff', roles: ['1481251363013791754'] }, process.env.DASHBOARD_SESSION_SECRET);
+  const session = readSession(token, process.env.DASHBOARD_SESSION_SECRET);
+  const table = [
+    '"Rank"\t"Player"\t"Guild Role"\t"Amount"',
+    '"1"\t"JogadorWeb"\t"Member"\t"123456"'
+  ].join('\n');
+  const body = new URLSearchParams({ category: 'pve', sourceName: 'pve.tsv', text: table, csrf: session.csrf });
+
+  const response = await fetch(`${base}/api/fame/import/preview`, {
+    method: 'POST',
+    headers: {
+      Cookie: `${SESSION_COOKIE}=${token}`,
+      Origin: new URL(env.dashboardBaseUrl).origin,
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body
+  });
+  const preview = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(preview.category, 'pve');
+  assert.equal(preview.summary.players, 1);
+
+  const rejected = await fetch(`${base}/api/fame/import/preview`, {
+    method: 'POST',
+    headers: {
+      Cookie: `${SESSION_COOKIE}=${token}`,
+      Origin: new URL(env.dashboardBaseUrl).origin,
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: new URLSearchParams({ category: 'pve', text: table, csrf: 'errado' })
+  });
+  assert.equal(rejected.status, 403);
 });

@@ -72,6 +72,64 @@ function participationRanking(limit = 10) {
   return { label: 'Últimos 7 dias', source: 'event_participants', rows };
 }
 
+function fameDashboard() {
+  if (!tableExists('albion_fame_category_imports')) return { imports: [], rows: [] };
+  const db = getDatabase();
+  const categories = [
+    ['pve', 'PvE', 'pve_fame'],
+    ['pvp', 'PvP', 'pvp_fame'],
+    ['gathering', 'Coleta', 'gathering_fame'],
+    ['crafting', 'Craft', 'crafting_fame']
+  ];
+  const imports = categories.map(([category, label]) => ({
+    category,
+    label,
+    latest: db.prepare(`
+      SELECT id, source_name, rows_count, linked_count, unmatched_count, missing_count,
+             reductions_count, imported_by, created_at
+      FROM albion_fame_category_imports
+      WHERE category = ? AND undone_at IS NULL
+      ORDER BY id DESC LIMIT 1
+    `).get(category) || null
+  }));
+  const rows = db.prepare(`
+    SELECT ft.albion_key, ft.albion_name, ft.pve_fame, ft.pvp_fame,
+           ft.gathering_fame, ft.crafting_fame, ft.updated_at,
+           u.discord_id, u.discord_name, u.registration_status
+    FROM albion_fame_totals ft
+    LEFT JOIN users u ON lower(u.albion_name) = lower(ft.albion_name)
+  `).all().map((row) => ({ ...row, linked: Boolean(row.discord_id) }));
+  const linkedRows = rows.filter((row) => row.linked);
+
+  for (const [, , column] of categories) {
+    const values = [...new Set(linkedRows.map((row) => Number(row[column] || 0)).filter((value) => value > 0))].sort((a, b) => b - a);
+    const scoreByValue = new Map(values.map((value, index) => [value, values.length <= 1 ? 100 : ((values.length - 1 - index) / (values.length - 1)) * 100]));
+    const rankByValue = new Map(values.map((value, index) => [value, index + 1]));
+    for (const row of rows) {
+      const value = Number(row[column] || 0);
+      row[`${column}_score`] = row.linked && value > 0 ? Number(scoreByValue.get(value).toFixed(2)) : 0;
+      row[`${column}_rank`] = row.linked && value > 0 ? rankByValue.get(value) : null;
+    }
+  }
+
+  for (const row of rows) {
+    row.overall_score = row.linked
+      ? Number(((row.pve_fame_score + row.pvp_fame_score + row.gathering_fame_score + row.crafting_fame_score) / 4).toFixed(2))
+      : null;
+  }
+  const ordered = linkedRows.sort((a, b) => b.overall_score - a.overall_score || a.albion_name.localeCompare(b.albion_name));
+  let previousScore = null;
+  let previousRank = 0;
+  ordered.forEach((row, index) => {
+    const rank = previousScore === row.overall_score ? previousRank : index + 1;
+    row.overall_rank = rank;
+    previousScore = row.overall_score;
+    previousRank = rank;
+  });
+  rows.sort((a, b) => (a.overall_rank || Number.MAX_SAFE_INTEGER) - (b.overall_rank || Number.MAX_SAFE_INTEGER) || a.albion_name.localeCompare(b.albion_name));
+  return { imports, rows };
+}
+
 function activeCampaign() {
   const campaign = getDatabase().prepare(`
     SELECT
@@ -221,7 +279,8 @@ function getDashboardData() {
     },
     rankings: {
       pve: latestPveRanking(),
-      participation: participationRanking()
+      participation: participationRanking(),
+      fame: fameDashboard()
     },
     members: listMembers(),
     events: listEvents(),

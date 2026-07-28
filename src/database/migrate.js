@@ -1483,6 +1483,49 @@ const migrations = [
           WHERE custom_slot_index IS NOT NULL AND is_spectator = 0;
       `);
     }
+  },
+  {
+    version: 51,
+    name: 'albion_fame_category_imports',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS albion_fame_category_imports (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          category TEXT NOT NULL,
+          source_name TEXT,
+          rows_count INTEGER NOT NULL DEFAULT 0,
+          linked_count INTEGER NOT NULL DEFAULT 0,
+          unmatched_count INTEGER NOT NULL DEFAULT 0,
+          missing_count INTEGER NOT NULL DEFAULT 0,
+          reductions_count INTEGER NOT NULL DEFAULT 0,
+          imported_by TEXT,
+          summary_json TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          undone_at TEXT,
+          undone_by TEXT,
+          CHECK (category IN ('pve', 'pvp', 'gathering', 'crafting'))
+        );
+
+        CREATE TABLE IF NOT EXISTS albion_fame_category_rows (
+          import_id INTEGER NOT NULL,
+          albion_key TEXT NOT NULL,
+          albion_name TEXT NOT NULL,
+          guild_role TEXT,
+          source_rank INTEGER,
+          amount INTEGER NOT NULL DEFAULT 0,
+          previous_amount INTEGER NOT NULL DEFAULT 0,
+          discord_id TEXT,
+          PRIMARY KEY (import_id, albion_key),
+          FOREIGN KEY (import_id) REFERENCES albion_fame_category_imports(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_albion_category_imports_active
+          ON albion_fame_category_imports (category, undone_at, id DESC);
+
+        CREATE INDEX IF NOT EXISTS idx_albion_category_rows_player
+          ON albion_fame_category_rows (albion_key, import_id DESC);
+      `);
+    }
   }
 ];
 

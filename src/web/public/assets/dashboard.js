@@ -1,4 +1,4 @@
-const state = { data: null, lastLoadedAt: 0, currentView: 'overview' };
+const state = { data: null, lastLoadedAt: 0, currentView: 'overview', csrf: null, famePreview: null, fameCategory: 'pve', fameSourceName: null };
 const number = new Intl.NumberFormat('pt-BR');
 const collator = new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base' });
 
@@ -278,6 +278,55 @@ function renderRankings(rankings) {
   renderRanking('participation-ranking-full', prepare(rankings.participation.rows, 'events'), 'participation');
 }
 
+const fameCategoryLabels = { pve: 'PvE', pvp: 'PvP', gathering: 'Coleta', crafting: 'Craft' };
+
+function resetFamePreview() {
+  state.famePreview = null;
+  document.querySelector('#fame-preview-empty').hidden = false;
+  document.querySelector('#fame-preview-content').hidden = true;
+  document.querySelector('#fame-preview-status').textContent = 'Aguardando tabela';
+  document.querySelector('#fame-confirm-reductions').checked = false;
+}
+
+function renderFameImportStatus(fameData) {
+  const imports = fameData?.imports || [];
+  for (const button of document.querySelectorAll('.fame-category')) {
+    const item = imports.find((entry) => entry.category === button.dataset.category);
+    const small = button.querySelector('small');
+    small.textContent = item?.latest
+      ? `${formatDate(item.latest.created_at)} · ${number.format(item.latest.rows_count)} jogadores`
+      : 'Sem importação';
+  }
+}
+
+function renderFamePreview(preview) {
+  state.famePreview = preview;
+  document.querySelector('#fame-preview-empty').hidden = true;
+  document.querySelector('#fame-preview-content').hidden = false;
+  document.querySelector('#fame-preview-status').textContent = preview.errors.length
+    ? `${preview.errors.length} erro${preview.errors.length === 1 ? '' : 's'}`
+    : 'Pronta para confirmar';
+  const summary = preview.summary;
+  document.querySelector('#fame-preview-metrics').innerHTML = [
+    metricCard('Encontrados', number.format(summary.players), `${number.format(summary.withPoints)} com pontuação`, '#5865f2'),
+    metricCard('Vinculados', number.format(summary.linked), 'Contas Discord reconhecidas', '#23a55a'),
+    metricCard('Aguardam vínculo', number.format(summary.unmatched), 'Visíveis somente para a staff', '#37c9ef'),
+    metricCard('Reduções', number.format(summary.reductions), 'Exigem confirmação especial', '#f0b232')
+  ].join('');
+  document.querySelector('#fame-reduction-warning').hidden = summary.reductions === 0;
+  document.querySelector('#fame-preview-summary').textContent = `${summary.missing} ausentes preservados · ${summary.zero} sem pontos · ${summary.errors} erros`;
+  document.querySelector('#fame-preview-errors').textContent = preview.errors.length
+    ? preview.errors.slice(0, 3).map((error) => `Linha ${error.line}: ${error.message}`).join(' · ')
+    : '';
+  document.querySelector('#fame-confirm').disabled = preview.errors.length > 0;
+  document.querySelector('#fame-preview-table').innerHTML = preview.rows.length
+    ? preview.rows.map((row) => {
+      const deltaClass = row.delta < 0 ? 'negative-value' : 'positive-value';
+      return `<tr><td class="primary-cell">${escapeHtml(row.albionName)}${row.guildRole ? `<span class="secondary-text">${escapeHtml(row.guildRole)}</span>` : ''}</td><td>${row.discordId ? '<span class="badge member">Vinculado</span>' : '<span class="badge pending">Sem Discord</span>'}</td><td class="number-cell">${escapeHtml(compact.format(row.previousAmount))}</td><td class="number-cell">${escapeHtml(compact.format(row.amount))}</td><td class="number-cell ${deltaClass}">${row.delta >= 0 ? '+' : ''}${escapeHtml(compact.format(row.delta))}</td></tr>`;
+    }).join('')
+    : emptyRow(5, 'Nenhum jogador válido encontrado.');
+}
+
 function renderAudit(rows) {
   const query = controlValue('audit-search');
   const filtered = rows.filter((row) => includesQuery(row, query, ['type', 'actor_id', 'target_id', 'reason']));
@@ -300,6 +349,7 @@ function render(data) {
   renderOperations(data.operations);
   renderFinance(data.finance, data.overview.totalMemberBalance);
   renderRankings(data.rankings);
+  renderFameImportStatus(data.rankings.fame);
   renderAudit(data.audit);
   document.querySelector('#freshness').textContent = data.freshness ? `Dados até ${formatDate(data.freshness)}` : `Atualizado ${formatDate(data.generatedAt)}`;
 }
@@ -310,8 +360,28 @@ async function fetchJson(path) {
     window.location.assign('/?login=required');
     throw new Error('Sessão encerrada.');
   }
-  if (!response.ok) throw new Error('Não foi possível carregar os dados.');
-  return response.json();
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || 'Não foi possível carregar os dados.');
+  return data;
+}
+
+async function postForm(path, values) {
+  const response = await fetch(path, {
+    method: 'POST',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ ...values, csrf: state.csrf || '' })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (response.status === 401) window.location.assign('/?login=required');
+  if (!response.ok) throw new Error(data.error || 'Não foi possível concluir a ação.');
+  return data;
+}
+
+function showToast(message) {
+  const toast = document.querySelector('#error-toast');
+  toast.textContent = message;
+  toast.hidden = false;
+  window.setTimeout(() => { toast.hidden = true; }, 6000);
 }
 
 async function loadDashboard({ manual = false } = {}) {
@@ -335,13 +405,75 @@ async function loadDashboard({ manual = false } = {}) {
 }
 
 async function loadSession() {
-  const { user } = await fetchJson('/api/session');
+  const { user, csrf } = await fetchJson('/api/session');
+  state.csrf = csrf;
   document.querySelector('#user-name').textContent = user.name;
   if (user.avatarUrl) {
     const avatar = document.querySelector('#user-avatar');
     avatar.src = user.avatarUrl;
     avatar.alt = `Avatar de ${user.name}`;
     avatar.hidden = false;
+  }
+}
+
+async function analyzeFameTable() {
+  const text = document.querySelector('#fame-text').value.trim();
+  if (!text) return showToast('Cole a tabela ou selecione um arquivo primeiro.');
+  const button = document.querySelector('#fame-analyze');
+  button.disabled = true;
+  button.textContent = 'Analisando…';
+  try {
+    const preview = await postForm('/api/fame/import/preview', {
+      category: state.fameCategory,
+      sourceName: state.fameSourceName || 'texto-colado',
+      text
+    });
+    renderFamePreview(preview);
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Analisar tabela';
+  }
+}
+
+async function confirmFameImport() {
+  if (!state.famePreview) return;
+  const reductions = Number(state.famePreview.summary.reductions || 0);
+  const confirmed = document.querySelector('#fame-confirm-reductions').checked;
+  if (reductions > 0 && !confirmed) return showToast('Revise e confirme os valores All-time menores.');
+  const button = document.querySelector('#fame-confirm');
+  button.disabled = true;
+  button.textContent = 'Salvando…';
+  try {
+    const result = await postForm('/api/fame/import/confirm', {
+      previewId: state.famePreview.previewId,
+      confirmReductions: String(confirmed)
+    });
+    showToast(`${result.categoryLabel} atualizado com ${result.summary.players} jogadores.`);
+    document.querySelector('#fame-text').value = '';
+    state.fameSourceName = null;
+    document.querySelector('#fame-source-name').textContent = 'Nenhum arquivo selecionado';
+    resetFamePreview();
+    await loadDashboard();
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Confirmar importação';
+  }
+}
+
+async function undoFameImport() {
+  const label = fameCategoryLabels[state.fameCategory];
+  if (!window.confirm(`Desfazer a importação mais recente de ${label}?`)) return;
+  try {
+    const result = await postForm('/api/fame/import/undo', { category: state.fameCategory });
+    showToast(`Importação de ${result.categoryLabel} desfeita. ${result.restoredRows} jogadores restaurados.`);
+    resetFamePreview();
+    await loadDashboard();
+  } catch (error) {
+    showToast(error.message);
   }
 }
 
@@ -374,6 +506,24 @@ document.querySelector('#menu-toggle').addEventListener('click', openSidebar);
 document.querySelector('#sidebar-close').addEventListener('click', closeSidebar);
 document.querySelector('#mobile-scrim').addEventListener('click', closeSidebar);
 document.querySelector('#refresh-button').addEventListener('click', () => loadDashboard({ manual: true }));
+document.querySelectorAll('.fame-category').forEach((button) => button.addEventListener('click', () => {
+  state.fameCategory = button.dataset.category;
+  document.querySelectorAll('.fame-category').forEach((item) => item.classList.toggle('active', item === button));
+  document.querySelector('#fame-import-title').textContent = `Importar ${fameCategoryLabels[state.fameCategory]}`;
+  resetFamePreview();
+}));
+document.querySelector('#fame-file').addEventListener('change', async (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  if (file.size > 512 * 1024) return showToast('O arquivo deve ter no máximo 512 KB.');
+  state.fameSourceName = file.name;
+  document.querySelector('#fame-source-name').textContent = file.name;
+  document.querySelector('#fame-text').value = await file.text();
+  resetFamePreview();
+});
+document.querySelector('#fame-analyze').addEventListener('click', analyzeFameTable);
+document.querySelector('#fame-confirm').addEventListener('click', confirmFameImport);
+document.querySelector('#fame-undo').addEventListener('click', undoFameImport);
 document.querySelectorAll('.table-controls input, .table-controls select').forEach((control) => {
   control.addEventListener(control.matches('input') ? 'input' : 'change', () => {
     if (!state.data) return;
