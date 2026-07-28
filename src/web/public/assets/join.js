@@ -52,9 +52,17 @@ form.addEventListener('submit', async (event) => {
     });
     form.hidden = true;
     document.querySelector('#join-user').hidden = true;
-    document.querySelector('#join-success-message').textContent = result.alreadyMember
-      ? `${result.albionName}, seu cadastro de membro já estava ativo.`
-      : `${result.albionName}, seu apelido e cargo Convidado foram atualizados.`;
+    const successTitle = document.querySelector('#join-success-title');
+    const successMessage = document.querySelector('#join-success-message');
+    if (result.needsStaff) {
+      successTitle.textContent = 'A staff vai ajudar você';
+      successMessage.textContent = result.message || 'A staff foi avisada. Entre na recepção para receber ajuda.';
+    } else {
+      successTitle.textContent = 'Entrada concluída';
+      successMessage.textContent = result.alreadyMember
+        ? `${result.albionName}, seu cadastro de membro já estava ativo.`
+        : `${result.albionName}, seu apelido e cargo Convidado foram atualizados.`;
+    }
     const voiceLink = document.querySelector('#voice-link');
     voiceLink.href = result.voiceUrl;
     success.hidden = false;

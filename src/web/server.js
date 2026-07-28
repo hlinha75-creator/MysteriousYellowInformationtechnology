@@ -4,7 +4,7 @@ const path = require('node:path');
 const ids = require('../config/ids');
 const env = require('../config/env');
 const { getDashboardData } = require('./dashboard.repository');
-const { completeOnboarding, ensureGuestMember, onboardingConfigured } = require('./onboarding');
+const { completeOnboarding, ensureGuestMember, handleOnboardingIssue, onboardingConfigured } = require('./onboarding');
 const {
   JOIN_OAUTH_STATE_COOKIE,
   JOIN_SESSION_COOKIE,
@@ -167,10 +167,8 @@ function createRequestHandler(client, options = {}) {
           return json(res, 200, result, isProduction);
         } catch (error) {
           console.error('[ONBOARDING] Falha ao concluir cadastro:', error);
-          const safeMessage = /^(Informe|O nome|A consulta|Personagem|Esse personagem|Sua conta)/.test(error.message)
-            ? error.message
-            : 'Não foi possível atualizar seu apelido ou cargo. Procure a staff.';
-          return json(res, 400, { error: safeMessage }, isProduction);
+          const fallback = await handleOnboardingIssue(client, joinSession, form.get('albionName'), error);
+          return json(res, 202, fallback, isProduction);
         }
       }
       if (req.method !== 'GET') {

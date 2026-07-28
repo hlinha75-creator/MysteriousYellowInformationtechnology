@@ -11,7 +11,13 @@ process.env.DATABASE_PATH = path.join(tempRoot, 'onboarding.sqlite');
 const ids = require('../src/config/ids');
 const { getDatabase } = require('../src/database/connection');
 const { migrate } = require('../src/database/migrate');
-const { completeOnboarding, ensureGuestMember, findAlbionCharacter } = require('../src/web/onboarding');
+const {
+  completeOnboarding,
+  ensureFallbackGuestAccess,
+  ensureGuestMember,
+  findAlbionCharacter,
+  notifyOnboardingIssue
+} = require('../src/web/onboarding');
 
 migrate();
 
@@ -84,4 +90,35 @@ test('busca rejeita personagem inexistente', async () => {
     findAlbionCharacter('NaoExiste', { fetchImpl: albionFetch('OutroJogador') }),
     /Personagem não encontrado/
   );
+});
+
+test('fallback mantém acesso de convidado e remove cargo sem tag', async () => {
+  const member = memberFixture('discord-help');
+  await ensureFallbackGuestAccess(clientFixture(member), { id: member.id });
+  assert.equal(member.roles.cache.has(ids.roles.guest), true);
+  assert.equal(member.roles.cache.has(ids.roles.noTag), false);
+});
+
+test('aviso para staff respeita intervalo contra mensagens repetidas', async () => {
+  const messages = [];
+  const client = {
+    channels: {
+      async fetch(channelId) {
+        assert.equal(channelId, ids.channels.memberRequests);
+        return {
+          isTextBased: () => true,
+          async send(payload) { messages.push(payload); return { id: 'message-1' }; }
+        };
+      }
+    }
+  };
+  const session = { id: 'discord-notification', username: 'usuario.teste' };
+  const first = await notifyOnboardingIssue(client, session, 'HeroNotag', new Error('Personagem já vinculado.'), { now: 1_000_000 });
+  const second = await notifyOnboardingIssue(client, session, 'HeroNotag', new Error('Personagem já vinculado.'), { now: 1_000_100 });
+
+  assert.equal(first.notified, true);
+  assert.equal(second.cooldown, true);
+  assert.equal(messages.length, 1);
+  assert.match(messages[0].content, /precisa de ajuda/);
+  assert.deepEqual(messages[0].allowedMentions.users, [session.id]);
 });

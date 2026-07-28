@@ -2,8 +2,15 @@ const ids = require('../config/ids');
 const env = require('../config/env');
 const audit = require('../modules/audit/audit.repository');
 const repo = require('../modules/registration/registration.repository');
+const { baseEmbed, safeSend } = require('../utils/discord');
 
 const DEFAULT_ALBION_API = 'https://gameinfo-ams.albiononline.com/api/gameinfo';
+const ISSUE_NOTIFICATION_COOLDOWN_MS = 5 * 60 * 1000;
+const issueNotifications = new Map();
+
+function guestVoiceUrl() {
+  return `https://discord.com/channels/${ids.guildId}/${ids.channels.guestVoice}`;
+}
 
 function normalizeName(value) {
   return String(value || '').trim().toLocaleLowerCase('en-US');
@@ -44,6 +51,87 @@ async function ensureGuestMember(client, discordUser, accessToken) {
     await member.roles.add(ids.roles.guest, 'Entrada pelo site da Notag');
   }
   return member;
+}
+
+async function ensureFallbackGuestAccess(client, session) {
+  const guild = await client.guilds.fetch(ids.guildId);
+  const member = await guild.members.fetch(session.id);
+  const protectedMember = hasAnyRole(member, [ids.roles.adm, ids.roles.staff, ids.roles.member]);
+
+  if (!protectedMember) {
+    if (ids.roles.guest && !member.roles.cache.has(ids.roles.guest)) {
+      await member.roles.add(ids.roles.guest, 'Ajuda solicitada pelo site da Notag');
+    }
+    if (ids.roles.noTag && member.roles.cache.has(ids.roles.noTag)) {
+      await member.roles.remove(ids.roles.noTag, 'Ajuda solicitada pelo site da Notag');
+    }
+  }
+  return member;
+}
+
+function issueReason(error) {
+  const reason = String(error?.message || 'Falha não identificada no cadastro.').trim();
+  return reason.slice(0, 900);
+}
+
+async function notifyOnboardingIssue(client, session, albionName, error, options = {}) {
+  const now = options.now ?? Date.now();
+  const lastNotification = issueNotifications.get(session.id) || 0;
+  if (now - lastNotification < ISSUE_NOTIFICATION_COOLDOWN_MS) {
+    return { notified: false, cooldown: true };
+  }
+  issueNotifications.set(session.id, now);
+
+  const informedName = String(albionName || '').trim() || 'Não informado';
+  const displayName = session.globalName || session.username || 'Usuário desconhecido';
+  const embed = baseEmbed('Ajuda necessária no cadastro pelo site')
+    .setColor(0xd97706)
+    .addFields(
+      { name: 'Discord', value: `${displayName} (<@${session.id}>)\nID: ${session.id}` },
+      { name: 'Personagem informado', value: informedName.slice(0, 1024) },
+      { name: 'Motivo', value: issueReason(error) },
+      { name: 'Recepção de voz', value: `<#${ids.channels.guestVoice}>` }
+    );
+  const sent = await safeSend(client, ids.channels.memberRequests, {
+    content: `<@${session.id}> precisa de ajuda no cadastro pelo site.`,
+    embeds: [embed],
+    allowedMentions: { parse: [], users: [session.id], roles: [] }
+  });
+  return { notified: Boolean(sent), cooldown: false };
+}
+
+async function handleOnboardingIssue(client, session, albionName, error, options = {}) {
+  try {
+    await ensureFallbackGuestAccess(client, session);
+  } catch (accessError) {
+    console.error('[ONBOARDING] Não foi possível confirmar o acesso de Convidado:', accessError);
+  }
+
+  try {
+    await notifyOnboardingIssue(client, session, albionName, error, options);
+  } catch (notificationError) {
+    console.error('[ONBOARDING] Não foi possível avisar a staff:', notificationError);
+  }
+
+  try {
+    audit.createAuditLog({
+      type: 'website_onboarding_needs_staff',
+      actorId: session.id,
+      targetId: session.id,
+      afterValue: String(albionName || '').trim() || null,
+      reason: issueReason(error),
+      metadata: { staffChannelId: ids.channels.memberRequests, voiceChannelId: ids.channels.guestVoice }
+    });
+  } catch (auditError) {
+    console.error('[ONBOARDING] Não foi possível registrar a solicitação na auditoria:', auditError);
+  }
+
+  return {
+    needsStaff: true,
+    albionName: String(albionName || '').trim() || null,
+    message: 'A staff foi avisada e vai ajudar você na recepção.',
+    voiceUrl: guestVoiceUrl()
+  };
 }
 
 async function completeOnboarding(client, session, albionName, options = {}) {
@@ -95,7 +183,7 @@ async function completeOnboarding(client, session, albionName, options = {}) {
   return {
     albionName: character.name,
     alreadyMember: isMember,
-    voiceUrl: `https://discord.com/channels/${ids.guildId}/${ids.channels.guestVoice}`
+    voiceUrl: guestVoiceUrl()
   };
 }
 
@@ -105,8 +193,11 @@ function onboardingConfigured() {
 
 module.exports = {
   completeOnboarding,
+  ensureFallbackGuestAccess,
   ensureGuestMember,
   findAlbionCharacter,
+  handleOnboardingIssue,
+  notifyOnboardingIssue,
   onboardingConfigured,
   validateAlbionName
 };
