@@ -690,13 +690,25 @@ async function createEventFromFields(interaction, fields) {
 
 async function refreshEventMessage(client, eventId) {
   const event = repo.getEvent(eventId);
-  if (!event?.message_id) return;
+  if (!event) return null;
   const participants = repo.listParticipants(eventId);
-  const channel = await fetchEventMessageChannel(client, event);
-  const message = await channel?.messages.fetch(event.message_id).catch(() => null);
+  const payload = { embeds: [eventEmbed(event, participants)], components: eventComponents(event) };
+  const channel = event.message_id ? await fetchEventMessageChannel(client, event) : null;
+  const message = event.message_id
+    ? await channel?.messages.fetch(event.message_id).catch(() => null)
+    : null;
   if (message) {
-    await message.edit({ embeds: [eventEmbed(event, participants)], components: eventComponents(event) });
+    await message.edit(payload);
+    return message;
   }
+
+  if (!['created', 'running'].includes(event.status)) return null;
+  const replacementChannel = await fetchEventRepairChannel(client, event);
+  if (!replacementChannel || typeof replacementChannel.send !== 'function') return null;
+  const replacement = await replacementChannel.send(payload).catch(() => null);
+  if (!replacement) return null;
+  repo.updateEvent(event.id, { message_id: replacement.id, message_channel_id: replacementChannel.id });
+  return replacement;
 }
 
 function eventPostChannelId(fields = {}) {
@@ -716,6 +728,13 @@ async function fetchEventMessageChannel(client, event) {
     if (channel) return channel;
   }
   return null;
+}
+
+async function fetchEventRepairChannel(client, event) {
+  const channelId = event.message_channel_id
+    || (repo.getWorldBossEventMeta(event.id) ? ids.channels.worldBoss : eventPostChannelId(event));
+  if (!channelId || typeof client?.channels?.fetch !== 'function') return null;
+  return client.channels.fetch(channelId).catch(() => null);
 }
 async function refreshRunningEventMessages(client) {
   // Open signups also need refreshing so a restart repairs missing controls.

@@ -469,6 +469,11 @@ test('fluxo local cobre evento, voz, loot split, aprovacao, ledger, saque e depo
   await events.refreshRunningEventMessages(harness.client);
   assert.equal(eventMessage.payload.components.length, 2);
 
+  await eventMessage.delete();
+  await events.refreshRunningEventMessages(harness.client);
+  assert.equal(harness.sentMessages.length, 2);
+  assert.notEqual(eventsRepo.getEvent(event.id).message_id, eventMessage.id);
+
   await events.joinEvent(harness.interaction(participantA), event.id, 'tank');
   await events.spectateEvent(harness.interaction(participantB), event.id);
   await events.spectateEvent(harness.interaction(spectatorOnly), event.id);
