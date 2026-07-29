@@ -15,7 +15,7 @@ const {
   previewCategoryFame,
   undoLatestCategoryImport
 } = require('../src/modules/albion/fame.service');
-const { getDashboardData } = require('../src/web/dashboard.repository');
+const { getDashboardData, publicFameRankings } = require('../src/web/dashboard.repository');
 
 migrate();
 
@@ -70,6 +70,36 @@ test('importação separada preserva categorias e jogadores ausentes', () => {
   assert.equal(db.prepare('SELECT crafting_fame FROM albion_fame_totals WHERE albion_key = ?').get('tmaiusculo').crafting_fame, 116411678);
   assert.equal(db.prepare('SELECT crafting_fame FROM albion_fame_totals WHERE albion_key = ?').get('avven1996').crafting_fame, 382677301);
 
+  const publicCraft = publicFameRankings().categories.find((item) => item.category === 'crafting');
+  assert.equal(publicCraft.comparisonAvailable, false);
+  assert.deepEqual(publicCraft.rows, []);
+  assert.ok(publicCraft.updatedAt);
+
+});
+
+test('ranking público mede somente o ganho entre as duas últimas importações', () => {
+  const first = previewCategoryFame(table([
+    { name: 'AlphaEvolucao', amount: 100 },
+    { name: 'BetaEvolucao', amount: 200 }
+  ]), { category: 'pvp', sourceName: 'pvp-anterior.tsv', actorId: 'staff-1' });
+  applyCategoryPreview(first);
+
+  const second = previewCategoryFame(table([
+    { name: 'AlphaEvolucao', amount: 180 },
+    { name: 'BetaEvolucao', amount: 210 },
+    { name: 'NovoSemBase', amount: 999999 }
+  ]), { category: 'pvp', sourceName: 'pvp-atual.tsv', actorId: 'staff-2' });
+  applyCategoryPreview(second);
+
+  const publicPvp = publicFameRankings().categories.find((item) => item.category === 'pvp');
+  assert.equal(publicPvp.comparisonAvailable, true);
+  assert.ok(publicPvp.comparisonFrom);
+  assert.deepEqual(publicPvp.rows, [
+    { rank: 1, name: 'AlphaEvolucao', amount: 80, currentAmount: 180, previousAmount: 100 },
+    { rank: 2, name: 'BetaEvolucao', amount: 10, currentAmount: 210, previousAmount: 200 }
+  ]);
+  assert.equal(publicPvp.rows.some((row) => row.name === 'NovoSemBase'), false);
+  assert.equal(Object.hasOwn(publicPvp.rows[0], 'discord_id'), false);
 });
 
 test('prévia identifica jogadores duplicados e valores inválidos', () => {

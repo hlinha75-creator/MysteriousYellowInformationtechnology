@@ -5,7 +5,7 @@ const ids = require('../config/ids');
 const env = require('../config/env');
 const fame = require('../modules/albion/fame.service');
 const { baseEmbed, safeSend } = require('../utils/discord');
-const { getDashboardData } = require('./dashboard.repository');
+const { getDashboardData, publicFameRankings } = require('./dashboard.repository');
 const { getPortalData } = require('./portal.repository');
 const { changePortalParticipation } = require('./portal-events.service');
 const { cancelPortalWithdraw, editPortalWithdraw, requestPortalWithdraw } = require('./portal-finance.service');
@@ -555,6 +555,9 @@ function createRequestHandler(client, options = {}) {
         return;
       }
       if (url.pathname === '/') return serveFile(res, 'index.html', isProduction, 'public, max-age=300');
+      if (url.pathname === '/api/public/rankings') {
+        return json(res, 200, publicFameRankings(5), isProduction);
+      }
       if (url.pathname === '/join') {
         if (!joinSession) return redirect(res, '/?join=required', {}, isProduction);
         return serveFile(res, 'join.html', isProduction, 'private, no-store');

@@ -1,6 +1,10 @@
 const ids = require('../config/ids');
 const events = require('../modules/events/events.service');
 const eventsRepo = require('../modules/events/events.repository');
+const finance = require('../modules/finance/finance.service');
+const campaigns = require('../modules/campaigns/campaigns.service');
+const balanceBackup = require('../modules/csv/balanceBackup.service');
+const { safeSend } = require('../utils/discord');
 const { parseSilver } = require('../utils/silver');
 
 const AUDIENCES = new Set(['public', 'member', 'staff']);
@@ -192,12 +196,100 @@ async function cancelStaffEvent(client, input) {
   return { event: eventsRepo.getEvent(event.id), message: `${event.event_code} cancelado.` };
 }
 
+async function submitStaffEventToFinance(client, input) {
+  const event = numericEvent(input.eventId);
+  await actorContext(client, input.actorId);
+  events.submitEventToFinance({ eventId: event.id, actorId: input.actorId });
+  const reviewChannel = await events.moveReviewChannelToClosed(client, event.id);
+  await events.postDpsMeterSummary(client, event.id);
+  await safeSend(client, ids.channels.finance, {
+    content: `Evento #${event.id} enviado para aprovacao financeira pelo painel web por <@${input.actorId}>.${reviewChannel ? ` Revisao: <#${reviewChannel.id}>` : ''}`,
+    embeds: [events.reviewEmbed(event.id)],
+    components: events.reviewComponents(event.id, 'finance'),
+    allowedMentions: { users: [input.actorId] }
+  });
+  return {
+    event: eventsRepo.getEvent(event.id),
+    reviewChannelId: reviewChannel?.id || null,
+    message: `${event.event_code} enviado ao financeiro. Agora pode ser aprovado pelo painel ou pelo Discord.`
+  };
+}
+
+async function returnStaffEventToReview(client, input) {
+  const event = numericEvent(input.eventId);
+  await actorContext(client, input.actorId);
+  const reviewChannel = await events.returnEventToReview({ client, eventId: event.id, actorId: input.actorId });
+  await safeSend(client, ids.channels.finance, {
+    content: `Evento ${event.event_code} devolvido para revisao pelo painel web por <@${input.actorId}>.${reviewChannel ? ` Revisao: <#${reviewChannel.id}>` : ''}`,
+    embeds: [events.reviewEmbed(event.id)],
+    allowedMentions: { users: [input.actorId] }
+  });
+  return {
+    event: eventsRepo.getEvent(event.id),
+    reviewChannelId: reviewChannel?.id || null,
+    message: `${event.event_code} devolvido para revisao.`
+  };
+}
+
+async function approveStaffEventPayment(client, input) {
+  const event = numericEvent(input.eventId);
+  const context = await actorContext(client, input.actorId);
+  const paymentResult = events.approveEventPayment({ eventId: event.id, actorId: input.actorId });
+  const transactions = Array.isArray(paymentResult) ? paymentResult : (paymentResult.transactions || []);
+  const raidRewards = await events.grantRaidAvalonRewards({
+    guild: context.guild,
+    eventId: event.id,
+    actorId: input.actorId
+  });
+
+  if (transactions.length > 0) {
+    await finance.notifyBalanceTransactions({ client, transactions });
+  }
+
+  let campaignText = '';
+  if (paymentResult.campaignChoices?.decisions?.length) {
+    const dmResult = await campaigns.sendEventPayoutDms({
+      client,
+      eventId: event.id,
+      choices: paymentResult.campaignChoices
+    });
+    await campaigns.refreshActiveCampaignProgress(client);
+    campaignText = ` Campanha @${paymentResult.campaignChoices.campaign.role_name || '900m'}: ${dmResult.sent} DM(s) enviada(s), ${dmResult.failed} falha(s).`;
+  }
+
+  await events.scheduleReviewChannelDeletion(client, event.id, 14);
+  await balanceBackup.postEventBalanceBackup(client, event.id);
+
+  const raidText = raidRewards.granted || raidRewards.points
+    ? ` Carreira: ${raidRewards.points} ponto(s), ${raidRewards.granted} tag(s) nova(s).`
+    : '';
+  const paymentText = paymentResult.campaignChoices?.decisions?.length
+    ? `Pagamento aprovado pelo painel web; os participantes receberam a escolha da campanha por DM.${campaignText}`
+    : `Pagamento aprovado pelo painel web; ${transactions.length} saldo(s) atualizado(s).`;
+
+  await safeSend(client, ids.channels.finance, {
+    content: `${event.event_code} aprovado pelo painel web por <@${input.actorId}>. ${paymentText}${raidText}`,
+    embeds: [events.reviewEmbed(event.id)],
+    allowedMentions: { users: [input.actorId] }
+  });
+
+  return {
+    event: eventsRepo.getEvent(event.id),
+    transactions: transactions.length,
+    campaignChoices: paymentResult.campaignChoices?.decisions?.length || 0,
+    message: `${event.event_code}: ${paymentText}${raidText}`
+  };
+}
+
 async function manageStaffEvent(client, input) {
   if (input.action === 'create') return createStaffEvent(client, input);
   if (input.action === 'edit') return editStaffEvent(client, input);
   if (input.action === 'start') return startStaffEvent(client, input);
   if (input.action === 'finish') return finishStaffEvent(client, input);
   if (input.action === 'cancel') return cancelStaffEvent(client, input);
+  if (input.action === 'submit_review') return submitStaffEventToFinance(client, input);
+  if (input.action === 'return_review') return returnStaffEventToReview(client, input);
+  if (input.action === 'approve_payment') return approveStaffEventPayment(client, input);
   throw actionError('Acao de evento invalida.');
 }
 
@@ -205,9 +297,12 @@ module.exports = {
   MAX_PARTICIPANTS,
   createStaffEvent,
   editStaffEvent,
+  approveStaffEventPayment,
   finishStaffEvent,
   manageStaffEvent,
   publicationForAudience,
+  returnStaffEventToReview,
   startStaffEvent,
+  submitStaffEventToFinance,
   validateEventInput
 };

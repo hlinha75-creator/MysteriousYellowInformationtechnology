@@ -145,6 +145,63 @@ function fameDashboard() {
   return { imports, rows };
 }
 
+function publicFameRankings(limit = 5) {
+  const db = getDatabase();
+  const categories = [
+    ['pve', 'PvE'],
+    ['pvp', 'PvP'],
+    ['gathering', 'Coleta'],
+    ['crafting', 'Craft']
+  ];
+  const safeLimit = Math.max(1, Math.min(10, Number(limit) || 5));
+
+  return {
+    metric: 'gain_since_previous_import',
+    categories: categories.map(([category, label]) => {
+      const imports = db.prepare(`
+        SELECT id, created_at
+        FROM albion_fame_category_imports
+        WHERE category = ? AND undone_at IS NULL
+        ORDER BY id DESC
+        LIMIT 2
+      `).all(category);
+      const latest = imports[0] || null;
+      const previous = imports[1] || null;
+      const rows = latest && previous
+        ? db.prepare(`
+          SELECT current.albion_name AS name,
+                 current.amount AS current_amount,
+                 previous.amount AS previous_amount,
+                 current.amount - previous.amount AS gain
+          FROM albion_fame_category_rows current
+          JOIN albion_fame_category_rows previous
+            ON previous.import_id = ?
+           AND previous.albion_key = current.albion_key
+          WHERE current.import_id = ?
+            AND current.amount > previous.amount
+          ORDER BY gain DESC, current.amount DESC, current.albion_name COLLATE NOCASE ASC
+          LIMIT ?
+        `).all(previous.id, latest.id, safeLimit).map((row, index) => ({
+          rank: index + 1,
+          name: row.name,
+          amount: Number(row.gain || 0),
+          currentAmount: Number(row.current_amount || 0),
+          previousAmount: Number(row.previous_amount || 0)
+        }))
+        : [];
+
+      return {
+        category,
+        label,
+        updatedAt: latest?.created_at || null,
+        comparisonFrom: previous?.created_at || null,
+        comparisonAvailable: Boolean(latest && previous),
+        rows
+      };
+    })
+  };
+}
+
 function activeCampaign() {
   const campaign = getDatabase().prepare(`
     SELECT
@@ -346,4 +403,4 @@ function getDashboardData() {
   };
 }
 
-module.exports = { fameDashboard, getDashboardData, latestPveRanking, participationRanking };
+module.exports = { fameDashboard, getDashboardData, latestPveRanking, participationRanking, publicFameRankings };

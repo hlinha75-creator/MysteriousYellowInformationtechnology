@@ -15,7 +15,14 @@ const { getDashboardData } = require('../src/web/dashboard.repository');
 const { createRequestHandler } = require('../src/web/server');
 const ids = require('../src/config/ids');
 const eventsRepo = require('../src/modules/events/events.repository');
-const { createStaffEvent, editStaffEvent, validateEventInput } = require('../src/web/staff-events.service');
+const events = require('../src/modules/events/events.service');
+const {
+  approveStaffEventPayment,
+  createStaffEvent,
+  editStaffEvent,
+  submitStaffEventToFinance,
+  validateEventInput
+} = require('../src/web/staff-events.service');
 const {
   JOIN_SESSION_COOKIE,
   PORTAL_SESSION_COOKIE,
@@ -109,6 +116,12 @@ test('servidor publica landing e protege a API do dashboard', async (t) => {
   const landing = await fetch(`${base}/`);
   assert.equal(landing.status, 200);
   assert.match(await landing.text(), /PvE, Farm de World Boss e Roaming/);
+
+  const publicRankings = await fetch(`${base}/api/public/rankings`);
+  assert.equal(publicRankings.status, 200);
+  const publicRankingBody = await publicRankings.json();
+  assert.equal(publicRankingBody.metric, 'gain_since_previous_import');
+  assert.deepEqual(publicRankingBody.categories.map((item) => item.category), ['pve', 'pvp', 'gathering', 'crafting']);
 
   const joinToken = createJoinSession({ id: 'visitante-web', username: 'Visitante' }, process.env.DASHBOARD_SESSION_SECRET);
   const joinPage = await fetch(`${base}/join`, { headers: { Cookie: `${JOIN_SESSION_COOKIE}=${joinToken}` } });
@@ -348,6 +361,68 @@ test('staff cria e edita evento no site com publicação sincronizada no Discord
   assert.equal(eventsRepo.getEvent(created.event.id).title, 'Roaming interno');
   assert.equal(sent.at(-1).channelId, ids.channels.staff);
   assert.equal(deleted.length, 1);
+});
+
+test('staff envia revisão e aprova pagamento de evento pelo site', async () => {
+  const db = getDatabase();
+  const staffId = 'staff-event-payment-web';
+  const participantId = 'participant-event-payment-web';
+  db.prepare("INSERT OR REPLACE INTO users (discord_id, discord_name, albion_name, registration_status) VALUES (?, 'Staff Evento Financeiro', 'StaffEventoFinanceiro', 'member')").run(staffId);
+  db.prepare("INSERT OR REPLACE INTO users (discord_id, discord_name, albion_name, registration_status) VALUES (?, 'Participante Evento Financeiro', 'ParticipanteEventoFinanceiro', 'member')").run(participantId);
+  db.prepare('INSERT OR REPLACE INTO balances (discord_id, balance) VALUES (?, 0)').run(participantId);
+  const eventId = Number(db.prepare(`
+    INSERT INTO events (event_code, creator_id, title, status, tank_slots, ended_at)
+    VALUES ('EVT-WEB-PAYMENT', ?, 'Pagamento pelo site', 'review', 1, CURRENT_TIMESTAMP)
+  `).run(staffId).lastInsertRowid);
+  db.prepare(`
+    INSERT INTO event_participants (event_id, discord_id, role, calculated_seconds)
+    VALUES (?, ?, 'tank', 3600)
+  `).run(eventId, participantId);
+  events.saveLootReview({ eventId, lootTotal: 1000000, repair: 0, silverBags: 0, taxPercent: 0, evidenceNotes: 'Teste web' });
+
+  const campaignStatuses = db.prepare('SELECT id, status FROM campaigns').all();
+  db.prepare("UPDATE campaigns SET status = 'closed' WHERE status = 'open'").run();
+  const sent = [];
+  const directMessages = [];
+  const textChannel = (id) => ({
+    id,
+    isTextBased: () => true,
+    async send(payload) {
+      sent.push({ channelId: id, payload });
+      return { id: `message-${sent.length}` };
+    }
+  });
+  const staffMember = { id: staffId, roles: { cache: new Map([[ids.roles.staff, {}]]) } };
+  const guild = {
+    ownerId: 'owner',
+    members: { cache: new Map([[staffId, staffMember]]), async fetch(id) { return id === staffId ? staffMember : null; } },
+    roles: { cache: new Map(), everyone: { id: 'everyone' } }
+  };
+  const client = {
+    guilds: { cache: new Map([[ids.guildId, guild]]), async fetch() { return guild; } },
+    channels: { async fetch(id) { return textChannel(id); } },
+    users: { async fetch(id) { return { async send(message) { directMessages.push({ id, message }); } }; } }
+  };
+  guild.client = client;
+
+  try {
+    const submitted = await submitStaffEventToFinance(client, { actorId: staffId, eventId });
+    assert.equal(submitted.event.status, 'pending_payment');
+    assert.equal(sent.some((item) => item.channelId === ids.channels.finance), true);
+    assert.equal(sent.some((item) => item.channelId === ids.channels.dpsMeter), true);
+
+    const approved = await approveStaffEventPayment(client, { actorId: staffId, eventId });
+    assert.equal(approved.event.status, 'approved');
+    assert.equal(approved.transactions, 1);
+    assert.equal(db.prepare('SELECT balance FROM balances WHERE discord_id = ?').get(participantId).balance, 1000000);
+    assert.equal(directMessages.length, 1);
+    assert.equal(sent.some((item) => item.channelId === ids.channels.archive), true);
+    assert.throws(() => events.approveEventPayment({ eventId, actorId: staffId }), /nao esta pendente/);
+    assert.equal(db.prepare("SELECT COUNT(*) AS total FROM audit_logs WHERE target_id = ? AND type = 'event_payment_approved'").get(String(eventId)).total, 1);
+  } finally {
+    const restoreStatus = db.prepare('UPDATE campaigns SET status = ? WHERE id = ?');
+    for (const campaign of campaignStatuses) restoreStatus.run(campaign.status, campaign.id);
+  }
 });
 
 test('portal solicita saque, avisa a staff e bloqueia duplicidade ou saldo insuficiente', async (t) => {

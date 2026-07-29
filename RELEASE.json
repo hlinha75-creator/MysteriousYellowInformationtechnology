@@ -1,11 +1,17 @@
 {
   "enabled": true,
-  "version": "1.26",
-  "title": "Fila de cadastros somente com usuários atuais do Discord",
+  "version": "1.28",
+  "title": "Evolução de fama e aprovação de eventos pelo site",
   "notes": [
     "A tela Cadastros aceita a lista de membros exportada do Albion por arquivo ou texto colado.",
     "A prévia mostra membros vinculados, sem Discord, entradas, saídas e cadastros fora da lista antes da confirmação.",
     "Cada confirmação mantém o histórico de snapshots e nunca remove cargos do Discord automaticamente.",
-    "Cadastros históricos de pessoas que saíram do Discord ficam preservados no banco, mas não aparecem mais na fila ativa."
+    "Cadastros históricos de pessoas que saíram do Discord ficam preservados no banco, mas não aparecem mais na fila ativa.",
+    "A página inicial exibe o Top 5 de PvE, PvP, Coleta e Craft logo abaixo da apresentação.",
+    "Os rankings públicos mostram o ganho entre as duas últimas importações manuais confirmadas, e não o valor acumulado.",
+    "Jogadores novos sem valor na importação anterior ficam fora do Top 5 de evolução.",
+    "Uma página aberta verifica atualizações dos rankings a cada cinco minutos.",
+    "A staff pode enviar uma revisão ao financeiro, devolver e aprovar o pagamento diretamente pela página Eventos.",
+    "A aprovação pelo site mantém notificações, campanha, recompensas, backup e auditoria sincronizados com o Discord."
   ]
 }

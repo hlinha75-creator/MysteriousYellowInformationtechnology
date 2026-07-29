@@ -74,7 +74,7 @@ function badge(status) {
     member: 'Membro', pending: 'Pendente', unregistered: 'Aguardando cadastro', guest: 'Convidado',
     overdue: 'Cadastro atrasado', link_review: 'Análise de vínculo', rejected: 'Devolvido',
     approved_member: 'Membro', approved_linked: 'Vínculo aprovado', approved_guest: 'Convidado',
-    created: 'Criado', running: 'Em andamento', approved: 'Aprovado', cancelled: 'Cancelado',
+    created: 'Criado', running: 'Em andamento', approved: 'Aprovado', cancelled: 'Cancelado', pending_payment: 'Aguardando pagamento',
     draft: 'Rascunho', submitted: 'Em revisão', review: 'Revisão', requested: 'Aguardando aprovação',
     paid: 'Pago', refused: 'Recusado'
   };
@@ -363,6 +363,12 @@ function eventManagementActions(row) {
   }
   if (row.status === 'running') {
     return `<button class="button button-primary staff-event-action" type="button" data-action="finish" data-event-id="${row.id}">Finalizar</button><button class="button button-danger staff-event-action" type="button" data-action="cancel" data-event-id="${row.id}">Cancelar</button>`;
+  }
+  if (row.status === 'review') {
+    return `<button class="button button-primary staff-event-action" type="button" data-action="submit_review" data-event-id="${row.id}">Enviar ao financeiro</button>`;
+  }
+  if (row.status === 'pending_payment') {
+    return `<button class="button button-success staff-event-action" type="button" data-action="approve_payment" data-event-id="${row.id}">Aprovar pagamento</button><button class="button button-ghost staff-event-action" type="button" data-action="return_review" data-event-id="${row.id}">Devolver</button>`;
   }
   return '<span class="secondary-text">Sem ação</span>';
 }
@@ -787,9 +793,14 @@ async function handleStaffEventAction(event) {
     document.querySelector('#finish-event-form').elements.eventId.value = eventId;
     return dialog.showModal();
   }
-  const question = action === 'start'
-    ? `Iniciar ${row?.event_code || 'este evento'} e criar a sala de voz?`
-    : `Cancelar ${row?.event_code || 'este evento'}? Esta ação encerra a publicação no Discord.`;
+  const questions = {
+    start: `Iniciar ${row?.event_code || 'este evento'} e criar a sala de voz?`,
+    cancel: `Cancelar ${row?.event_code || 'este evento'}? Esta ação encerra a publicação no Discord.`,
+    submit_review: `Enviar ${row?.event_code || 'este evento'} para aprovação financeira? A revisão será fechada para edição.`,
+    return_review: `Devolver ${row?.event_code || 'este evento'} para revisão? Nenhum saldo será alterado.`,
+    approve_payment: `Aprovar o pagamento de ${row?.event_code || 'este evento'}? Os saldos ou as escolhas da campanha serão processados agora.`
+  };
+  const question = questions[action] || `Confirmar ação em ${row?.event_code || 'este evento'}?`;
   if (!window.confirm(question)) return;
   button.disabled = true;
   try {
