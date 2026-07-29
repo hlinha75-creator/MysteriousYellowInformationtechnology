@@ -1,4 +1,4 @@
-const state = { data: null, lastLoadedAt: 0, currentView: 'overview', csrf: null, userId: null, famePreview: null, fameCategory: 'pve', fameSourceName: null, rankingCategory: 'overall', editingEventId: null };
+const state = { data: null, lastLoadedAt: 0, currentView: 'overview', csrf: null, userId: null, permissions: { full: true, registrations: true }, registrationPreview: null, memberRosterPreview: null, memberRosterSourceName: null, famePreview: null, fameCategory: 'pve', fameSourceName: null, rankingCategory: 'overall', editingEventId: null };
 const number = new Intl.NumberFormat('pt-BR');
 const collator = new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base' });
 
@@ -71,7 +71,9 @@ function setSummary(id, shown, total) {
 
 function badge(status) {
   const labels = {
-    member: 'Membro', pending: 'Pendente', unregistered: 'Sem cadastro', guest: 'Convidado',
+    member: 'Membro', pending: 'Pendente', unregistered: 'Aguardando cadastro', guest: 'Convidado',
+    overdue: 'Cadastro atrasado', link_review: 'Análise de vínculo', rejected: 'Devolvido',
+    approved_member: 'Membro', approved_linked: 'Vínculo aprovado', approved_guest: 'Convidado',
     created: 'Criado', running: 'Em andamento', approved: 'Aprovado', cancelled: 'Cancelado',
     draft: 'Rascunho', submitted: 'Em revisão', review: 'Revisão', requested: 'Aguardando aprovação',
     paid: 'Pago', refused: 'Recusado'
@@ -172,28 +174,156 @@ function renderMembers(members) {
   document.querySelector('#members-table').innerHTML = sorted.length ? sorted.map((row) => `<tr><td class="primary-cell">${escapeHtml(row.albion_name || 'Sem nome Albion')}</td><td>${badge(row.registration_status)}</td><td>${escapeHtml(row.discord_name || '—')}</td><td>${number.format(row.events_total)}</td><td class="number-cell">${escapeHtml(formatSilver(row.balance))}</td></tr>`).join('') : emptyRow(5);
 }
 
-function renderRegistrations(members, pending) {
-  const counts = members.reduce((result, row) => {
-    result[row.registration_status || 'unregistered'] = (result[row.registration_status || 'unregistered'] || 0) + 1;
+function registrationActions(row) {
+  const id = escapeHtml(row.discord_id);
+  if (row.queue_status === 'member') return '<span class="muted-value">Concluído</span>';
+  const analyzeLabel = row.queue_status === 'link_review' ? 'Analisar vínculo' : (row.requested_albion_name ? 'Analisar' : 'Cadastrar');
+  const analyze = `<button class="button button-primary registration-action" type="button" data-action="analyze" data-discord-id="${id}">${analyzeLabel}</button>`;
+  const reject = ['pending', 'link_review'].includes(row.queue_status)
+    ? `<button class="button button-danger registration-action" type="button" data-action="reject" data-discord-id="${id}">Devolver</button>` : '';
+  const remind = ['unregistered', 'overdue', 'rejected', 'guest'].includes(row.queue_status)
+    ? `<button class="button button-ghost registration-action" type="button" data-action="remind" data-discord-id="${id}">Reenviar aviso</button>` : '';
+  return `<div class="table-actions">${analyze}${reject}${remind}</div>`;
+}
+
+function waitingLabel(hours) {
+  const value = Number(hours || 0);
+  if (value < 1) return 'menos de 1h';
+  if (value < 24) return `${value}h`;
+  return `${Math.floor(value / 24)}d ${value % 24}h`;
+}
+
+function registrationRosterNote(row) {
+  if (row.roster_status === 'current') {
+    const lastSeen = row.roster_last_seen ? ` · ${row.roster_last_seen}` : '';
+    return `<small class="roster-state current">Na lista atual${escapeHtml(lastSeen)}</small>`;
+  }
+  if (row.roster_status === 'absent') return '<small class="roster-state absent">Não encontrado na lista atual</small>';
+  return '';
+}
+
+function renderRegistrations(registrations = [], pending = 0, memberRoster = null) {
+  const counts = registrations.reduce((result, row) => {
+    result[row.queue_status || 'unregistered'] = (result[row.queue_status || 'unregistered'] || 0) + 1;
     return result;
   }, {});
   document.querySelector('#registration-metrics').innerHTML = [
-    metricCard('Membros', number.format(counts.member || 0), 'Cadastro ativo', '#23a55a'),
-    metricCard('Pendentes', number.format(pending), 'Aguardando análise', '#f0b232'),
-    metricCard('Outros status', number.format(members.length - (counts.member || 0)), 'Convidados e não cadastrados', '#5865f2')
+    metricCard('Para analisar', number.format((counts.pending || 0) + (counts.link_review || 0)), `${number.format(counts.link_review || 0)} vínculo(s)`, '#f0b232'),
+    metricCard('Atrasados', number.format(counts.overdue || 0), 'Mais de 24 horas', '#ed4245'),
+    metricCard('Aguardando cadastro', number.format((counts.unregistered || 0) + (counts.guest || 0)), 'Convidados sem envio', '#5865f2'),
+    metricCard('Lista atual da guilda', memberRoster ? number.format(memberRoster.memberCount) : '—', memberRoster ? `${number.format(memberRoster.linkedCount)} vinculados ao Discord` : 'Ainda não importada', '#37c9ef')
   ].join('');
   const query = controlValue('registration-search');
   const status = controlValue('registration-status');
-  const filtered = members.filter((row) => (!status || row.registration_status === status) && includesQuery(row, query, ['albion_name', 'discord_name', 'registration_status']));
-  const sorted = sortRows(filtered, controlValue('registration-sort', 'updated-desc'), {
-    'updated-desc': (a, b) => dateValue(b.updated_at) - dateValue(a.updated_at),
-    'updated-asc': (a, b) => dateValue(a.updated_at) - dateValue(b.updated_at),
-    'name-asc': (a, b) => collator.compare(a.albion_name || '', b.albion_name || ''),
-    'name-desc': (a, b) => collator.compare(b.albion_name || '', a.albion_name || ''),
-    default: (a, b) => dateValue(b.updated_at) - dateValue(a.updated_at)
+  const filtered = registrations.filter((row) => (!status || row.queue_status === status) && includesQuery(row, query, ['requested_albion_name', 'albion_name', 'discord_name', 'discord_display_name', 'queue_status']));
+  const priority = { link_review: 0, pending: 1, overdue: 2, unregistered: 3, rejected: 4, guest: 5, member: 6 };
+  const sorted = sortRows(filtered, controlValue('registration-sort', 'priority'), {
+    priority: (a, b) => (priority[a.queue_status] ?? 9) - (priority[b.queue_status] ?? 9) || Number(b.waiting_hours || 0) - Number(a.waiting_hours || 0),
+    'waiting-desc': (a, b) => Number(b.waiting_hours || 0) - Number(a.waiting_hours || 0),
+    'waiting-asc': (a, b) => Number(a.waiting_hours || 0) - Number(b.waiting_hours || 0),
+    'name-asc': (a, b) => collator.compare(a.requested_albion_name || a.discord_name || '', b.requested_albion_name || b.discord_name || ''),
+    'name-desc': (a, b) => collator.compare(b.requested_albion_name || b.discord_name || '', a.requested_albion_name || a.discord_name || ''),
+    default: (a, b) => (priority[a.queue_status] ?? 9) - (priority[b.queue_status] ?? 9)
   });
-  setSummary('registrations-summary', sorted.length, members.length);
-  document.querySelector('#registrations-table').innerHTML = sorted.length ? sorted.map((row) => `<tr><td class="primary-cell">${escapeHtml(row.albion_name || 'Sem nome Albion')}</td><td>${escapeHtml(row.discord_name || '—')}</td><td>${badge(row.registration_status)}</td><td>${formatDate(row.updated_at)}</td></tr>`).join('') : emptyRow(4);
+  setSummary('registrations-summary', sorted.length, registrations.length);
+  document.querySelector('#registrations-table').innerHTML = sorted.length ? sorted.map((row) => `<tr><td class="primary-cell">${escapeHtml(row.requested_albion_name || row.albion_name || 'Não informado')}${row.linked_owner_id ? `<small>Já vinculado a ${escapeHtml(row.linked_owner_name || row.linked_owner_id)}</small>` : ''}${registrationRosterNote(row)}</td><td>${escapeHtml(row.discord_display_name || row.discord_name || row.discord_id)}<small>${escapeHtml(row.discord_id)}</small></td><td>${badge(row.queue_status)}</td><td>${escapeHtml(waitingLabel(row.waiting_hours))}</td><td>${registrationActions(row)}</td></tr>`).join('') : emptyRow(5);
+}
+
+function renderMemberRosterCurrent(roster) {
+  const target = document.querySelector('#member-roster-current');
+  if (!roster) {
+    target.textContent = 'Nenhuma lista importada. Abra para enviar a lista atual do jogo.';
+    return;
+  }
+  target.textContent = `${number.format(roster.memberCount)} membros · ${number.format(roster.onlineCount)} online · ${number.format(roster.linkedCount)} vinculados · atualizada ${formatDate(roster.createdAt)}`;
+}
+
+function rosterDifference(label, values, tone = '') {
+  if (!values?.length) return `<div class="roster-difference ${tone}"><strong>${escapeHtml(label)}</strong><span>Nenhum</span></div>`;
+  const names = values.slice(0, 12).map((value) => escapeHtml(typeof value === 'string' ? value : (value.albionName || value.characterName || value.discordName))).join(', ');
+  const remaining = values.length > 12 ? ` +${values.length - 12}` : '';
+  return `<div class="roster-difference ${tone}"><strong>${escapeHtml(label)} (${number.format(values.length)})</strong><span>${names}${remaining}</span></div>`;
+}
+
+function resetMemberRosterPreview() {
+  state.memberRosterPreview = null;
+  document.querySelector('#member-roster-status').textContent = 'Aguardando lista';
+  document.querySelector('#member-roster-status').className = 'badge';
+  document.querySelector('#member-roster-empty').hidden = false;
+  document.querySelector('#member-roster-preview-content').hidden = true;
+}
+
+function renderMemberRosterPreview(preview) {
+  state.memberRosterPreview = preview;
+  const status = document.querySelector('#member-roster-status');
+  status.textContent = 'Pronta para confirmar';
+  status.className = 'badge member';
+  document.querySelector('#member-roster-empty').hidden = true;
+  document.querySelector('#member-roster-preview-content').hidden = false;
+  document.querySelector('#member-roster-metrics').innerHTML = [
+    metricCard('Membros no jogo', number.format(preview.memberCount), `${number.format(preview.onlineCount)} online`, '#5865f2'),
+    metricCard('Vinculados', number.format(preview.linkedCount), 'Personagem ligado ao Discord', '#23a55a'),
+    metricCard('Sem vínculo', number.format(preview.unlinkedCount), 'Na guilda, sem conta ligada', '#f0b232'),
+    metricCard('Fora da nova lista', number.format(preview.registeredOutside.length), 'Somente conferência', '#ed4245')
+  ].join('');
+  document.querySelector('#member-roster-differences').innerHTML = [
+    rosterDifference('Entraram desde a lista anterior', preview.additions, 'positive'),
+    rosterDifference('Saíram desde a lista anterior', preview.removals, 'negative'),
+    rosterDifference('Na guilda sem vínculo Discord', preview.unlinked),
+    rosterDifference('Cadastros Membro fora da lista', preview.registeredOutside, 'warning'),
+    ...(preview.duplicates.length ? [rosterDifference('Duplicados ignorados', preview.duplicates, 'warning')] : [])
+  ].join('');
+  setSummary('member-roster-preview-summary', preview.sample.length, preview.memberCount);
+  document.querySelector('#member-roster-preview-table').innerHTML = preview.sample.map((row) => `<tr><td class="primary-cell">${escapeHtml(row.characterName)}</td><td>${escapeHtml(row.lastSeen || '—')}</td><td>${escapeHtml(row.roles.join(', ') || '—')}</td><td>${row.linked ? '<span class="badge member">Vinculado</span>' : '<span class="badge pending">Sem Discord</span>'}</td></tr>`).join('') || emptyRow(4);
+}
+
+async function analyzeMemberRoster() {
+  const rosterText = document.querySelector('#member-roster-text').value;
+  const button = document.querySelector('#member-roster-analyze');
+  button.disabled = true;
+  button.textContent = 'Analisando…';
+  try {
+    const response = await postForm('/api/staff/member-roster', {
+      action: 'preview',
+      sourceName: state.memberRosterSourceName || 'Lista copiada do Albion',
+      rosterText
+    });
+    renderMemberRosterPreview(response.result.preview);
+    showRegistrationFeedback(response.result.message);
+  } catch (error) {
+    resetMemberRosterPreview();
+    showRegistrationFeedback(error.message, true);
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Analisar lista';
+  }
+}
+
+async function confirmMemberRoster() {
+  if (!state.memberRosterPreview) return;
+  const button = document.querySelector('#member-roster-confirm');
+  button.disabled = true;
+  button.textContent = 'Salvando…';
+  try {
+    const response = await postForm('/api/staff/member-roster', {
+      action: 'confirm',
+      sourceName: state.memberRosterSourceName || 'Lista copiada do Albion',
+      rosterText: document.querySelector('#member-roster-text').value
+    });
+    state.data = response.dashboard;
+    document.querySelector('#member-roster-text').value = '';
+    document.querySelector('#member-roster-file').value = '';
+    state.memberRosterSourceName = null;
+    document.querySelector('#member-roster-source').textContent = 'Nenhum arquivo selecionado';
+    resetMemberRosterPreview();
+    render(state.data);
+    showRegistrationFeedback(response.result.message);
+  } catch (error) {
+    showRegistrationFeedback(error.message, true);
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Confirmar lista atual';
+  }
 }
 
 function renderEvents(events) {
@@ -517,15 +647,18 @@ function renderAudit(rows) {
 }
 
 function render(data) {
-  renderOverview(data);
-  renderMembers(data.members);
-  renderRegistrations(data.members, data.operations.registrationsPending);
-  renderEvents(data.events);
-  renderOperations(data.operations);
-  renderFinance(data.finance, data.overview.totalMemberBalance);
-  renderRankings(data.rankings);
-  renderFameImportStatus(data.rankings.fame);
-  renderAudit(data.audit);
+  renderMemberRosterCurrent(data.memberRoster || null);
+  renderRegistrations(data.registrations || [], data.operations?.registrationsPending || 0, data.memberRoster || null);
+  if (state.permissions.full) {
+    renderOverview(data);
+    renderMembers(data.members);
+    renderEvents(data.events);
+    renderOperations(data.operations);
+    renderFinance(data.finance, data.overview.totalMemberBalance);
+    renderRankings(data.rankings);
+    renderFameImportStatus(data.rankings.fame);
+    renderAudit(data.audit);
+  }
   document.querySelector('#freshness').textContent = data.freshness ? `Dados até ${formatDate(data.freshness)}` : `Atualizado ${formatDate(data.generatedAt)}`;
 }
 
@@ -690,6 +823,125 @@ async function submitFinishEventForm(event) {
   }
 }
 
+function showRegistrationFeedback(message, error = false) {
+  const feedback = document.querySelector('#registration-feedback');
+  feedback.textContent = message;
+  feedback.classList.toggle('error', error);
+  feedback.hidden = false;
+}
+
+function openRegistrationDialog(discordId) {
+  const row = state.data?.registrations?.find((item) => String(item.discord_id) === String(discordId));
+  if (!row) return showRegistrationFeedback('Cadastro não encontrado.', true);
+  const dialog = document.querySelector('#registration-dialog');
+  const form = document.querySelector('#registration-form');
+  form.reset();
+  form.elements.discordId.value = row.discord_id;
+  form.elements.albionName.value = row.requested_albion_name || row.albion_name || '';
+  document.querySelector('#registration-dialog-title').textContent = `Validar ${row.discord_display_name || row.discord_name || row.discord_id}`;
+  document.querySelector('#registration-preview').hidden = true;
+  document.querySelector('#registration-preview').innerHTML = '';
+  document.querySelector('#registration-dialog-submit').textContent = 'Consultar Albion';
+  state.registrationPreview = null;
+  dialog.showModal();
+}
+
+function renderRegistrationPreview(preview) {
+  const target = document.querySelector('#registration-preview');
+  target.hidden = false;
+  target.innerHTML = `<span class="badge ${preview.linkRequired ? 'link_review' : 'member'}">${preview.linkRequired ? 'Análise de vínculo' : 'Na guilda NoTag'}</span><dl><div><dt>Personagem</dt><dd>${escapeHtml(preview.albionName)}</dd></div><div><dt>Guilda</dt><dd>${escapeHtml(preview.guildName)}</dd></div><div><dt>Discord</dt><dd>${escapeHtml(preview.displayName)}</dd></div>${preview.owner ? `<div><dt>Perfil atual</dt><dd>${escapeHtml(preview.owner.albionName || preview.owner.discordName || preview.owner.discordId)} · ${escapeHtml(preview.owner.discordId)}</dd></div>` : ''}</dl><p>${preview.linkRequired ? 'Ao confirmar, esta conta Discord será vinculada ao perfil existente, preservando saldo e histórico.' : 'Ao confirmar, o cargo Membro e o apelido serão atualizados.'}</p>`;
+  document.querySelector('#registration-dialog-submit').textContent = preview.linkRequired ? 'Autorizar vínculo e aprovar' : 'Aprovar como Membro';
+}
+
+async function submitRegistrationForm(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const submit = document.querySelector('#registration-dialog-submit');
+  submit.disabled = true;
+  try {
+    const values = formValues(form);
+    if (!state.registrationPreview) {
+      const response = await postForm('/api/staff/registrations', { ...values, action: 'preview' });
+      state.registrationPreview = response.result.preview;
+      form.elements.albionName.value = response.result.preview.albionName;
+      renderRegistrationPreview(response.result.preview);
+    } else {
+      const response = await postForm('/api/staff/registrations', {
+        action: 'confirm',
+        discordId: state.registrationPreview.discordId,
+        albionName: state.registrationPreview.albionName
+      });
+      state.data = response.dashboard;
+      render(state.data);
+      showRegistrationFeedback(response.result.message);
+      document.querySelector('#registration-dialog').close();
+      state.registrationPreview = null;
+    }
+  } catch (error) {
+    const target = document.querySelector('#registration-preview');
+    target.hidden = false;
+    target.innerHTML = `<div class="registration-error">${escapeHtml(error.message)}</div>`;
+    state.registrationPreview = null;
+    submit.textContent = 'Consultar novamente';
+  } finally {
+    submit.disabled = false;
+  }
+}
+
+async function handleRegistrationAction(event) {
+  const button = event.target.closest('.registration-action');
+  if (!button) return;
+  const action = button.dataset.action;
+  const discordId = button.dataset.discordId;
+  if (action === 'analyze') return openRegistrationDialog(discordId);
+  let reason = '';
+  if (action === 'reject') {
+    const answer = window.prompt('Motivo da devolução (opcional):', '');
+    if (answer === null) return;
+    reason = answer;
+  } else if (action === 'remind' && !window.confirm('Reenviar por DM as instruções de cadastro?')) {
+    return;
+  }
+  button.disabled = true;
+  try {
+    const response = await postForm('/api/staff/registrations', { action, discordId, reason });
+    state.data = response.dashboard;
+    render(state.data);
+    showRegistrationFeedback(response.result.message);
+  } catch (error) {
+    showRegistrationFeedback(error.message, true);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function setupRegistrationUI() {
+  document.querySelector('#registrations-table').addEventListener('click', handleRegistrationAction);
+  document.querySelector('#registration-form').addEventListener('submit', submitRegistrationForm);
+  document.querySelector('#registration-dialog-close').addEventListener('click', () => document.querySelector('#registration-dialog').close());
+  document.querySelector('#registration-dialog-x').addEventListener('click', () => document.querySelector('#registration-dialog').close());
+  document.querySelector('#registration-form').elements.albionName.addEventListener('input', () => {
+    state.registrationPreview = null;
+    document.querySelector('#registration-preview').hidden = true;
+    document.querySelector('#registration-dialog-submit').textContent = 'Consultar Albion';
+  });
+  document.querySelector('#member-roster-file').addEventListener('change', async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (file.size > 512 * 1024) {
+      event.target.value = '';
+      return showRegistrationFeedback('O arquivo deve ter no máximo 512 KB.', true);
+    }
+    state.memberRosterSourceName = file.name;
+    document.querySelector('#member-roster-source').textContent = file.name;
+    document.querySelector('#member-roster-text').value = await file.text();
+    resetMemberRosterPreview();
+  });
+  document.querySelector('#member-roster-text').addEventListener('input', resetMemberRosterPreview);
+  document.querySelector('#member-roster-analyze').addEventListener('click', analyzeMemberRoster);
+  document.querySelector('#member-roster-confirm').addEventListener('click', confirmMemberRoster);
+}
+
 async function loadDashboard({ manual = false } = {}) {
   const button = document.querySelector('#refresh-button');
   if (manual) button.classList.add('spinning');
@@ -711,9 +963,19 @@ async function loadDashboard({ manual = false } = {}) {
 }
 
 async function loadSession() {
-  const { user, csrf } = await fetchJson('/api/session');
+  const { user, csrf, permissions } = await fetchJson('/api/session');
   state.csrf = csrf;
   state.userId = user.id;
+  state.permissions = permissions || { full: true, registrations: true };
+  if (!state.permissions.full) {
+    state.currentView = 'registrations';
+    document.querySelectorAll('.nav-item').forEach((item) => { item.hidden = item.dataset.view !== 'registrations'; });
+    document.querySelectorAll('.nav-group').forEach((group) => { group.hidden = !group.querySelector('.nav-item:not([hidden])'); });
+    document.querySelector('#sidebar .app-brand small').textContent = 'Cadastros da comunidade';
+    switchView('registrations');
+  } else {
+    setupEventManagementUI();
+  }
   document.querySelector('#user-name').textContent = user.name;
   if (user.avatarUrl) {
     const avatar = document.querySelector('#user-avatar');
@@ -807,7 +1069,7 @@ function closeSidebar() {
   document.querySelector('#mobile-scrim').classList.remove('open');
 }
 
-setupEventManagementUI();
+setupRegistrationUI();
 document.querySelectorAll('.nav-item').forEach((button) => button.addEventListener('click', () => switchView(button.dataset.view)));
 document.querySelectorAll('[data-go]').forEach((button) => button.addEventListener('click', () => switchView(button.dataset.go)));
 document.querySelector('#menu-toggle').addEventListener('click', openSidebar);
@@ -848,17 +1110,19 @@ document.querySelectorAll('.ranking-tab').forEach((button) => button.addEventLis
 document.querySelectorAll('.table-controls input, .table-controls select').forEach((control) => {
   control.addEventListener(control.matches('input') ? 'input' : 'change', () => {
     if (!state.data) return;
-    renderMembers(state.data.members);
-    renderRegistrations(state.data.members, state.data.operations.registrationsPending);
-    renderEvents(state.data.events);
-    renderFinance(state.data.finance, state.data.overview.totalMemberBalance);
-    renderRankings(state.data.rankings);
-    renderAudit(state.data.audit);
+    if (state.permissions.full) {
+      renderMembers(state.data.members);
+      renderEvents(state.data.events);
+      renderFinance(state.data.finance, state.data.overview.totalMemberBalance);
+      renderRankings(state.data.rankings);
+      renderAudit(state.data.audit);
+    }
+    renderRegistrations(state.data.registrations || [], state.data.operations?.registrationsPending || 0, state.data.memberRoster || null);
   });
 });
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && Date.now() - state.lastLoadedAt >= 30000) loadDashboard();
 });
 
-Promise.all([loadSession(), loadDashboard()]).catch(() => {});
+loadSession().then(() => loadDashboard()).catch(() => {});
 window.setInterval(() => { if (!document.hidden) loadDashboard(); }, 30000);

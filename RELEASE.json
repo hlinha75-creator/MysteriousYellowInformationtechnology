@@ -1,10 +1,11 @@
 {
   "enabled": true,
-  "version": "1.23",
-  "title": "Correcoes e bugs dos relatorios",
+  "version": "1.26",
+  "title": "Fila de cadastros somente com usuários atuais do Discord",
   "notes": [
-    "Relatorio diario ADM agora inclui HTML com mais detalhes.",
-    "Painel /setup ajustado para evitar erro de botoes.",
-    "Atualizacoes do bot agora aparecem apenas no canal ADM."
+    "A tela Cadastros aceita a lista de membros exportada do Albion por arquivo ou texto colado.",
+    "A prévia mostra membros vinculados, sem Discord, entradas, saídas e cadastros fora da lista antes da confirmação.",
+    "Cada confirmação mantém o histórico de snapshots e nunca remove cargos do Discord automaticamente.",
+    "Cadastros históricos de pessoas que saíram do Discord ficam preservados no banco, mas não aparecem mais na fila ativa."
   ]
 }

@@ -35,6 +35,22 @@ async function findAlbionCharacter(value, options = {}) {
   return { id: match.Id, name: match.Name || requestedName };
 }
 
+async function findAlbionProfile(value, options = {}) {
+  const character = await findAlbionCharacter(value, options);
+  const fetchImpl = options.fetchImpl || fetch;
+  const apiBase = String(options.apiBase || process.env.ALBION_API_BASE_URL || process.env.ALBION_API_BASE || DEFAULT_ALBION_API).replace(/\/$/, '');
+  const response = await fetchImpl(`${apiBase}/players/${encodeURIComponent(character.id)}`);
+  if (!response.ok) throw new Error('O Albion não retornou os dados completos desse personagem.');
+  const profile = await response.json();
+  return {
+    id: character.id,
+    name: profile.Name || character.name,
+    guildId: profile.GuildId || null,
+    guildName: profile.GuildName || '',
+    allianceName: profile.AllianceName || ''
+  };
+}
+
 function hasAnyRole(member, roleIds) {
   return roleIds.some((roleId) => roleId && member.roles?.cache?.has(roleId));
 }
@@ -97,6 +113,19 @@ async function notifyOnboardingIssue(client, session, albionName, error, options
     embeds: [embed],
     allowedMentions: { parse: [], users: [session.id], roles: [] }
   });
+  if (sent?.id) {
+    try {
+      repo.upsertStaffAlert({
+        discordId: session.id,
+        channelId: sent.channelId || ids.channels.memberRequests,
+        messageId: sent.id
+      });
+    } catch (storageError) {
+      const closedTestDatabase = process.env.NODE_ENV === 'test'
+        && /database connection is not open/i.test(String(storageError?.message || ''));
+      if (!closedTestDatabase) console.error('[ONBOARDING] Não foi possível vincular o aviso à fila:', storageError);
+    }
+  }
   return { notified: Boolean(sent), cooldown: false };
 }
 
@@ -196,6 +225,7 @@ module.exports = {
   ensureFallbackGuestAccess,
   ensureGuestMember,
   findAlbionCharacter,
+  findAlbionProfile,
   handleOnboardingIssue,
   notifyOnboardingIssue,
   onboardingConfigured,

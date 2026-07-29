@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Central da staff — Notag</title>
-  <link rel="stylesheet" href="/assets/styles.css?v=20260729-7">
-  <script src="/assets/dashboard.js?v=20260729-2" defer></script>
+  <link rel="stylesheet" href="/assets/styles.css?v=20260729-9">
+  <script src="/assets/dashboard.js?v=20260729-5" defer></script>
 </head>
 <body class="dashboard-body">
   <div class="app-shell">
@@ -78,7 +78,45 @@
         </section>
 
         <section class="view" id="view-members" data-title="Membros" data-kicker="Gestão"><div class="view-heading"><div><h2>Membros da guilda</h2><p>Cadastro, saldo e participação de cada jogador.</p></div><div class="table-controls"><input class="search-input" id="member-search" type="search" placeholder="Buscar jogador…" aria-label="Buscar membro"><select id="member-status" aria-label="Filtrar membros por status"><option value="">Todos os status</option><option value="member">Membros</option><option value="pending">Pendentes</option><option value="guest">Convidados</option><option value="unregistered">Sem cadastro</option></select><select id="member-sort" aria-label="Classificar membros"><option value="name-asc">Nome: A–Z</option><option value="name-desc">Nome: Z–A</option><option value="balance-desc">Saldo: maior–menor</option><option value="balance-asc">Saldo: menor–maior</option><option value="events-desc">Eventos: maior–menor</option><option value="events-asc">Eventos: menor–maior</option></select></div></div><article class="panel"><div class="result-summary" id="members-summary"></div><div class="table-wrap"><table><thead><tr><th>Jogador</th><th>Status</th><th>Discord</th><th>Eventos</th><th class="number-cell">Saldo</th></tr></thead><tbody id="members-table"></tbody></table></div></article></section>
-        <section class="view" id="view-registrations" data-title="Cadastros" data-kicker="Gestão"><div class="view-heading"><div><h2>Cadastros</h2><p>Visão dos vínculos entre Discord e Albion.</p></div><div class="table-controls"><input class="search-input" id="registration-search" type="search" placeholder="Buscar cadastro…" aria-label="Buscar cadastro"><select id="registration-status" aria-label="Filtrar cadastros por status"><option value="">Todos os status</option><option value="member">Membros</option><option value="pending">Pendentes</option><option value="guest">Convidados</option><option value="unregistered">Sem cadastro</option></select><select id="registration-sort" aria-label="Classificar cadastros"><option value="updated-desc">Atualização: recente</option><option value="updated-asc">Atualização: antiga</option><option value="name-asc">Nome: A–Z</option><option value="name-desc">Nome: Z–A</option></select></div></div><div class="metric-grid compact" id="registration-metrics"></div><article class="panel"><div class="result-summary" id="registrations-summary"></div><div class="table-wrap"><table><thead><tr><th>Jogador</th><th>Discord</th><th>Status</th><th>Atualizado</th></tr></thead><tbody id="registrations-table"></tbody></table></div></article></section>
+        <section class="view" id="view-registrations" data-title="Cadastros" data-kicker="Gestão">
+          <div id="registration-feedback" class="finance-action-feedback" hidden></div>
+          <details class="panel member-roster-panel" id="member-roster-panel">
+            <summary>
+              <div><span>LISTA ATUAL DO JOGO</span><h3>Atualizar membros da guilda</h3><p id="member-roster-current">Nenhuma lista importada.</p></div>
+              <strong>Importar lista</strong>
+            </summary>
+            <div class="dashboard-grid equal member-roster-grid">
+              <div>
+                <label class="fame-upload member-roster-upload" for="member-roster-file"><span class="fame-upload-icon">↑</span><strong>Selecionar arquivo</strong><small>.txt, .tsv ou .csv · máximo 512 KB</small></label>
+                <input id="member-roster-file" type="file" accept=".txt,.tsv,.csv,text/plain,text/csv" hidden>
+                <div class="fame-divider"><span>ou cole a lista copiada do jogo</span></div>
+                <textarea class="fame-textarea member-roster-textarea" id="member-roster-text" spellcheck="false" placeholder="&quot;Character Name&quot;&#9;&quot;Last Seen&quot;&#9;&quot;Roles&quot;"></textarea>
+                <div class="fame-actions"><span id="member-roster-source">Nenhum arquivo selecionado</span><button class="button button-primary" id="member-roster-analyze" type="button">Analisar lista</button></div>
+              </div>
+              <div class="member-roster-preview">
+                <div class="panel-head"><div><span>CONFERÊNCIA</span><h3>Prévia das diferenças</h3></div><span class="badge" id="member-roster-status">Aguardando lista</span></div>
+                <div class="fame-preview-empty" id="member-roster-empty"><span>⌁</span><p>Analise a lista antes de salvar. A importação não remove cargos do Discord automaticamente.</p></div>
+                <div id="member-roster-preview-content" hidden>
+                  <div class="metric-grid compact member-roster-metrics" id="member-roster-metrics"></div>
+                  <div class="roster-differences" id="member-roster-differences"></div>
+                  <div class="result-summary" id="member-roster-preview-summary"></div>
+                  <div class="table-wrap"><table><thead><tr><th>Personagem</th><th>Último acesso</th><th>Cargos no jogo</th><th>Vínculo</th></tr></thead><tbody id="member-roster-preview-table"></tbody></table></div>
+                  <div class="fame-actions confirm"><span class="safe-note">Nenhum cargo será removido.</span><button class="button button-primary" id="member-roster-confirm" type="button">Confirmar lista atual</button></div>
+                </div>
+              </div>
+            </div>
+          </details>
+          <div class="view-heading">
+            <div><h2>Fila de cadastros</h2><p>Valide o personagem no Albion, aprove novos membros e resolva contas vinculadas.</p></div>
+            <div class="table-controls">
+              <input class="search-input" id="registration-search" type="search" placeholder="Buscar cadastro…" aria-label="Buscar cadastro">
+              <select id="registration-status" aria-label="Filtrar cadastros por status"><option value="">Todos os status</option><option value="link_review">Análise de vínculo</option><option value="pending">Pendentes</option><option value="overdue">Cadastro atrasado</option><option value="unregistered">Aguardando cadastro</option><option value="rejected">Devolvidos</option><option value="guest">Convidados</option><option value="member">Membros</option></select>
+              <select id="registration-sort" aria-label="Classificar cadastros"><option value="priority">Prioridade</option><option value="waiting-desc">Espera: maior–menor</option><option value="waiting-asc">Espera: menor–maior</option><option value="name-asc">Nome: A–Z</option><option value="name-desc">Nome: Z–A</option></select>
+            </div>
+          </div>
+          <div class="metric-grid compact" id="registration-metrics"></div>
+          <article class="panel"><div class="result-summary" id="registrations-summary"></div><div class="table-wrap"><table><thead><tr><th>Personagem</th><th>Discord</th><th>Situação</th><th>Tempo</th><th>Ações</th></tr></thead><tbody id="registrations-table"></tbody></table></div></article>
+        </section>
         <section class="view" id="view-events" data-title="Eventos" data-kicker="Atividades"><div class="view-heading"><div><h2>Eventos</h2><p>Histórico recente, participação e revisão financeira.</p></div><div class="table-controls"><input class="search-input" id="event-search" type="search" placeholder="Buscar evento…" aria-label="Buscar evento"><select id="event-status" aria-label="Filtrar eventos por status"><option value="">Todos os status</option><option value="created">Criados</option><option value="running">Em andamento</option><option value="review">Em revisão</option><option value="approved">Aprovados</option><option value="cancelled">Cancelados</option></select><select id="event-sort" aria-label="Classificar eventos"><option value="date-desc">Data: recente</option><option value="date-asc">Data: antiga</option><option value="participants-desc">Participantes: maior–menor</option><option value="participants-asc">Participantes: menor–maior</option><option value="name-asc">Nome: A–Z</option><option value="name-desc">Nome: Z–A</option></select></div></div><article class="panel"><div class="result-summary" id="events-summary"></div><div class="table-wrap"><table><thead><tr><th>Evento</th><th>Local</th><th>Status</th><th>Participantes</th><th>Revisão</th><th>Data</th></tr></thead><tbody id="events-table"></tbody></table></div></article></section>
         <section class="view" id="view-operations" data-title="Operações" data-kicker="Atividades"><div class="view-heading"><div><h2>Fila operacional</h2><p>Itens que merecem atenção da staff.</p></div></div><div class="metric-grid" id="operations-metrics"></div><article class="panel empty-guidance"><span class="empty-icon">✓</span><h3>Acompanhamento centralizado</h3><p>Esta primeira versão reúne os totais. As ações administrativas serão adicionadas na próxima etapa.</p></article></section>
         <section class="view" id="view-finance" data-title="Saldos e saques" data-kicker="Financeiro"><div id="staff-finance-feedback" class="finance-action-feedback" hidden></div><div class="view-heading"><div><h2>Financeiro</h2><p>Aprove saques, acompanhe saldos e confira as movimentações.</p></div><div class="table-controls"><input class="search-input" id="transaction-search" type="search" placeholder="Buscar movimentação…" aria-label="Buscar movimentação"><select id="transaction-kind" aria-label="Filtrar movimentações"><option value="">Créditos e débitos</option><option value="credit">Somente créditos</option><option value="debit">Somente débitos</option></select><select id="transaction-sort" aria-label="Classificar movimentações"><option value="date-desc">Data: recente</option><option value="date-asc">Data: antiga</option><option value="amount-desc">Valor: maior–menor</option><option value="amount-asc">Valor: menor–maior</option><option value="name-asc">Nome: A–Z</option><option value="name-desc">Nome: Z–A</option></select></div></div><div class="metric-grid compact" id="finance-metrics"></div><article class="panel"><div class="panel-head"><div><span>Fila da staff</span><h3>Saques para analisar</h3></div><small id="withdrawals-summary"></small></div><div class="staff-withdraw-list" id="staff-withdraw-list"></div></article><article class="panel"><div class="panel-head"><div><span>Extrato</span><h3>Movimentações recentes</h3></div></div><div class="result-summary" id="transactions-summary"></div><div class="table-wrap"><table><thead><tr><th>Jogador</th><th>Tipo</th><th>Motivo</th><th>Data</th><th class="number-cell">Valor</th></tr></thead><tbody id="transactions-table"></tbody></table></div></article></section>
@@ -143,6 +181,15 @@
     </div>
   </div>
   <div class="mobile-scrim" id="mobile-scrim"></div>
+  <dialog class="event-dialog registration-dialog" id="registration-dialog">
+    <form method="dialog" id="registration-form">
+      <div class="dialog-head"><div><span>ANÁLISE DE CADASTRO</span><h2 id="registration-dialog-title">Validar personagem</h2></div><button class="icon-button" id="registration-dialog-x" type="button" aria-label="Fechar">×</button></div>
+      <input type="hidden" name="discordId">
+      <label class="field-label">Nome exato no Albion<input name="albionName" type="text" minlength="3" maxlength="32" required placeholder="Ex: Tmaiusculo"></label>
+      <div class="registration-preview" id="registration-preview" hidden></div>
+      <div class="dialog-actions"><button class="button button-ghost" value="cancel" type="button" id="registration-dialog-close">Voltar</button><button class="button button-primary" type="submit" id="registration-dialog-submit">Consultar Albion</button></div>
+    </form>
+  </dialog>
   <div class="error-toast" id="error-toast" role="alert" hidden></div>
 </body>
 </html>

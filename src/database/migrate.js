@@ -1564,6 +1564,25 @@ const migrations = [
           ON events (audience, status, id DESC);
       `);
     }
+  },
+  {
+    version: 54,
+    name: 'registration_staff_alerts',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS registration_staff_alerts (
+          discord_id TEXT PRIMARY KEY,
+          channel_id TEXT NOT NULL,
+          message_id TEXT NOT NULL,
+          resolved_at TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_registration_alerts_open
+          ON registration_staff_alerts (resolved_at, updated_at DESC);
+      `);
+    }
   }
 ];
 

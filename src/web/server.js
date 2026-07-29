@@ -11,6 +11,8 @@ const { changePortalParticipation } = require('./portal-events.service');
 const { cancelPortalWithdraw, editPortalWithdraw, requestPortalWithdraw } = require('./portal-finance.service');
 const { manageStaffEvent } = require('./staff-events.service');
 const { manageStaffWithdraw } = require('./staff-finance.service');
+const { getRegistrationQueue, manageStaffRegistration } = require('./staff-registration.service');
+const { getMemberRosterData, manageMemberRoster } = require('./staff-member-roster.service');
 const { completeOnboarding, ensureGuestMember, handleOnboardingIssue, onboardingConfigured } = require('./onboarding');
 const {
   JOIN_OAUTH_STATE_COOKIE,
@@ -38,6 +40,12 @@ const {
 
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const ALLOWED_STAFF_ROLES = new Set([ids.roles.adm, ids.roles.staff].filter(Boolean));
+const REGISTRATION_REVIEW_ROLES = new Set([
+  ids.roles.adm,
+  ids.roles.staff,
+  ids.roles.recruiter,
+  ids.roles.caller
+].filter(Boolean));
 const PRIVILEGED_PORTAL_ROLES = new Set([
   ids.roles.adm,
   ids.roles.staff,
@@ -146,15 +154,28 @@ async function authorizeStaff(client, discordUser) {
   const guild = await client.guilds.fetch(ids.guildId);
   const member = await guild.members.fetch(discordUser.id);
   const roles = [...member.roles.cache.keys()];
-  const allowed = member.id === guild.ownerId || roles.some((roleId) => ALLOWED_STAFF_ROLES.has(roleId));
-  return { allowed, roles };
+  const allowed = member.id === guild.ownerId || roles.some((roleId) => REGISTRATION_REVIEW_ROLES.has(roleId));
+  const full = member.id === guild.ownerId || roles.some((roleId) => ALLOWED_STAFF_ROLES.has(roleId));
+  return { allowed, full, canReviewRegistrations: allowed, roles };
+}
+
+async function dashboardAccess(client, session) {
+  if (!session || !client?.guilds) return { allowed: false, full: false, canReviewRegistrations: false, roles: [] };
+  const guild = client.guilds.cache?.get(ids.guildId) || await client.guilds.fetch(ids.guildId);
+  const member = guild.members.cache?.get(session.id) || await guild.members.fetch(session.id).catch(() => null);
+  if (!member) return { allowed: false, full: false, canReviewRegistrations: false, roles: [] };
+  const roles = [...member.roles.cache.keys()];
+  const full = member.id === guild.ownerId || roles.some((roleId) => ALLOWED_STAFF_ROLES.has(roleId));
+  const canReviewRegistrations = full || roles.some((roleId) => REGISTRATION_REVIEW_ROLES.has(roleId));
+  return { allowed: canReviewRegistrations, full, canReviewRegistrations, roles };
 }
 
 async function sessionStillAuthorized(client, session) {
-  if (!session || !client?.guilds) return false;
-  const guild = client.guilds.cache?.get(ids.guildId) || await client.guilds.fetch(ids.guildId);
-  const member = guild.members.cache?.get(session.id) || await guild.members.fetch(session.id);
-  return member.id === guild.ownerId || [...member.roles.cache.keys()].some((roleId) => ALLOWED_STAFF_ROLES.has(roleId));
+  return (await dashboardAccess(client, session)).full;
+}
+
+async function sessionCanAccessDashboard(client, session) {
+  return (await dashboardAccess(client, session)).allowed;
 }
 
 async function portalAccess(client, discordId) {
@@ -163,10 +184,23 @@ async function portalAccess(client, discordId) {
   const member = guild.members.cache?.get(discordId) || await guild.members.fetch(discordId).catch(() => null);
   if (!member) return null;
   const roles = [...member.roles.cache.keys()];
-  const staffAllowed = member.id === guild.ownerId || roles.some((roleId) => ALLOWED_STAFF_ROLES.has(roleId));
+  const staffAllowed = member.id === guild.ownerId || roles.some((roleId) => REGISTRATION_REVIEW_ROLES.has(roleId));
   const privileged = member.id === guild.ownerId || roles.some((roleId) => PRIVILEGED_PORTAL_ROLES.has(roleId));
   const accessLevel = member.roles.cache.has(ids.roles.member) || privileged ? 'member' : 'guest';
   return { accessLevel, privileged, roles, staffAllowed };
+}
+
+async function staffDashboardPayload(client, access) {
+  const registrations = await getRegistrationQueue(client);
+  const memberRoster = getMemberRosterData();
+  if (access.full) return { ...getDashboardData(), registrations, memberRoster };
+  return {
+    generatedAt: new Date().toISOString(),
+    freshness: registrations.map((row) => row.updated_at).filter(Boolean).sort().at(-1) || null,
+    registrations,
+    memberRoster,
+    operations: { registrationsPending: registrations.filter((row) => ['pending', 'link_review', 'overdue', 'unregistered'].includes(row.queue_status)).length }
+  };
 }
 
 function configuredForOAuth() {
@@ -395,6 +429,70 @@ function createRequestHandler(client, options = {}) {
           return json(res, Number(error.statusCode || 400), { error: error.message || 'Nao foi possivel atualizar o evento.' }, isProduction);
         }
       }
+      if (req.method === 'POST' && url.pathname === '/api/staff/registrations') {
+        if (!session) return json(res, 401, { error: 'Sessão da staff necessária.' }, isProduction);
+        const access = await dashboardAccess(client, session);
+        if (!access.canReviewRegistrations) return json(res, 403, { error: 'Acesso de cadastro necessário.' }, isProduction);
+        const expectedOrigin = new URL(env.dashboardBaseUrl).origin;
+        if (req.headers.origin !== expectedOrigin) return json(res, 403, { error: 'Origem inválida.' }, isProduction);
+        if (!String(req.headers['content-type'] || '').startsWith('application/x-www-form-urlencoded')) {
+          return json(res, 415, { error: 'Formato de formulário inválido.' }, isProduction);
+        }
+        const form = await readFormBody(req, 16 * 1024);
+        if (!session.csrf || form.get('csrf') !== session.csrf) {
+          return json(res, 403, { error: 'Sua sessão precisa ser renovada. Atualize a página e tente novamente.' }, isProduction);
+        }
+        try {
+          const result = await manageStaffRegistration(client, {
+            actorId: session.id,
+            action: form.get('action'),
+            discordId: form.get('discordId'),
+            albionName: form.get('albionName'),
+            reason: form.get('reason'),
+            note: form.get('note')
+          }, { fetchImpl });
+          const renewedSession = createSession(session, env.dashboardSessionSecret);
+          return json(res, 200, {
+            result,
+            dashboard: form.get('action') === 'preview' ? null : await staffDashboardPayload(client, access)
+          }, isProduction, {
+            'Set-Cookie': cookie(SESSION_COOKIE, renewedSession, { maxAge: SESSION_MAX_AGE_SECONDS, secure: secureCookie })
+          });
+        } catch (error) {
+          return json(res, Number(error.statusCode || 400), { error: error.message || 'Não foi possível atualizar o cadastro.' }, isProduction);
+        }
+      }
+      if (req.method === 'POST' && url.pathname === '/api/staff/member-roster') {
+        if (!session) return json(res, 401, { error: 'Sessão da staff necessária.' }, isProduction);
+        const access = await dashboardAccess(client, session);
+        if (!access.canReviewRegistrations) return json(res, 403, { error: 'Acesso de cadastro necessário.' }, isProduction);
+        const expectedOrigin = new URL(env.dashboardBaseUrl).origin;
+        if (req.headers.origin !== expectedOrigin) return json(res, 403, { error: 'Origem inválida.' }, isProduction);
+        if (!String(req.headers['content-type'] || '').startsWith('application/x-www-form-urlencoded')) {
+          return json(res, 415, { error: 'Formato de formulário inválido.' }, isProduction);
+        }
+        const form = await readFormBody(req, 640 * 1024);
+        if (!session.csrf || form.get('csrf') !== session.csrf) {
+          return json(res, 403, { error: 'Sua sessão precisa ser renovada. Atualize a página e tente novamente.' }, isProduction);
+        }
+        try {
+          const result = manageMemberRoster({
+            actorId: session.id,
+            action: form.get('action'),
+            sourceName: form.get('sourceName'),
+            rosterText: form.get('rosterText')
+          });
+          const renewedSession = createSession(session, env.dashboardSessionSecret);
+          return json(res, 200, {
+            result,
+            dashboard: form.get('action') === 'preview' ? null : await staffDashboardPayload(client, access)
+          }, isProduction, {
+            'Set-Cookie': cookie(SESSION_COOKIE, renewedSession, { maxAge: SESSION_MAX_AGE_SECONDS, secure: secureCookie })
+          });
+        } catch (error) {
+          return json(res, Number(error.statusCode || 400), { error: error.message || 'Não foi possível atualizar a lista de membros.' }, isProduction);
+        }
+      }
       if (req.method === 'POST' && url.pathname.startsWith('/api/fame/')) {
         if (!session) return json(res, 401, { error: 'Sessão da staff necessária.' }, isProduction);
         if (!await sessionStillAuthorized(client, session)) return json(res, 403, { error: 'Acesso de staff necessário.' }, isProduction);
@@ -462,7 +560,7 @@ function createRequestHandler(client, options = {}) {
         return serveFile(res, 'join.html', isProduction, 'private, no-store');
       }
       if (url.pathname === '/dashboard') {
-        if (!session && portalSession && await sessionStillAuthorized(client, portalSession)) {
+        if (!session && portalSession && await sessionCanAccessDashboard(client, portalSession)) {
           const access = await portalAccess(client, portalSession.id);
           const sessionToken = createSession({ ...portalSession, roles: access?.roles || portalSession.roles }, env.dashboardSessionSecret);
           return redirect(res, '/dashboard', {
@@ -470,7 +568,7 @@ function createRequestHandler(client, options = {}) {
           }, isProduction);
         }
         if (!session) return redirect(res, '/?login=required', {}, isProduction);
-        if (!await sessionStillAuthorized(client, session)) {
+        if (!await sessionCanAccessDashboard(client, session)) {
           return redirect(res, '/?auth=forbidden', { 'Set-Cookie': clearCookie(SESSION_COOKIE, secureCookie) }, isProduction);
         }
         return serveFile(res, 'dashboard.html', isProduction, 'private, no-store');
@@ -494,8 +592,8 @@ function createRequestHandler(client, options = {}) {
         return serveFile(res, 'member.html', isProduction, 'private, no-store');
       }
       if (url.pathname === '/auth/discord') {
-        if (session && await sessionStillAuthorized(client, session)) return redirect(res, '/dashboard', {}, isProduction);
-        if (portalSession && await sessionStillAuthorized(client, portalSession)) {
+        if (session && await sessionCanAccessDashboard(client, session)) return redirect(res, '/dashboard', {}, isProduction);
+        if (portalSession && await sessionCanAccessDashboard(client, portalSession)) {
           const access = await portalAccess(client, portalSession.id);
           const sessionToken = createSession({ ...portalSession, roles: access?.roles || portalSession.roles }, env.dashboardSessionSecret);
           return redirect(res, '/dashboard', {
@@ -613,14 +711,18 @@ function createRequestHandler(client, options = {}) {
       }
       if (url.pathname === '/api/session') {
         if (!session) return json(res, 401, { error: 'Sessão necessária.' }, isProduction);
-        if (!await sessionStillAuthorized(client, session)) return json(res, 403, { error: 'Acesso de staff necessário.' }, isProduction);
+        const access = await dashboardAccess(client, session);
+        if (!access.allowed) return json(res, 403, { error: 'Acesso de staff necessário.' }, isProduction);
         const renewedSession = createSession(session, env.dashboardSessionSecret);
         return json(res, 200, { user: {
           id: session.id,
           name: session.globalName || session.username,
           username: session.username,
           avatarUrl: avatarUrl(session)
-        }, csrf: session.csrf || null }, isProduction, {
+        }, csrf: session.csrf || null, permissions: {
+          full: access.full,
+          registrations: access.canReviewRegistrations
+        } }, isProduction, {
           'Set-Cookie': cookie(SESSION_COOKIE, renewedSession, { maxAge: SESSION_MAX_AGE_SECONDS, secure: secureCookie })
         });
       }
@@ -654,9 +756,10 @@ function createRequestHandler(client, options = {}) {
       }
       if (url.pathname === '/api/dashboard') {
         if (!session) return json(res, 401, { error: 'Sessão necessária.' }, isProduction);
-        if (!await sessionStillAuthorized(client, session)) return json(res, 403, { error: 'Acesso de staff necessário.' }, isProduction);
+        const access = await dashboardAccess(client, session);
+        if (!access.allowed) return json(res, 403, { error: 'Acesso de staff necessário.' }, isProduction);
         const renewedSession = createSession(session, env.dashboardSessionSecret);
-        return json(res, 200, getDashboardData(), isProduction, {
+        return json(res, 200, await staffDashboardPayload(client, access), isProduction, {
           'Set-Cookie': cookie(SESSION_COOKIE, renewedSession, { maxAge: SESSION_MAX_AGE_SECONDS, secure: secureCookie })
         });
       }
