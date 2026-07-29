@@ -205,7 +205,7 @@ function renderFinance(data) {
   state.editingWithdrawId = null;
   document.querySelector('#withdraw-form').hidden = Boolean(pending);
   document.querySelector('#withdraw-form').reset();
-  document.querySelector('#withdraw-review-button').textContent = 'Revisar saque';
+  document.querySelector('#withdraw-review-button').textContent = 'Solicitar saque';
   document.querySelector('#withdraw-edit-cancel-button').hidden = true;
   document.querySelector('#withdraw-review').hidden = true;
   const blocked = document.querySelector('#withdraw-blocked');
@@ -251,7 +251,7 @@ function startWithdrawEdit(requestId) {
   state.withdrawDraft = null;
   document.querySelector('#withdraw-amount').value = String(request.amount);
   document.querySelector('#withdraw-note').value = request.note || '';
-  document.querySelector('#withdraw-review-button').textContent = 'Revisar alteração';
+  document.querySelector('#withdraw-review-button').textContent = 'Salvar alteração';
   document.querySelector('#withdraw-edit-cancel-button').hidden = false;
   document.querySelector('#withdraw-blocked').hidden = true;
   document.querySelector('#withdraw-review').hidden = true;
