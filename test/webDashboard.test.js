@@ -222,6 +222,79 @@ test('portal permite participar, trocar para espectador e respeita o limite de 2
   assert.equal(rejected.status, 403);
 });
 
+test('portal solicita saque, avisa a staff e bloqueia duplicidade ou saldo insuficiente', async (t) => {
+  const db = getDatabase();
+  const discordId = 'portal-withdraw-member';
+  db.prepare("INSERT OR REPLACE INTO users (discord_id, discord_name, albion_name, registration_status) VALUES (?, 'Membro Saque', 'HeroiSaque', 'member')").run(discordId);
+  db.prepare('INSERT OR REPLACE INTO balances (discord_id, balance) VALUES (?, ?)').run(discordId, 2000000);
+
+  const member = { id: discordId, roles: { cache: new Map([['1481251365131911314', {}]]) } };
+  const guild = { ownerId: 'owner', members: { cache: new Map([[discordId, member]]), async fetch() { return member; } } };
+  const staffMessages = [];
+  const financeChannel = {
+    isTextBased: () => true,
+    async send(payload) {
+      staffMessages.push(payload);
+      return { id: `withdraw-staff-${staffMessages.length}` };
+    }
+  };
+  const client = {
+    guilds: { cache: new Map(), async fetch() { return guild; } },
+    channels: { async fetch() { return financeChannel; } }
+  };
+  const server = require('node:http').createServer(createRequestHandler(client));
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const token = createPortalSession({ id: discordId, username: 'Membro Saque' }, process.env.DASHBOARD_SESSION_SECRET, { accessLevel: 'member' });
+  const portalSession = readPortalSession(token, process.env.DASHBOARD_SESSION_SECRET);
+  const headers = {
+    Cookie: `${PORTAL_SESSION_COOKIE}=${token}`,
+    Origin: new URL(env.dashboardBaseUrl).origin,
+    'Content-Type': 'application/x-www-form-urlencoded'
+  };
+
+  const response = await fetch(`${base}/api/portal/withdrawals`, {
+    method: 'POST',
+    headers,
+    body: new URLSearchParams({ csrf: portalSession.csrf, amount: '1.5m', note: 'Entregar hoje' })
+  });
+  const created = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(created.result.request.amount, 1500000);
+  assert.equal(created.portal.finance.balance, 2000000);
+  assert.equal(created.portal.overview.pendingWithdraws, 1);
+  assert.equal(staffMessages.length, 1);
+  assert.match(staffMessages[0].content, /Saque #\d+.*1\.5m/);
+  assert.deepEqual(staffMessages[0].components[0].components.map((button) => button.data.custom_id), [
+    `finance:approve_withdraw:${created.result.request.id}`,
+    `finance:pay_withdraw:${created.result.request.id}`,
+    `finance:refuse_withdraw:${created.result.request.id}`
+  ]);
+
+  const duplicate = await fetch(`${base}/api/portal/withdrawals`, {
+    method: 'POST',
+    headers,
+    body: new URLSearchParams({ csrf: portalSession.csrf, amount: '100k' })
+  });
+  assert.equal(duplicate.status, 409);
+
+  db.prepare("UPDATE withdraw_requests SET status = 'refused' WHERE id = ?").run(created.result.request.id);
+  const insufficient = await fetch(`${base}/api/portal/withdrawals`, {
+    method: 'POST',
+    headers,
+    body: new URLSearchParams({ csrf: portalSession.csrf, amount: '2.1m' })
+  });
+  assert.equal(insufficient.status, 409);
+
+  const rejectedWithdraw = await fetch(`${base}/api/portal/withdrawals`, {
+    method: 'POST',
+    headers,
+    body: new URLSearchParams({ csrf: 'invalido', amount: '100k' })
+  });
+  assert.equal(rejectedWithdraw.status, 403);
+});
+
 test('staff autenticada gera prévia de tabela com proteção CSRF', async (t) => {
   const staffId = 'staff-fame-web';
   const member = { id: staffId, roles: { cache: new Map([['1481251363013791754', {}]]) } };

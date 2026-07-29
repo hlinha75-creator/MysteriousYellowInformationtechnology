@@ -1,4 +1,4 @@
-const state = { data: null, session: null, view: 'overview', rankingCategory: 'overall', lastLoadedAt: 0 };
+const state = { data: null, session: null, view: 'overview', rankingCategory: 'overall', lastLoadedAt: 0, withdrawDraft: null };
 const compact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
 const integer = new Intl.NumberFormat('pt-BR');
 
@@ -8,6 +8,15 @@ function escapeHtml(value) {
 
 function formatSilver(value) {
   return `${compact.format(Number(value || 0)).toLowerCase()} prata`;
+}
+
+function parseSilverInput(value) {
+  const raw = String(value || '').trim().toLowerCase().replace(/\s+/g, '').replace(',', '.');
+  const match = raw.match(/^(\d+(?:\.\d+)?)(k|m)?$/);
+  if (!match) return null;
+  const multiplier = match[2] === 'm' ? 1000000 : match[2] === 'k' ? 1000 : 1;
+  const amount = Math.round(Number(match[1]) * multiplier);
+  return Number.isSafeInteger(amount) && amount > 0 ? amount : null;
 }
 
 function formatDate(value) {
@@ -177,11 +186,12 @@ function renderRankings(data) {
 }
 
 function requestRow(row, title) {
-  return `<div class="portal-list-row"><div><strong>${escapeHtml(title)}</strong><small>${formatDate(row.created_at)}</small></div><div class="request-value"><b>${escapeHtml(formatSilver(row.amount))}</b>${badge(row.status)}</div></div>`;
+  return `<div class="portal-list-row"><div><strong>${escapeHtml(title)}</strong><small>${formatDate(row.created_at)}${row.note ? ` · ${escapeHtml(row.note)}` : ''}</small></div><div class="request-value"><b>${escapeHtml(formatSilver(row.amount))}</b>${badge(row.status)}</div></div>`;
 }
 
 function renderFinance(data) {
   const finance = data.finance;
+  const pending = finance.withdraws.find((row) => ['requested', 'approved'].includes(row.status));
   document.querySelector('#finance-metrics').innerHTML = [
     metric('Saldo', formatSilver(finance.balance), 'Disponível na conta', '#23a55a'),
     metric('Saques', integer.format(finance.withdraws.length), 'Últimos pedidos'),
@@ -190,6 +200,66 @@ function renderFinance(data) {
   document.querySelector('#withdraw-list').innerHTML = finance.withdraws.length ? finance.withdraws.map((row) => requestRow(row, `Saque #${row.id}`)).join('') : empty('Nenhum saque solicitado.');
   document.querySelector('#payment-list').innerHTML = finance.paymentRequests.length ? finance.paymentRequests.map((row) => requestRow(row, row.service || `Pagamento #${row.id}`)).join('') : empty('Nenhum pagamento solicitado.');
   document.querySelector('#transaction-history').innerHTML = finance.transactions.length ? finance.transactions.map((row) => `<tr><td>${formatDate(row.created_at)}</td><td class="primary-cell">${escapeHtml(row.reason)}</td><td class="number-cell ${row.amount >= 0 ? 'positive' : 'negative'}">${row.amount >= 0 ? '+' : ''}${escapeHtml(formatSilver(row.amount))}</td><td class="number-cell">${escapeHtml(formatSilver(row.after_balance))}</td></tr>`).join('') : '<tr><td colspan="4" class="empty-cell">Nenhuma movimentação.</td></tr>';
+  document.querySelector('#withdraw-balance-hint').textContent = `Disponível: ${formatSilver(finance.balance)}`;
+  document.querySelector('#withdraw-form').hidden = Boolean(pending);
+  document.querySelector('#withdraw-review').hidden = true;
+  const blocked = document.querySelector('#withdraw-blocked');
+  blocked.hidden = !pending;
+  blocked.textContent = pending ? `O saque #${pending.id} está ${statusLabel(pending.status).toLowerCase()}. Você poderá pedir outro quando ele for concluído.` : '';
+  state.withdrawDraft = null;
+}
+
+function showFinanceFeedback(message, error = false) {
+  const feedback = document.querySelector('#finance-action-feedback');
+  feedback.textContent = message;
+  feedback.classList.toggle('error', error);
+  feedback.hidden = false;
+}
+
+function reviewWithdrawal(event) {
+  event.preventDefault();
+  const amountRaw = document.querySelector('#withdraw-amount').value;
+  const amount = parseSilverInput(amountRaw);
+  const balance = Number(state.data?.finance?.balance || 0);
+  if (!amount) return showFinanceFeedback('Informe um valor válido. Exemplos: 850k, 1.5m ou 1500000.', true);
+  if (amount > balance) return showFinanceFeedback(`Seu saldo disponível é ${formatSilver(balance)}.`, true);
+  state.withdrawDraft = { amountRaw, amount, note: document.querySelector('#withdraw-note').value.trim() };
+  document.querySelector('#withdraw-review-amount').textContent = `${formatSilver(amount)} de ${formatSilver(balance)} disponíveis`;
+  document.querySelector('#withdraw-form').hidden = true;
+  document.querySelector('#withdraw-review').hidden = false;
+  document.querySelector('#finance-action-feedback').hidden = true;
+}
+
+function cancelWithdrawalReview() {
+  state.withdrawDraft = null;
+  document.querySelector('#withdraw-review').hidden = true;
+  document.querySelector('#withdraw-form').hidden = false;
+}
+
+async function submitWithdrawal() {
+  if (!state.withdrawDraft || !state.session?.csrf) return showFinanceFeedback('Sua sessão precisa ser renovada. Saia e entre novamente.', true);
+  const button = document.querySelector('#withdraw-confirm-button');
+  button.disabled = true;
+  button.textContent = 'Enviando…';
+  try {
+    const response = await fetch('/api/portal/withdrawals', {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ csrf: state.session.csrf, amount: state.withdrawDraft.amountRaw, note: state.withdrawDraft.note })
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error || 'Não foi possível solicitar o saque.');
+    state.data = body.portal;
+    state.lastLoadedAt = Date.now();
+    render(state.data);
+    setView('finance');
+    showFinanceFeedback(body.result.message);
+    document.querySelector('#withdraw-form').reset();
+  } catch (error) {
+    showFinanceFeedback(error.message, true);
+    button.disabled = false;
+    button.textContent = 'Confirmar pedido';
+  }
 }
 
 function render(data) {
@@ -238,8 +308,13 @@ document.querySelector('#portal-events').addEventListener('click', (event) => {
   const button = event.target.closest('.event-action');
   if (button) changeEventParticipation(button);
 });
-document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - state.lastLoadedAt >= 30000) loadPortal(); });
-window.setInterval(() => { if (!document.hidden) loadPortal(); }, 30000);
+document.querySelector('#withdraw-form').addEventListener('submit', reviewWithdrawal);
+document.querySelector('#withdraw-confirm-button').addEventListener('click', submitWithdrawal);
+document.querySelector('#withdraw-cancel-button').addEventListener('click', cancelWithdrawalReview);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && !state.withdrawDraft && Date.now() - state.lastLoadedAt >= 30000) loadPortal();
+});
+window.setInterval(() => { if (!document.hidden && !state.withdrawDraft) loadPortal(); }, 30000);
 
 Promise.all([fetchJson('/api/portal/session'), loadPortal()]).then(([session]) => {
   state.session = session;

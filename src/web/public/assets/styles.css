@@ -384,6 +384,24 @@ tbody tr:hover td { background: #222429; }
 .event-signup .button:disabled, .event-signup .button.busy { cursor: not-allowed; opacity: .55; transform: none; }
 .event-signup > small { grid-column: 1 / -1; color: #747a85; font-size: 9px; }
 .own-ranking-row td { background: rgba(88,101,242,.12); }
+.finance-action-feedback { margin-bottom: 12px; padding: 12px 14px; border: 1px solid rgba(35,165,90,.45); border-radius: 9px; color: #b8ebca; background: rgba(35,165,90,.1); font-size: 11px; }
+.finance-action-feedback.error { border-color: rgba(240,124,126,.48); color: #ffc1c2; background: rgba(240,124,126,.1); }
+.withdraw-panel .panel-head small { color: #8d929d; font-size: 9px; white-space: nowrap; }
+.withdraw-form { display: grid; grid-template-columns: minmax(120px, .7fr) minmax(180px, 1fr) auto; align-items: end; gap: 8px; }
+.withdraw-form label { display: grid; gap: 5px; min-width: 0; }
+.withdraw-form label span, .withdraw-review > span { color: #858b96; font-size: 9px; font-weight: 750; letter-spacing: .05em; text-transform: uppercase; }
+.withdraw-form input { width: 100%; height: 44px; padding: 0 11px; border: 1px solid #3b3e45; border-radius: 9px; outline: none; color: #eceef2; background: #191a1e; font-size: 11px; }
+.withdraw-form input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(88,101,242,.12); }
+.withdraw-form .button { padding-inline: 14px; white-space: nowrap; }
+.withdraw-review { padding: 14px; border: 1px solid rgba(88,101,242,.42); border-radius: 10px; background: rgba(88,101,242,.08); }
+.withdraw-review strong { display: block; margin-top: 7px; color: #f0f1f4; font-size: 16px; }
+.withdraw-review p, .withdraw-blocked { margin: 8px 0 0; color: #9da2ad; font-size: 10px; line-height: 1.55; }
+.withdraw-review > div { display: flex; gap: 8px; margin-top: 13px; }
+.withdraw-review .button { min-height: 38px; padding-inline: 13px; font-size: 11px; cursor: pointer; }
+.withdraw-review .button:disabled { cursor: wait; opacity: .6; transform: none; }
+.withdraw-blocked { margin: 0; padding: 12px; border: 1px solid rgba(217,154,67,.35); border-radius: 9px; color: #e0bc83; background: rgba(217,154,67,.08); }
+.withdraw-history { margin-top: 18px; padding-top: 14px; border-top: 1px solid #303238; }
+.withdraw-history h4 { margin: 0 0 10px; color: #aeb2bc; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; }
 
 @media (max-width: 920px) {
   .event-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -408,6 +426,10 @@ tbody tr:hover td { background: #222429; }
   .event-signup .button { width: 100%; }
   .portal-details > div { grid-template-columns: 1fr; gap: 5px; }
   .portal-details dd { text-align: left; }
+  .withdraw-form { grid-template-columns: 1fr; }
+  .withdraw-form .button { width: 100%; }
+  .withdraw-review > div { flex-direction: column; }
+  .withdraw-review .button { width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {

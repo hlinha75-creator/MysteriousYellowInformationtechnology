@@ -157,6 +157,10 @@ const payWithdraw = transaction(({ requestId, actorId }) => {
   if (!['requested', 'approved'].includes(request.status)) {
     throw new Error('Solicitacao de saque nao esta pendente.');
   }
+  const currentBalance = repo.getBalance(request.user_id);
+  if (Math.abs(request.amount) > currentBalance) {
+    throw new Error(`Saldo insuficiente para pagar este saque. Saldo atual: ${formatSilver(currentBalance)}.`);
+  }
 
   const result = applyBalanceTransaction({
     type: 'withdraw_paid',

@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Portal pessoal da comunidade Notag.">
   <title>Meu portal — Notag</title>
-  <link rel="stylesheet" href="/assets/styles.css?v=20260729-4">
-  <script src="/assets/member.js?v=20260729-1" defer></script>
+  <link rel="stylesheet" href="/assets/styles.css?v=20260729-5">
+  <script src="/assets/member.js?v=20260729-2" defer></script>
 </head>
 <body class="dashboard-body member-portal-body">
   <div class="app-shell">
@@ -75,10 +75,24 @@
         </section>
 
         <section class="view" id="view-finance" data-title="Saldo e pagamentos" data-kicker="Minha conta">
+          <div class="finance-action-feedback" id="finance-action-feedback" hidden></div>
           <div class="view-heading"><div><h2>Meu financeiro</h2><p>Consulte saldo, pedidos e todo o histórico da sua conta.</p></div><span class="access-chip">Somente você</span></div>
           <div class="metric-grid compact" id="finance-metrics"></div>
           <div class="dashboard-grid equal">
-            <article class="panel"><div class="panel-head"><div><span>Solicitações</span><h3>Saques</h3></div></div><div class="portal-card-list" id="withdraw-list"></div></article>
+            <article class="panel withdraw-panel">
+              <div class="panel-head"><div><span>Solicitações</span><h3>Pedir saque</h3></div><small id="withdraw-balance-hint"></small></div>
+              <form class="withdraw-form" id="withdraw-form">
+                <label><span>Valor</span><input id="withdraw-amount" name="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="Ex: 850k ou 1.5m" required></label>
+                <label><span>Observação opcional</span><input id="withdraw-note" name="note" type="text" maxlength="180" autocomplete="off" placeholder="Ex: entregar no jogo hoje"></label>
+                <button class="button button-primary" id="withdraw-review-button" type="submit">Revisar saque</button>
+              </form>
+              <div class="withdraw-review" id="withdraw-review" hidden>
+                <span>Confira antes de enviar</span><strong id="withdraw-review-amount"></strong><p>O saldo será descontado somente quando a staff marcar o saque como pago.</p>
+                <div><button class="button button-primary" id="withdraw-confirm-button" type="button">Confirmar pedido</button><button class="button button-secondary" id="withdraw-cancel-button" type="button">Voltar</button></div>
+              </div>
+              <p class="withdraw-blocked" id="withdraw-blocked" hidden></p>
+              <div class="withdraw-history"><h4>Últimos pedidos</h4><div class="portal-card-list" id="withdraw-list"></div></div>
+            </article>
             <article class="panel"><div class="panel-head"><div><span>Serviços</span><h3>Pagamentos solicitados</h3></div></div><div class="portal-card-list" id="payment-list"></div></article>
           </div>
           <article class="panel"><div class="panel-head"><div><span>Extrato</span><h3>Movimentações</h3></div></div><div class="table-wrap"><table><thead><tr><th>Data</th><th>Descrição</th><th class="number-cell">Valor</th><th class="number-cell">Saldo</th></tr></thead><tbody id="transaction-history"></tbody></table></div></article>
