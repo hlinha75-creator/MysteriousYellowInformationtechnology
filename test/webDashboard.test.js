@@ -148,6 +148,80 @@ test('portal entrega somente os dados pessoais e oculta rankings de convidado', 
   assert.deepEqual(body.rankings.rows, []);
 });
 
+test('portal permite participar, trocar para espectador e respeita o limite de 20 vagas', async (t) => {
+  const db = getDatabase();
+  const discordId = 'portal-event-member';
+  db.prepare("INSERT OR REPLACE INTO users (discord_id, discord_name, albion_name, registration_status) VALUES (?, 'Membro Evento', 'HeroiEvento', 'member')").run(discordId);
+  const openEvent = db.prepare(`
+    INSERT INTO events (event_code, creator_id, title, tank_slots, healer_slots, support_slots, dps_slots)
+    VALUES ('EVT-PORTAL-ACTION', 'staff', 'Evento pelo portal', 2, 2, 4, 12)
+  `).run().lastInsertRowid;
+  const fullEvent = db.prepare(`
+    INSERT INTO events (event_code, creator_id, title, dps_slots)
+    VALUES ('EVT-PORTAL-FULL', 'staff', 'Evento lotado', 20)
+  `).run().lastInsertRowid;
+  for (let index = 0; index < 20; index += 1) {
+    db.prepare('INSERT INTO event_participants (event_id, discord_id, role) VALUES (?, ?, ?)')
+      .run(fullEvent, `portal-full-${index}`, 'dps');
+  }
+
+  const member = {
+    id: discordId,
+    roles: { cache: new Map([['1481251365131911314', {}]]) },
+    voice: { channel: null, channelId: null }
+  };
+  const guild = { ownerId: 'owner', members: { cache: new Map([[discordId, member]]), async fetch() { return member; } } };
+  const client = { guilds: { cache: new Map(), async fetch() { return guild; } } };
+  const server = require('node:http').createServer(createRequestHandler(client));
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const token = createPortalSession({ id: discordId, username: 'Membro Evento' }, process.env.DASHBOARD_SESSION_SECRET, { accessLevel: 'member' });
+  const portalSession = readPortalSession(token, process.env.DASHBOARD_SESSION_SECRET);
+  const headers = {
+    Cookie: `${PORTAL_SESSION_COOKIE}=${token}`,
+    Origin: new URL(env.dashboardBaseUrl).origin,
+    'Content-Type': 'application/x-www-form-urlencoded'
+  };
+
+  const joinResponse = await fetch(`${base}/api/portal/events/participation`, {
+    method: 'POST',
+    headers,
+    body: new URLSearchParams({ csrf: portalSession.csrf, eventId: openEvent, action: 'join', role: 'healer' })
+  });
+  const joined = await joinResponse.json();
+  assert.equal(joinResponse.status, 200);
+  assert.equal(joined.result.action, 'participant');
+  assert.equal(joined.portal.events.find((event) => event.id === openEvent).ownParticipation.role, 'healer');
+
+  const spectateResponse = await fetch(`${base}/api/portal/events/participation`, {
+    method: 'POST',
+    headers,
+    body: new URLSearchParams({ csrf: portalSession.csrf, eventId: openEvent, action: 'spectate' })
+  });
+  const spectating = await spectateResponse.json();
+  assert.equal(spectateResponse.status, 200);
+  assert.equal(spectating.result.action, 'spectator');
+  assert.equal(spectating.portal.events.find((event) => event.id === openEvent).ownParticipation.is_spectator, 1);
+
+  const fullResponse = await fetch(`${base}/api/portal/events/participation`, {
+    method: 'POST',
+    headers,
+    body: new URLSearchParams({ csrf: portalSession.csrf, eventId: fullEvent, action: 'join', role: 'dps' })
+  });
+  const full = await fullResponse.json();
+  assert.equal(fullResponse.status, 200);
+  assert.equal(full.result.action, 'spectator');
+  assert.equal(full.result.automatic, true);
+
+  const rejected = await fetch(`${base}/api/portal/events/participation`, {
+    method: 'POST',
+    headers,
+    body: new URLSearchParams({ csrf: 'invalido', eventId: openEvent, action: 'join', role: 'dps' })
+  });
+  assert.equal(rejected.status, 403);
+});
+
 test('staff autenticada gera prévia de tabela com proteção CSRF', async (t) => {
   const staffId = 'staff-fame-web';
   const member = { id: staffId, roles: { cache: new Map([['1481251363013791754', {}]]) } };

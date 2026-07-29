@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Portal pessoal da comunidade Notag.">
   <title>Meu portal — Notag</title>
-  <link rel="stylesheet" href="/assets/styles.css?v=20260728-7">
-  <script src="/assets/member.js?v=20260728-1" defer></script>
+  <link rel="stylesheet" href="/assets/styles.css?v=20260729-4">
+  <script src="/assets/member.js?v=20260729-1" defer></script>
 </head>
 <body class="dashboard-body member-portal-body">
   <div class="app-shell">
@@ -61,6 +61,7 @@
         </section>
 
         <section class="view" id="view-events" data-title="Eventos" data-kicker="Atividades">
+          <div class="event-action-feedback" id="event-action-feedback" role="status" aria-live="polite" hidden></div>
           <div class="view-heading"><div><h2>Eventos da guilda</h2><p>Veja atividades abertas e seu histórico de participação.</p></div></div>
           <article class="panel"><div class="panel-head"><div><span>Inscrições abertas</span><h3>Eventos disponíveis</h3></div></div><div class="event-card-grid" id="portal-events"></div></article>
           <article class="panel"><div class="panel-head"><div><span>Histórico pessoal</span><h3>Minhas participações</h3></div></div><div class="table-wrap"><table><thead><tr><th>Evento</th><th>Função</th><th>Status</th><th>Tempo</th><th class="number-cell">Loot</th></tr></thead><tbody id="event-history"></tbody></table></div></article>

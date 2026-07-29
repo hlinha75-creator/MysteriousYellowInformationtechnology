@@ -24,7 +24,7 @@ function formatDuration(seconds) {
 }
 
 function statusLabel(status) {
-  const labels = { member: 'Membro', guest: 'Convidado', pending: 'Em análise', unregistered: 'Sem cadastro', created: 'Aberto', running: 'Em andamento', review: 'Em revisão', pending_payment: 'Financeiro', approved: 'Finalizado', cancelled: 'Cancelado', requested: 'Pendente', paid: 'Pago', refused: 'Recusado' };
+  const labels = { member: 'Membro', guest: 'Convidado', pending: 'Em análise', unregistered: 'Sem cadastro', approved_guest: 'Aprovado como convidado', approved_member: 'Aprovado como membro', created: 'Aberto', running: 'Em andamento', review: 'Em revisão', pending_payment: 'Financeiro', approved: 'Finalizado', cancelled: 'Cancelado', requested: 'Pendente', paid: 'Pago', refused: 'Recusado' };
   return labels[status] || status || 'Pendente';
 }
 
@@ -68,7 +68,7 @@ function renderOverview(data) {
     metric('Tempo ativo', formatDuration(data.overview.activeSeconds), 'Somente como participante', '#d99a43'),
     metric('Loot recebido', formatSilver(data.overview.lootReceived), 'Eventos aprovados', '#33a7d8')
   ].join('');
-  document.querySelector('#overview-events').innerHTML = data.events.length ? data.events.slice(0, 5).map(eventCard).join('') : empty('Nenhum evento aberto agora.');
+  document.querySelector('#overview-events').innerHTML = data.events.length ? data.events.slice(0, 5).map((event) => eventCard(event, false)).join('') : empty('Nenhum evento aberto agora.');
   document.querySelector('#overview-transactions').innerHTML = data.finance.transactions.length ? data.finance.transactions.slice(0, 6).map((row) => `
     <div class="portal-list-row"><div><strong>${escapeHtml(row.reason)}</strong><small>${formatDate(row.created_at)}</small></div><b class="${row.amount >= 0 ? 'positive' : 'negative'}">${row.amount >= 0 ? '+' : ''}${escapeHtml(formatSilver(row.amount))}</b></div>`).join('') : empty('Nenhuma movimentação financeira.');
 }
@@ -84,14 +84,78 @@ function renderRegistration(data) {
     <div class="portal-list-row"><div><strong>${escapeHtml(account.discordName || account.discordId)}</strong><small>${escapeHtml(account.discordId)}</small></div>${account.primary ? '<span class="access-chip">Principal</span>' : '<span class="access-chip subtle">Vinculada</span>'}</div>`).join('') : empty('Nenhuma conta vinculada encontrada.');
 }
 
-function eventCard(event) {
-  const total = Number(event.tank_slots || 0) + Number(event.healer_slots || 0) + Number(event.support_slots || 0) + Number(event.dps_slots || 0);
-  return `<article class="event-mini-card"><div><span>${escapeHtml(event.event_code)}</span>${badge(event.status)}</div><h4>${escapeHtml(event.title)}</h4><p>${escapeHtml(event.location || 'Local a confirmar')}</p><footer><span>${escapeHtml(event.scheduled_time || 'Horário a confirmar')}</span><strong>${integer.format(event.participants || 0)}/${integer.format(total)} vagas</strong></footer></article>`;
+const eventRoleLabels = { tank: 'Tank', healer: 'Healer', support: 'Suporte', dps: 'DPS' };
+
+function roleLabel(role) {
+  return eventRoleLabels[role] || role || 'Participante';
+}
+
+function eventPeople(event) {
+  const participants = event.participantList || [];
+  const spectators = event.spectatorList || [];
+  if (!participants.length && !spectators.length) return '<p class="event-people-empty">Ninguém inscrito ainda.</p>';
+  const people = (rows, spectator = false) => rows.map((row) => `<li><span>${escapeHtml(row.display_name)}</span><small>${escapeHtml(spectator ? 'Espectador' : roleLabel(row.role))}</small></li>`).join('');
+  return `<details class="event-people"><summary>Ver lista completa (${integer.format(participants.length + spectators.length)})</summary><ul>${people(participants)}${people(spectators, true)}</ul></details>`;
+}
+
+function eventActions(event) {
+  const own = event.ownParticipation;
+  const isSpectator = Boolean(own?.is_spectator);
+  const isSpecial = event.signupMode !== 'standard';
+  const options = Object.entries(event.roles || {}).map(([role, availability]) => {
+    const ownRole = own && !isSpectator && own.role === role;
+    const disabled = availability.available <= 0 && !ownRole;
+    return `<option value="${escapeHtml(role)}" ${ownRole ? 'selected' : ''} ${disabled ? 'disabled' : ''}>${escapeHtml(roleLabel(role))} — ${integer.format(availability.available)} livre(s)</option>`;
+  }).join('');
+  const current = own ? `<div class="event-current ${isSpectator ? 'spectator' : ''}">Sua inscrição: <strong>${escapeHtml(isSpectator ? 'Espectador' : roleLabel(own.role))}</strong></div>` : '';
+  const participantControl = isSpecial
+    ? '<p class="event-special-note">Este evento usa vagas específicas. Escolha a composição pelo painel do Discord.</p>'
+    : `<label class="event-role-field" for="event-role-${event.id}"><span>Função</span><select id="event-role-${event.id}">${options}</select></label><button class="button button-primary event-action" type="button" data-event-id="${event.id}" data-event-action="join">${own && !isSpectator ? 'Atualizar função' : 'Participar'}</button>`;
+  return `<div class="event-signup">${current}${participantControl}<button class="button button-secondary event-action" type="button" data-event-id="${event.id}" data-event-action="spectate" ${isSpectator ? 'disabled' : ''}>${isSpectator ? 'Você é espectador' : 'Entrar como espectador'}</button><small>Espectadores não ocupam vaga nem recebem loot.</small></div>`;
+}
+
+function eventCard(event, interactive = true) {
+  const total = Number(event.capacity || 20);
+  return `<article class="event-mini-card ${event.status === 'running' ? 'running' : ''}"><div><span>${escapeHtml(event.event_code)}</span>${badge(event.status)}</div><h4>${escapeHtml(event.title)}</h4><p>${escapeHtml(event.description || event.location || 'Local a confirmar')}</p><footer><span>${escapeHtml(event.scheduled_time || 'Horário a confirmar')}</span><strong>${integer.format(event.participants || 0)}/${integer.format(total)} participantes</strong></footer>${interactive ? `${eventPeople(event)}${eventActions(event)}` : ''}</article>`;
 }
 
 function renderEvents(data) {
-  document.querySelector('#portal-events').innerHTML = data.events.length ? data.events.map(eventCard).join('') : empty('Nenhum evento disponível.');
-  document.querySelector('#event-history').innerHTML = data.eventHistory.length ? data.eventHistory.map((row) => `<tr><td class="primary-cell">${escapeHtml(row.title)}<span class="secondary-text">${escapeHtml(row.event_code)}</span></td><td>${escapeHtml(row.is_spectator ? 'Espectador' : row.role)}</td><td>${badge(row.status)}</td><td>${escapeHtml(formatDuration(row.seconds))}</td><td class="number-cell">${escapeHtml(formatSilver(row.payout_amount))}</td></tr>`).join('') : '<tr><td colspan="5" class="empty-cell">Nenhuma participação registrada.</td></tr>';
+  document.querySelector('#portal-events').innerHTML = data.events.length ? data.events.map((event) => eventCard(event, true)).join('') : empty('Nenhum evento disponível.');
+  document.querySelector('#event-history').innerHTML = data.eventHistory.length ? data.eventHistory.map((row) => `<tr><td class="primary-cell">${escapeHtml(row.title)}<span class="secondary-text">${escapeHtml(row.event_code)}</span></td><td>${escapeHtml(row.is_spectator ? 'Espectador' : roleLabel(row.role))}</td><td>${badge(row.status)}</td><td>${escapeHtml(formatDuration(row.seconds))}</td><td class="number-cell">${escapeHtml(formatSilver(row.payout_amount))}</td></tr>`).join('') : '<tr><td colspan="5" class="empty-cell">Nenhuma participação registrada.</td></tr>';
+}
+
+function showEventFeedback(message, error = false) {
+  const feedback = document.querySelector('#event-action-feedback');
+  feedback.textContent = message;
+  feedback.classList.toggle('error', error);
+  feedback.hidden = false;
+}
+
+async function changeEventParticipation(button) {
+  if (!state.session?.csrf) return showEventFeedback('Sua sessão precisa ser renovada. Saia e entre novamente.', true);
+  const eventId = button.dataset.eventId;
+  const action = button.dataset.eventAction;
+  const role = action === 'join' ? document.querySelector(`#event-role-${eventId}`)?.value : '';
+  button.disabled = true;
+  button.classList.add('busy');
+  try {
+    const response = await fetch('/api/portal/events/participation', {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ csrf: state.session.csrf, eventId, action, role })
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error || 'Não foi possível atualizar sua participação.');
+    state.data = body.portal;
+    state.lastLoadedAt = Date.now();
+    render(state.data);
+    setView('events');
+    showEventFeedback(body.result.message);
+  } catch (error) {
+    showEventFeedback(error.message, true);
+    button.disabled = false;
+    button.classList.remove('busy');
+  }
 }
 
 const rankingConfig = {
@@ -170,6 +234,10 @@ document.querySelectorAll('#member-ranking-tabs button').forEach((button) => but
   document.querySelectorAll('#member-ranking-tabs button').forEach((item) => item.classList.toggle('active', item === button));
   if (state.data) renderRankings(state.data);
 }));
+document.querySelector('#portal-events').addEventListener('click', (event) => {
+  const button = event.target.closest('.event-action');
+  if (button) changeEventParticipation(button);
+});
 document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - state.lastLoadedAt >= 30000) loadPortal(); });
 window.setInterval(() => { if (!document.hidden) loadPortal(); }, 30000);
 

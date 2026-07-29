@@ -2,6 +2,7 @@ const { getDatabase } = require('../database/connection');
 const accountLinks = require('../modules/accounts/accountLinks.service');
 const financeRepo = require('../modules/finance/finance.repository');
 const { fameDashboard } = require('./dashboard.repository');
+const { MAX_PARTICIPANTS } = require('./portal-events.service');
 
 function placeholders(values) {
   return values.map(() => '?').join(',');
@@ -71,7 +72,7 @@ function getPortalData(discordId, accessLevel = 'guest') {
     ORDER BY e.id DESC LIMIT 50
   `).all(...linkedIds);
 
-  const events = db.prepare(`
+  const eventRows = db.prepare(`
     SELECT e.id, e.event_code, e.title, e.description, e.location, e.scheduled_time, e.status,
            e.tank_slots, e.healer_slots, e.support_slots, e.dps_slots,
            SUM(CASE WHEN ep.is_spectator = 0 THEN 1 ELSE 0 END) AS participants,
@@ -83,6 +84,45 @@ function getPortalData(discordId, accessLevel = 'guest') {
     ORDER BY CASE WHEN e.status = 'running' THEN 0 ELSE 1 END, e.id DESC
     LIMIT 50
   `).all();
+
+  const openEventIds = eventRows.map((event) => event.id);
+  const openParticipants = openEventIds.length ? db.prepare(`
+    SELECT ep.event_id, ep.discord_id, ep.role, ep.is_spectator, ep.joined_at,
+           COALESCE(u.albion_name, u.discord_name, ep.discord_id) AS display_name
+    FROM event_participants ep
+    LEFT JOIN users u ON u.discord_id = ep.discord_id
+    WHERE ep.event_id IN (${placeholders(openEventIds)})
+    ORDER BY ep.event_id, ep.is_spectator, ep.joined_at
+  `).all(...openEventIds) : [];
+  const specialEventModes = new Map(openEventIds.length ? db.prepare(`
+    SELECT event_id, 'world_boss' AS mode FROM world_boss_events WHERE event_id IN (${placeholders(openEventIds)})
+    UNION ALL
+    SELECT event_id, 'raid_avalon' AS mode FROM raid_avalon_events WHERE event_id IN (${placeholders(openEventIds)})
+    UNION ALL
+    SELECT event_id, 'custom' AS mode FROM custom_events WHERE event_id IN (${placeholders(openEventIds)})
+  `).all(...openEventIds, ...openEventIds, ...openEventIds).map((row) => [row.event_id, row.mode]) : []);
+  const roleKeys = ['tank', 'healer', 'support', 'dps'];
+  const events = eventRows.map((event) => {
+    const eventParticipants = openParticipants.filter((participant) => participant.event_id === event.id);
+    const activeParticipants = eventParticipants.filter((participant) => !participant.is_spectator);
+    const spectators = eventParticipants.filter((participant) => participant.is_spectator);
+    const ownParticipation = eventParticipants.find((participant) => linkedIds.includes(participant.discord_id)) || null;
+    const roles = Object.fromEntries(roleKeys.map((role) => {
+      const slots = Math.max(0, Number(event[`${role}_slots`] || 0));
+      const used = activeParticipants.filter((participant) => participant.role === role).length;
+      return [role, { slots, used, available: Math.max(0, slots - used) }];
+    }));
+    const configuredCapacity = roleKeys.reduce((total, role) => total + roles[role].slots, 0);
+    return {
+      ...event,
+      capacity: Math.min(MAX_PARTICIPANTS, configuredCapacity || MAX_PARTICIPANTS),
+      signupMode: specialEventModes.get(event.id) || 'standard',
+      roles,
+      ownParticipation,
+      participantList: activeParticipants,
+      spectatorList: spectators
+    };
+  });
 
   const fame = fameDashboard();
   const ownFame = profile.albionName

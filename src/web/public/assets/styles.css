@@ -362,10 +362,32 @@ tbody tr:hover td { background: #222429; }
 .event-mini-card p { min-height: 17px; margin: 0 0 18px; overflow: hidden; color: #8d929d; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .event-mini-card footer { padding-top: 10px; border-top: 1px solid #313339; color: #828793; font-size: 9px; }
 .event-mini-card footer strong { color: #c9ccd3; }
+.event-mini-card.running { border-color: rgba(35,165,90,.42); box-shadow: inset 0 1px 0 rgba(35,165,90,.1); }
+#portal-events.event-card-grid { grid-template-columns: 1fr; }
+.event-action-feedback { margin-bottom: 12px; padding: 12px 14px; border: 1px solid rgba(35,165,90,.45); border-radius: 9px; color: #b8ebca; background: rgba(35,165,90,.1); font-size: 11px; }
+.event-action-feedback.error { border-color: rgba(240,124,126,.48); color: #ffc1c2; background: rgba(240,124,126,.1); }
+.event-people { margin-top: 12px; border-top: 1px solid #313339; }
+.event-people summary { padding: 11px 0 2px; color: #aeb2bc; cursor: pointer; font-size: 10px; font-weight: 700; }
+.event-people ul { display: grid; gap: 5px; max-height: 190px; margin: 9px 0 0; padding: 0; overflow-y: auto; list-style: none; }
+.event-people li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 9px; border-radius: 7px; background: #292a30; color: #e0e2e7; font-size: 10px; }
+.event-people li small { color: #8e94a0; }
+.event-people-empty { min-height: 0 !important; margin: 12px 0 0 !important; padding-top: 10px; border-top: 1px solid #313339; }
+.event-mini-card > .event-signup { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: end; gap: 8px; margin-top: 13px; padding-top: 12px; border-top: 1px solid #313339; }
+.event-current, .event-special-note { grid-column: 1 / -1; margin: 0; color: #9ea3ae; font-size: 10px; }
+.event-current strong { color: #eef0f4; }
+.event-current.spectator strong { color: #d6b36a; }
+.event-role-field { display: grid; gap: 5px; min-width: 0; }
+.event-role-field span { color: #858b96; font-size: 9px; font-weight: 750; text-transform: uppercase; }
+.event-role-field select { width: 100%; min-width: 130px; height: 44px; padding: 0 10px; border: 1px solid #3b3e45; border-radius: 9px; outline: none; color: #eceef2; background: #212226; font-size: 11px; }
+.event-role-field select:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(88,101,242,.12); }
+.event-signup .button { padding-inline: 13px; cursor: pointer; white-space: nowrap; }
+.event-signup .button:disabled, .event-signup .button.busy { cursor: not-allowed; opacity: .55; transform: none; }
+.event-signup > small { grid-column: 1 / -1; color: #747a85; font-size: 9px; }
 .own-ranking-row td { background: rgba(88,101,242,.12); }
 
 @media (max-width: 920px) {
   .event-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #portal-events.event-card-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 680px) {
@@ -381,6 +403,9 @@ tbody tr:hover td { background: #222429; }
   .member-portal-body .refresh-state { display: none; }
   .member-welcome { align-items: flex-start; flex-direction: column; }
   .event-card-grid { grid-template-columns: 1fr; }
+  .event-mini-card > .event-signup { grid-template-columns: 1fr; align-items: stretch; }
+  .event-signup > * { grid-column: 1 / -1; min-width: 0; }
+  .event-signup .button { width: 100%; }
   .portal-details > div { grid-template-columns: 1fr; gap: 5px; }
   .portal-details dd { text-align: left; }
 }

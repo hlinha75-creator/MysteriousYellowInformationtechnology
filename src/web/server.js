@@ -7,6 +7,7 @@ const fame = require('../modules/albion/fame.service');
 const { baseEmbed, safeSend } = require('../utils/discord');
 const { getDashboardData } = require('./dashboard.repository');
 const { getPortalData } = require('./portal.repository');
+const { changePortalParticipation } = require('./portal-events.service');
 const { completeOnboarding, ensureGuestMember, handleOnboardingIssue, onboardingConfigured } = require('./onboarding');
 const {
   JOIN_OAUTH_STATE_COOKIE,
@@ -216,6 +217,38 @@ function createRequestHandler(client, options = {}) {
           console.error('[ONBOARDING] Falha ao concluir cadastro:', error);
           const fallback = await handleOnboardingIssue(client, joinSession, form.get('albionName'), error);
           return json(res, 202, fallback, isProduction);
+        }
+      }
+      if (req.method === 'POST' && url.pathname === '/api/portal/events/participation') {
+        if (!portalSession) return json(res, 401, { error: 'Entre com o Discord para acessar seu portal.' }, isProduction);
+        const access = await portalAccess(client, portalSession.id);
+        if (!access) return json(res, 403, { error: 'Você precisa estar no Discord da Notag.' }, isProduction);
+        const expectedOrigin = new URL(env.dashboardBaseUrl).origin;
+        if (req.headers.origin !== expectedOrigin) return json(res, 403, { error: 'Origem inválida.' }, isProduction);
+        if (!String(req.headers['content-type'] || '').startsWith('application/x-www-form-urlencoded')) {
+          return json(res, 415, { error: 'Formato de formulário inválido.' }, isProduction);
+        }
+        const form = await readFormBody(req);
+        if (!portalSession.csrf || form.get('csrf') !== portalSession.csrf) {
+          return json(res, 403, { error: 'Sua sessão precisa ser renovada. Saia e entre novamente.' }, isProduction);
+        }
+        try {
+          const result = await changePortalParticipation(client, {
+            discordId: portalSession.id,
+            eventId: form.get('eventId'),
+            action: form.get('action'),
+            role: form.get('role')
+          });
+          const renewedPortal = createPortalSession(portalSession, env.dashboardSessionSecret, access);
+          const renewedMaxAge = access.privileged ? PORTAL_PRIVILEGED_MAX_AGE_SECONDS : PORTAL_MEMBER_MAX_AGE_SECONDS;
+          return json(res, 200, {
+            result,
+            portal: getPortalData(portalSession.id, access.accessLevel)
+          }, isProduction, {
+            'Set-Cookie': cookie(PORTAL_SESSION_COOKIE, renewedPortal, { maxAge: renewedMaxAge, secure: secureCookie })
+          });
+        } catch (error) {
+          return json(res, Number(error.statusCode || 400), { error: error.message || 'Não foi possível atualizar sua participação.' }, isProduction);
         }
       }
       if (req.method === 'POST' && url.pathname.startsWith('/api/fame/')) {
