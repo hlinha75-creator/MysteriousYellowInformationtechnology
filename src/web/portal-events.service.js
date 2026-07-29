@@ -31,11 +31,15 @@ async function interactionFor(client, discordId) {
   return { client, guild, member, user: { id: discordId } };
 }
 
-async function changePortalParticipation(client, { discordId, eventId, action, role }) {
+async function changePortalParticipation(client, { discordId, accessLevel = 'guest', eventId, action, role }) {
   const numericEventId = Number(eventId);
   if (!Number.isInteger(numericEventId) || numericEventId <= 0) throw actionError('Evento inválido.');
 
   const event = eventsRepo.getEvent(numericEventId);
+  const audience = event?.audience || 'public';
+  if (audience === 'staff' || (audience === 'member' && accessLevel !== 'member')) {
+    throw actionError('Voce nao tem acesso a este evento.', 403);
+  }
   if (!event || !['created', 'running'].includes(event.status)) throw actionError('Esse evento não está aberto.');
 
   const existingLinked = linkedParticipant(numericEventId, discordId);

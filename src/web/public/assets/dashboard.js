@@ -1,4 +1,4 @@
-const state = { data: null, lastLoadedAt: 0, currentView: 'overview', csrf: null, famePreview: null, fameCategory: 'pve', fameSourceName: null, rankingCategory: 'overall' };
+const state = { data: null, lastLoadedAt: 0, currentView: 'overview', csrf: null, userId: null, famePreview: null, fameCategory: 'pve', fameSourceName: null, rankingCategory: 'overall', editingEventId: null };
 const number = new Intl.NumberFormat('pt-BR');
 const collator = new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base' });
 
@@ -211,7 +211,67 @@ function renderEvents(events) {
     default: (a, b) => dateValue(eventDate(b)) - dateValue(eventDate(a))
   });
   setSummary('events-summary', sorted.length, events.length);
-  document.querySelector('#events-table').innerHTML = sorted.length ? sorted.map((row) => `<tr><td class="primary-cell">${escapeHtml(row.title)}<span class="secondary-text">${escapeHtml(row.event_code)}</span></td><td>${escapeHtml(row.location || '—')}</td><td>${badge(row.status)}</td><td>${number.format(row.participants)}</td><td>${row.review_status ? badge(row.review_status) : '—'}</td><td>${formatDate(eventDate(row))}</td></tr>`).join('') : emptyRow(6);
+  document.querySelector('#events-table').innerHTML = sorted.length ? sorted.map(eventManagementRow).join('') : emptyRow(6);
+}
+
+function eventAudienceLabel(audience) {
+  if (audience === 'staff') return 'Staff';
+  if (audience === 'member') return 'Membros';
+  return 'Público';
+}
+
+function eventCapacity(row) {
+  return Number(row.tank_slots || 0) + Number(row.healer_slots || 0) + Number(row.support_slots || 0) + Number(row.dps_slots || 0);
+}
+
+function eventManagementActions(row) {
+  if (row.status === 'created') {
+    const edit = row.event_kind === 'standard'
+      ? `<button class="button button-ghost staff-event-action" type="button" data-action="edit" data-event-id="${row.id}">Editar</button>`
+      : '';
+    return `${edit}<button class="button button-success staff-event-action" type="button" data-action="start" data-event-id="${row.id}">Iniciar</button><button class="button button-danger staff-event-action" type="button" data-action="cancel" data-event-id="${row.id}">Cancelar</button>`;
+  }
+  if (row.status === 'running') {
+    return `<button class="button button-primary staff-event-action" type="button" data-action="finish" data-event-id="${row.id}">Finalizar</button><button class="button button-danger staff-event-action" type="button" data-action="cancel" data-event-id="${row.id}">Cancelar</button>`;
+  }
+  return '<span class="secondary-text">Sem ação</span>';
+}
+
+function eventManagementRow(row) {
+  const creator = row.creator_name || row.creator_id || 'Desconhecido';
+  const capacity = eventCapacity(row);
+  const spectators = Number(row.spectators || 0);
+  const schedule = row.scheduled_time
+    ? escapeHtml(row.scheduled_time)
+    : formatDate(row.started_at || row.created_at);
+  return `<tr><td class="primary-cell">${escapeHtml(row.title)}<span class="secondary-text">${escapeHtml(row.event_code)} · por ${escapeHtml(creator)}</span></td><td><strong>${escapeHtml(eventAudienceLabel(row.audience))}</strong><span class="secondary-text">${escapeHtml(row.location || 'Local a confirmar')}</span></td><td>${badge(row.status)}</td><td>${number.format(row.participants || 0)}/${number.format(capacity)}<span class="secondary-text">${number.format(spectators)} espectador(es)</span></td><td>${schedule}</td><td><div class="staff-event-actions">${eventManagementActions(row)}</div></td></tr>`;
+}
+
+function eventManagementMarkup() {
+  return `
+    <div id="staff-event-feedback" class="finance-action-feedback" hidden></div>
+    <article class="panel event-management-panel">
+      <div class="panel-head"><div><span>Discord + site</span><h3 id="staff-event-form-title">Criar novo evento</h3></div><small>Até 20 participantes · espectadores ilimitados</small></div>
+      <form id="staff-event-form" class="staff-event-form">
+        <input type="hidden" name="eventId">
+        <label class="event-field event-title-field"><span>Título</span><input name="title" maxlength="80" required placeholder="Ex: Roaming 4.2"></label>
+        <label class="event-field"><span>Data e hora (opcional)</span><input name="scheduledTime" maxlength="80" placeholder="Ex: 30/07 20:00 UTC"></label>
+        <label class="event-field"><span>Local</span><input name="location" maxlength="100" placeholder="Ex: Pergunte na Call"></label>
+        <label class="event-field"><span>Público</span><select name="audience"><option value="public">Convidados e Membros</option><option value="member">Somente Membros</option><option value="staff">Interno da Staff</option></select></label>
+        <label class="event-field event-description-field"><span>Build ou descrição</span><textarea name="description" maxlength="500" rows="3" placeholder="Build, IP, objetivo e observações"></textarea></label>
+        <fieldset class="event-slots"><legend>Composição</legend>
+          <label><span>Tank</span><input type="number" name="tankSlots" min="0" max="20" value="1" required></label>
+          <label><span>Healer</span><input type="number" name="healerSlots" min="0" max="20" value="1" required></label>
+          <label><span>Suporte</span><input type="number" name="supportSlots" min="0" max="20" value="1" required></label>
+          <label><span>DPS</span><input type="number" name="dpsSlots" min="0" max="20" value="17" required></label>
+        </fieldset>
+        <div class="staff-event-form-actions"><button class="button button-primary" id="staff-event-submit" type="submit">Criar e publicar</button><button class="button button-ghost" id="staff-event-reset" type="button" hidden>Cancelar edição</button></div>
+      </form>
+    </article>`;
+}
+
+function finishEventDialogMarkup() {
+  return `<dialog class="event-dialog" id="finish-event-dialog"><form id="finish-event-form" class="event-finish-form"><input type="hidden" name="eventId"><div class="dialog-head"><div><span>Encerrar atividade</span><h3>Finalizar evento e criar revisão</h3></div><button type="button" class="icon-button" data-close-event-dialog aria-label="Fechar">×</button></div><p>O bot moverá todos para Aguardando Evento, apagará a call e criará o canal privado de revisão.</p><div class="event-finish-grid"><label class="event-field"><span>Loot total</span><input name="lootTotal" required placeholder="Ex: 50m"></label><label class="event-field"><span>Reparo</span><input name="repair" value="0" required></label><label class="event-field"><span>Sacos de prata</span><input name="silverBags" value="0" required></label><label class="event-field"><span>Taxa %</span><input type="number" name="taxPercent" min="0" max="100" value="0" required></label><label class="event-field event-description-field"><span>Evidências ou observações</span><textarea name="evidenceNotes" maxlength="1000" rows="3" placeholder="DPS meter, fama total ou observações"></textarea></label></div><div class="dialog-actions"><button type="button" class="button button-ghost" data-close-event-dialog>Voltar</button><button type="submit" class="button button-primary">Finalizar e revisar</button></div></form></dialog>`;
 }
 
 function renderOperations(operations) {
@@ -499,6 +559,137 @@ function showToast(message) {
   window.setTimeout(() => { toast.hidden = true; }, 6000);
 }
 
+function setupEventManagementUI() {
+  const view = document.querySelector('#view-events');
+  if (!view || document.querySelector('#staff-event-form')) return;
+  const heading = view.querySelector('.view-heading');
+  const description = heading?.querySelector('p');
+  if (description) description.textContent = 'Crie, publique e acompanhe eventos sincronizados com o Discord.';
+  heading.insertAdjacentHTML('beforebegin', eventManagementMarkup());
+  document.body.insertAdjacentHTML('beforeend', finishEventDialogMarkup());
+  view.querySelector('thead tr').innerHTML = '<th>Evento</th><th>Público e local</th><th>Status</th><th>Participação</th><th>Horário</th><th>Ações</th>';
+  document.querySelector('#staff-event-form').addEventListener('submit', submitStaffEventForm);
+  document.querySelector('#staff-event-reset').addEventListener('click', resetStaffEventForm);
+  document.querySelector('#events-table').addEventListener('click', handleStaffEventAction);
+  document.querySelector('#finish-event-form').addEventListener('submit', submitFinishEventForm);
+  document.querySelectorAll('[data-close-event-dialog]').forEach((button) => button.addEventListener('click', () => document.querySelector('#finish-event-dialog').close()));
+}
+
+function showEventFeedback(message, error = false) {
+  const feedback = document.querySelector('#staff-event-feedback');
+  feedback.textContent = message;
+  feedback.classList.toggle('error', error);
+  feedback.hidden = false;
+}
+
+function resetStaffEventForm() {
+  const form = document.querySelector('#staff-event-form');
+  form.reset();
+  form.elements.eventId.value = '';
+  form.elements.tankSlots.value = '1';
+  form.elements.healerSlots.value = '1';
+  form.elements.supportSlots.value = '1';
+  form.elements.dpsSlots.value = '17';
+  state.editingEventId = null;
+  document.querySelector('#staff-event-form-title').textContent = 'Criar novo evento';
+  document.querySelector('#staff-event-submit').textContent = 'Criar e publicar';
+  document.querySelector('#staff-event-reset').hidden = true;
+}
+
+function editStaffEvent(eventId) {
+  const row = state.data?.events.find((event) => Number(event.id) === Number(eventId));
+  if (!row) return showEventFeedback('Evento não encontrado.', true);
+  const form = document.querySelector('#staff-event-form');
+  form.elements.eventId.value = row.id;
+  form.elements.title.value = row.title || '';
+  form.elements.description.value = row.description || '';
+  form.elements.location.value = row.location || '';
+  form.elements.scheduledTime.value = row.scheduled_time || '';
+  form.elements.audience.value = row.audience || 'public';
+  form.elements.tankSlots.value = row.tank_slots || 0;
+  form.elements.healerSlots.value = row.healer_slots || 0;
+  form.elements.supportSlots.value = row.support_slots || 0;
+  form.elements.dpsSlots.value = row.dps_slots || 0;
+  state.editingEventId = row.id;
+  document.querySelector('#staff-event-form-title').textContent = `Editar ${row.event_code}`;
+  document.querySelector('#staff-event-submit').textContent = 'Salvar e atualizar Discord';
+  document.querySelector('#staff-event-reset').hidden = false;
+  form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function formValues(form) {
+  return Object.fromEntries(new FormData(form).entries());
+}
+
+async function submitStaffEventForm(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = document.querySelector('#staff-event-submit');
+  button.disabled = true;
+  try {
+    const response = await postForm('/api/staff/events', {
+      ...formValues(form),
+      action: state.editingEventId ? 'edit' : 'create'
+    });
+    state.data = response.dashboard;
+    render(state.data);
+    showEventFeedback(response.result.message);
+    resetStaffEventForm();
+  } catch (error) {
+    showEventFeedback(error.message, true);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function handleStaffEventAction(event) {
+  const button = event.target.closest('.staff-event-action');
+  if (!button) return;
+  const eventId = button.dataset.eventId;
+  const action = button.dataset.action;
+  const row = state.data?.events.find((item) => Number(item.id) === Number(eventId));
+  if (action === 'edit') return editStaffEvent(eventId);
+  if (action === 'finish') {
+    const dialog = document.querySelector('#finish-event-dialog');
+    document.querySelector('#finish-event-form').elements.eventId.value = eventId;
+    return dialog.showModal();
+  }
+  const question = action === 'start'
+    ? `Iniciar ${row?.event_code || 'este evento'} e criar a sala de voz?`
+    : `Cancelar ${row?.event_code || 'este evento'}? Esta ação encerra a publicação no Discord.`;
+  if (!window.confirm(question)) return;
+  button.disabled = true;
+  try {
+    const response = await postForm('/api/staff/events', { action, eventId });
+    state.data = response.dashboard;
+    render(state.data);
+    showEventFeedback(response.result.message);
+  } catch (error) {
+    showEventFeedback(error.message, true);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function submitFinishEventForm(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const submit = form.querySelector('[type="submit"]');
+  submit.disabled = true;
+  try {
+    const response = await postForm('/api/staff/events', { ...formValues(form), action: 'finish' });
+    state.data = response.dashboard;
+    render(state.data);
+    showEventFeedback(response.result.message);
+    document.querySelector('#finish-event-dialog').close();
+    form.reset();
+  } catch (error) {
+    showEventFeedback(error.message, true);
+  } finally {
+    submit.disabled = false;
+  }
+}
+
 async function loadDashboard({ manual = false } = {}) {
   const button = document.querySelector('#refresh-button');
   if (manual) button.classList.add('spinning');
@@ -522,6 +713,7 @@ async function loadDashboard({ manual = false } = {}) {
 async function loadSession() {
   const { user, csrf } = await fetchJson('/api/session');
   state.csrf = csrf;
+  state.userId = user.id;
   document.querySelector('#user-name').textContent = user.name;
   if (user.avatarUrl) {
     const avatar = document.querySelector('#user-avatar');
@@ -615,6 +807,7 @@ function closeSidebar() {
   document.querySelector('#mobile-scrim').classList.remove('open');
 }
 
+setupEventManagementUI();
 document.querySelectorAll('.nav-item').forEach((button) => button.addEventListener('click', () => switchView(button.dataset.view)));
 document.querySelectorAll('[data-go]').forEach((button) => button.addEventListener('click', () => switchView(button.dataset.go)));
 document.querySelector('#menu-toggle').addEventListener('click', openSidebar);

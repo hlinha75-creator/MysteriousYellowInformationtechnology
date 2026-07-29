@@ -208,14 +208,27 @@ function listMembers(limit = 100) {
 function listEvents(limit = 50) {
   return getDatabase().prepare(`
     SELECT
-      e.id, e.event_code, e.title, e.location, e.scheduled_time, e.status,
+      e.id, e.event_code, e.creator_id, e.finalized_by, e.title, e.description,
+      e.location, e.scheduled_time, e.status, COALESCE(e.audience, 'public') AS audience,
+      e.tank_slots, e.healer_slots, e.support_slots, e.dps_slots,
       e.created_at, e.started_at, e.ended_at, e.review_required,
-      COUNT(ep.id) AS participants,
+      COALESCE(creator.albion_name, creator.discord_name, e.creator_id) AS creator_name,
+      COALESCE(finalizer.albion_name, finalizer.discord_name, e.finalized_by) AS finalizer_name,
+      SUM(CASE WHEN ep.is_spectator = 0 THEN 1 ELSE 0 END) AS participants,
+      SUM(CASE WHEN ep.is_spectator = 1 THEN 1 ELSE 0 END) AS spectators,
       COALESCE(er.net_loot, 0) AS net_loot,
-      er.status AS review_status
+      er.status AS review_status,
+      CASE
+        WHEN EXISTS (SELECT 1 FROM world_boss_events wb WHERE wb.event_id = e.id) THEN 'world_boss'
+        WHEN EXISTS (SELECT 1 FROM raid_avalon_events ra WHERE ra.event_id = e.id) THEN 'raid_avalon'
+        WHEN EXISTS (SELECT 1 FROM custom_events ce WHERE ce.event_id = e.id) THEN 'custom'
+        ELSE 'standard'
+      END AS event_kind
     FROM events e
     LEFT JOIN event_participants ep ON ep.event_id = e.id
     LEFT JOIN event_reviews er ON er.event_id = e.id
+    LEFT JOIN users creator ON creator.discord_id = e.creator_id
+    LEFT JOIN users finalizer ON finalizer.discord_id = e.finalized_by
     GROUP BY e.id
     ORDER BY e.id DESC
     LIMIT ?

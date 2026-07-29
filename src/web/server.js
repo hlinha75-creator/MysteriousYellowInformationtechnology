@@ -9,6 +9,7 @@ const { getDashboardData } = require('./dashboard.repository');
 const { getPortalData } = require('./portal.repository');
 const { changePortalParticipation } = require('./portal-events.service');
 const { cancelPortalWithdraw, editPortalWithdraw, requestPortalWithdraw } = require('./portal-finance.service');
+const { manageStaffEvent } = require('./staff-events.service');
 const { manageStaffWithdraw } = require('./staff-finance.service');
 const { completeOnboarding, ensureGuestMember, handleOnboardingIssue, onboardingConfigured } = require('./onboarding');
 const {
@@ -238,6 +239,7 @@ function createRequestHandler(client, options = {}) {
         try {
           const result = await changePortalParticipation(client, {
             discordId: portalSession.id,
+            accessLevel: access.accessLevel,
             eventId: form.get('eventId'),
             action: form.get('action'),
             role: form.get('role')
@@ -350,6 +352,47 @@ function createRequestHandler(client, options = {}) {
           });
         } catch (error) {
           return json(res, Number(error.statusCode || 400), { error: error.message || 'Não foi possível atualizar o saque.' }, isProduction);
+        }
+      }
+      if (req.method === 'POST' && url.pathname === '/api/staff/events') {
+        if (!session) return json(res, 401, { error: 'Sessao da staff necessaria.' }, isProduction);
+        if (!await sessionStillAuthorized(client, session)) return json(res, 403, { error: 'Acesso de staff necessario.' }, isProduction);
+        const expectedOrigin = new URL(env.dashboardBaseUrl).origin;
+        if (req.headers.origin !== expectedOrigin) return json(res, 403, { error: 'Origem invalida.' }, isProduction);
+        if (!String(req.headers['content-type'] || '').startsWith('application/x-www-form-urlencoded')) {
+          return json(res, 415, { error: 'Formato de formulario invalido.' }, isProduction);
+        }
+        const form = await readFormBody(req, 16 * 1024);
+        if (!session.csrf || form.get('csrf') !== session.csrf) {
+          return json(res, 403, { error: 'Sua sessao precisa ser renovada. Atualize a pagina e tente novamente.' }, isProduction);
+        }
+        try {
+          const result = await manageStaffEvent(client, {
+            actorId: session.id,
+            action: form.get('action'),
+            eventId: form.get('eventId'),
+            title: form.get('title'),
+            description: form.get('description'),
+            location: form.get('location'),
+            scheduledTime: form.get('scheduledTime'),
+            audience: form.get('audience'),
+            tankSlots: form.get('tankSlots'),
+            healerSlots: form.get('healerSlots'),
+            supportSlots: form.get('supportSlots'),
+            dpsSlots: form.get('dpsSlots'),
+            lootTotal: form.get('lootTotal'),
+            repair: form.get('repair'),
+            silverBags: form.get('silverBags'),
+            taxPercent: form.get('taxPercent'),
+            evidenceNotes: form.get('evidenceNotes'),
+            reason: form.get('reason')
+          });
+          const renewedSession = createSession(session, env.dashboardSessionSecret);
+          return json(res, 200, { result, dashboard: getDashboardData() }, isProduction, {
+            'Set-Cookie': cookie(SESSION_COOKIE, renewedSession, { maxAge: SESSION_MAX_AGE_SECONDS, secure: secureCookie })
+          });
+        } catch (error) {
+          return json(res, Number(error.statusCode || 400), { error: error.message || 'Nao foi possivel atualizar o evento.' }, isProduction);
         }
       }
       if (req.method === 'POST' && url.pathname.startsWith('/api/fame/')) {

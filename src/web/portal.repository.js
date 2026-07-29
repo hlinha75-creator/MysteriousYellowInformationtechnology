@@ -80,10 +80,14 @@ function getPortalData(discordId, accessLevel = 'guest') {
     FROM events e
     LEFT JOIN event_participants ep ON ep.event_id = e.id
     WHERE e.status IN ('created', 'running')
+      AND (
+        COALESCE(e.audience, 'public') = 'public'
+        OR (? = 'member' AND COALESCE(e.audience, 'public') = 'member')
+      )
     GROUP BY e.id
     ORDER BY CASE WHEN e.status = 'running' THEN 0 ELSE 1 END, e.id DESC
     LIMIT 50
-  `).all();
+  `).all(accessLevel);
 
   const openEventIds = eventRows.map((event) => event.id);
   const openParticipants = openEventIds.length ? db.prepare(`

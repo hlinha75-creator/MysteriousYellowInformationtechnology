@@ -416,6 +416,36 @@ tbody tr:hover td { background: #222429; }
 .staff-withdraw-actions { display: flex; justify-content: flex-end; gap: 6px; }
 .staff-withdraw-actions .button { min-height: 34px; padding-inline: 11px; font-size: 10px; cursor: pointer; white-space: nowrap; }
 .staff-withdraw-actions .button:disabled { cursor: wait; opacity: .55; transform: none; }
+.event-management-panel { margin-bottom: 18px; }
+.event-management-panel .panel-head small { color: #8d929d; font-size: 9px; }
+.staff-event-form { display: grid; grid-template-columns: 1.2fr 1fr 1fr .8fr; gap: 12px; }
+.event-field { display: grid; min-width: 0; gap: 6px; }
+.event-field > span, .event-slots legend, .event-slots label span { color: #858b96; font-size: 9px; font-weight: 750; letter-spacing: .05em; text-transform: uppercase; }
+.event-field input, .event-field select, .event-field textarea, .event-slots input { width: 100%; min-height: 42px; padding: 9px 11px; border: 1px solid #3b3e45; border-radius: 9px; outline: 0; color: #eceef2; background: #191a1e; font: inherit; font-size: 11px; }
+.event-field textarea { resize: vertical; line-height: 1.5; }
+.event-field input:focus, .event-field select:focus, .event-field textarea:focus, .event-slots input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(88,101,242,.12); }
+.event-title-field { grid-column: span 1; }
+.event-description-field { grid-column: 1 / -1; }
+.event-slots { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(4, minmax(90px, 1fr)); gap: 10px; margin: 0; padding: 12px; border: 1px solid #303238; border-radius: 10px; }
+.event-slots legend { padding: 0 6px; }
+.event-slots label { display: grid; gap: 6px; }
+.staff-event-form-actions { display: flex; grid-column: 1 / -1; justify-content: flex-end; gap: 8px; }
+.staff-event-form-actions .button { cursor: pointer; }
+.staff-event-form-actions .button:disabled { cursor: wait; opacity: .55; }
+.staff-event-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 5px; min-width: 190px; }
+.staff-event-actions .button { min-height: 32px; padding-inline: 10px; cursor: pointer; font-size: 9px; white-space: nowrap; }
+.staff-event-actions .button:disabled { cursor: wait; opacity: .55; }
+.event-dialog { width: min(720px, calc(100% - 28px)); padding: 0; border: 1px solid #3b3e45; border-radius: 14px; color: #eceef2; background: #202126; box-shadow: 0 24px 80px rgba(0,0,0,.55); }
+.event-dialog::backdrop { background: rgba(6,7,10,.76); backdrop-filter: blur(3px); }
+.event-finish-form { padding: 20px; }
+.event-finish-form > p { margin: 9px 0 18px; color: #9298a3; font-size: 11px; line-height: 1.55; }
+.dialog-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.dialog-head span { color: #8b91a0; font-size: 9px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.dialog-head h3 { margin: 5px 0 0; font-size: 18px; }
+.event-finish-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.dialog-actions .button { cursor: pointer; }
+.dialog-actions .button:disabled { cursor: wait; opacity: .55; }
 
 @media (max-width: 920px) {
   .event-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -449,6 +479,10 @@ tbody tr:hover td { background: #222429; }
   .staff-withdraw-row { grid-template-columns: 1fr; }
   .staff-withdraw-actions { justify-content: stretch; flex-wrap: wrap; }
   .staff-withdraw-actions .button { flex: 1 1 120px; }
+  .staff-event-form { grid-template-columns: 1fr 1fr; }
+  .event-slots { grid-template-columns: 1fr 1fr; }
+  .staff-event-actions { min-width: 150px; }
+  .event-finish-grid { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {

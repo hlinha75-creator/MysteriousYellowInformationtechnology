@@ -312,7 +312,8 @@ function commonEventAnnouncement(event, participants, options = {}) {
       ? customEventDetailLines(event, customMeta)
       : [
           `**Local:** ${event.location || 'Nao informado'}`,
-          `**Build:** ${event.description || 'Nao informado'}`
+          `**Build:** ${event.description || 'Nao informado'}`,
+          `**Acesso:** ${eventAudienceLabel(event.audience)}`
         ]),
     '',
     `### Composicao (${filled}/${totalSlots})`,
@@ -325,6 +326,12 @@ function commonEventAnnouncement(event, participants, options = {}) {
     `**Espectadores:** ${spectators.length ? spectators.map((participant) => `<@${participant.discord_id}>`).join(', ') : 'Vazio'}`
   ];
   return lines.join('\n').slice(0, 4096);
+}
+
+function eventAudienceLabel(audience) {
+  if (audience === 'staff') return 'Interno da Staff';
+  if (audience === 'member') return 'Exclusivo para Membros';
+  return 'Publico para Membros e Convidados';
 }
 
 function customEventDetailLines(event, customMeta) {
@@ -709,6 +716,79 @@ async function refreshEventMessage(client, eventId) {
   if (!replacement) return null;
   repo.updateEvent(event.id, { message_id: replacement.id, message_channel_id: replacementChannel.id });
   return replacement;
+}
+
+async function syncEventPublication(client, eventId, { channelId, content, allowedMentions } = {}) {
+  const event = repo.getEvent(eventId);
+  if (!event) throw new Error('Evento nao encontrado.');
+  if (!['created', 'running'].includes(event.status)) throw new Error('Evento nao pode ser publicado neste status.');
+
+  const participants = repo.listParticipants(eventId);
+  const payload = {
+    content: content || null,
+    embeds: [eventEmbed(event, participants)],
+    components: eventComponents(event),
+    allowedMentions: allowedMentions ? normalizeAllowedMentions(allowedMentions) : undefined
+  };
+  const currentChannel = event.message_id ? await fetchEventMessageChannel(client, event) : null;
+  const currentMessage = event.message_id
+    ? await currentChannel?.messages?.fetch(event.message_id).catch(() => null)
+    : null;
+  const targetChannelId = channelId || event.message_channel_id || eventPostChannelId(event);
+
+  if (currentMessage && currentChannel?.id === targetChannelId) {
+    await currentMessage.edit(payload);
+    return currentMessage;
+  }
+
+  await currentMessage?.delete().catch(() => {});
+  const targetChannel = await client.channels.fetch(targetChannelId).catch(() => null);
+  if (!targetChannel || typeof targetChannel.send !== 'function') {
+    throw new Error('Canal de publicacao do evento nao encontrado.');
+  }
+  const message = await targetChannel.send(payload);
+  repo.updateEvent(eventId, { message_id: message.id, message_channel_id: targetChannel.id });
+  return message;
+}
+
+async function updateCreatedEvent({ client, guild, eventId, actorId, patch, publication }) {
+  const event = repo.getEvent(eventId);
+  if (!event) throw new Error('Evento nao encontrado.');
+  if (event.status !== 'created') throw new Error('Somente eventos ainda nao iniciados podem ser editados.');
+
+  await deleteWarningMessage(client, event).catch(() => {});
+  await removeWarningRole(guild, event).catch(() => {});
+  const updated = repo.updateEvent(eventId, {
+    ...patch,
+    warning_role_id: null,
+    warning_message_id: null,
+    warning_sent: 0,
+    reminder_10_sent: 0,
+    reminder_start_sent: 0,
+    temp_role_delete_after: null
+  });
+  await syncEventPublication(client, eventId, publication);
+  audit.createAuditLog({
+    type: 'event_edited',
+    actorId,
+    targetId: String(eventId),
+    beforeValue: JSON.stringify({
+      title: event.title,
+      description: event.description,
+      location: event.location,
+      scheduledTime: event.scheduled_time,
+      audience: event.audience
+    }),
+    afterValue: JSON.stringify({
+      title: updated.title,
+      description: updated.description,
+      location: updated.location,
+      scheduledTime: updated.scheduled_time,
+      audience: updated.audience
+    }),
+    reason: 'Evento editado pelo painel web'
+  });
+  return repo.getEvent(eventId);
 }
 
 function eventPostChannelId(fields = {}) {
@@ -1214,7 +1294,12 @@ async function finishEvent(interaction, eventId) {
   const now = new Date().toISOString();
   await closeAllOpenSessions(eventId, now);
   repo.refreshParticipantSeconds(eventId);
-  repo.updateEvent(eventId, { status: 'review', ended_at: now, review_required: 1 });
+  repo.updateEvent(eventId, {
+    status: 'review',
+    ended_at: now,
+    review_required: 1,
+    finalized_by: interaction.user.id
+  });
 
   const voice = await interaction.guild.channels.fetch(event.voice_channel_id).catch(() => null);
   const waiting = await interaction.guild.channels.fetch(ids.channels.waitingVoice).catch(() => null);
@@ -1235,7 +1320,11 @@ async function cancelEvent(interaction, eventId, reason) {
   const event = repo.getEvent(eventId);
   if (!event) throw new Error('Evento nao encontrado.');
   const cancelReason = String(reason || '').trim() || 'Sem motivo informado';
-  repo.updateEvent(eventId, { status: 'cancelled', cancel_reason: cancelReason });
+  repo.updateEvent(eventId, {
+    status: 'cancelled',
+    cancel_reason: cancelReason,
+    cancelled_by: interaction.user.id
+  });
   const voice = event.voice_channel_id ? await interaction.guild.channels.fetch(event.voice_channel_id).catch(() => null) : null;
   await voice?.delete(`Evento cancelado: ${cancelReason}`).catch(() => {});
   await deleteWarningMessage(interaction.client, event).catch(() => {});
@@ -2454,6 +2543,9 @@ module.exports = {
   submitEventToFinance,
   spectateEvent,
   startEvent,
+  startEventWithGuild,
+  syncEventPublication,
+  updateCreatedEvent,
   worldBossMemberSlotOptions,
   worldBossSlot,
   worldBossSlotOptions,

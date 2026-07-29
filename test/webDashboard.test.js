@@ -13,6 +13,9 @@ const env = require('../src/config/env');
 const { migrate } = require('../src/database/migrate');
 const { getDashboardData } = require('../src/web/dashboard.repository');
 const { createRequestHandler } = require('../src/web/server');
+const ids = require('../src/config/ids');
+const eventsRepo = require('../src/modules/events/events.repository');
+const { createStaffEvent, editStaffEvent, validateEventInput } = require('../src/web/staff-events.service');
 const {
   JOIN_SESSION_COOKIE,
   PORTAL_SESSION_COOKIE,
@@ -220,6 +223,131 @@ test('portal permite participar, trocar para espectador e respeita o limite de 2
     body: new URLSearchParams({ csrf: 'invalido', eventId: openEvent, action: 'join', role: 'dps' })
   });
   assert.equal(rejected.status, 403);
+});
+
+test('portal respeita eventos públicos, exclusivos de membros e internos da staff', async (t) => {
+  const db = getDatabase();
+  const guestId = 'portal-audience-guest';
+  const memberId = 'portal-audience-member';
+  db.prepare("INSERT OR REPLACE INTO users (discord_id, discord_name, albion_name, registration_status) VALUES (?, 'Convidado Publico', 'ConvidadoPublico', 'guest')").run(guestId);
+  db.prepare("INSERT OR REPLACE INTO users (discord_id, discord_name, albion_name, registration_status) VALUES (?, 'Membro Exclusivo', 'MembroExclusivo', 'member')").run(memberId);
+  const publicEvent = db.prepare("INSERT INTO events (event_code, creator_id, title, audience, dps_slots) VALUES ('EVT-AUDIENCE-PUBLIC', 'staff', 'Evento Publico', 'public', 20)").run().lastInsertRowid;
+  const memberEvent = db.prepare("INSERT INTO events (event_code, creator_id, title, audience, dps_slots) VALUES ('EVT-AUDIENCE-MEMBER', 'staff', 'Evento Membro', 'member', 20)").run().lastInsertRowid;
+  db.prepare("INSERT INTO events (event_code, creator_id, title, audience, dps_slots) VALUES ('EVT-AUDIENCE-STAFF', 'staff', 'Evento Staff', 'staff', 20)").run();
+
+  const members = new Map([
+    [guestId, { id: guestId, roles: { cache: new Map([[ids.roles.guest, {}]]) }, voice: { channel: null, channelId: null } }],
+    [memberId, { id: memberId, roles: { cache: new Map([[ids.roles.member, {}]]) }, voice: { channel: null, channelId: null } }]
+  ]);
+  const guild = { ownerId: 'owner', members: { cache: members, async fetch(id) { return members.get(id); } } };
+  const client = { guilds: { cache: new Map([[ids.guildId, guild]]), async fetch() { return guild; } } };
+  const server = require('node:http').createServer(createRequestHandler(client));
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const base = `http://127.0.0.1:${server.address().port}`;
+
+  const guestToken = createPortalSession({ id: guestId, username: 'Convidado Publico' }, process.env.DASHBOARD_SESSION_SECRET, { accessLevel: 'guest' });
+  const guestSession = readPortalSession(guestToken, process.env.DASHBOARD_SESSION_SECRET);
+  const guestResponse = await fetch(`${base}/api/portal`, { headers: { Cookie: `${PORTAL_SESSION_COOKIE}=${guestToken}` } });
+  const guestPortal = await guestResponse.json();
+  assert.deepEqual(guestPortal.events.map((event) => event.id).filter((id) => [publicEvent, memberEvent].includes(id)), [publicEvent]);
+
+  const forbidden = await fetch(`${base}/api/portal/events/participation`, {
+    method: 'POST',
+    headers: {
+      Cookie: `${PORTAL_SESSION_COOKIE}=${guestToken}`,
+      Origin: new URL(env.dashboardBaseUrl).origin,
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: new URLSearchParams({ csrf: guestSession.csrf, eventId: memberEvent, action: 'join', role: 'dps' })
+  });
+  assert.equal(forbidden.status, 403);
+
+  const memberToken = createPortalSession({ id: memberId, username: 'Membro Exclusivo' }, process.env.DASHBOARD_SESSION_SECRET, { accessLevel: 'member' });
+  const memberResponse = await fetch(`${base}/api/portal`, { headers: { Cookie: `${PORTAL_SESSION_COOKIE}=${memberToken}` } });
+  const memberPortal = await memberResponse.json();
+  assert.deepEqual(
+    memberPortal.events.map((event) => event.id).filter((id) => [publicEvent, memberEvent].includes(id)).sort((a, b) => a - b),
+    [publicEvent, memberEvent].sort((a, b) => a - b)
+  );
+});
+
+test('staff cria e edita evento no site com publicação sincronizada no Discord', async () => {
+  assert.throws(() => validateEventInput({
+    title: 'Acima do limite', tankSlots: 1, healerSlots: 1, supportSlots: 1, dpsSlots: 18
+  }), /no maximo 20 participantes/);
+
+  const staffId = 'staff-event-web';
+  const sent = [];
+  const edited = [];
+  const deleted = [];
+  const messages = new Map();
+  const makeChannel = (id) => ({
+    id,
+    messages: { async fetch(messageId) { return messages.get(messageId) || null; } },
+    async send(payload) {
+      const message = {
+        id: `staff-event-message-${sent.length + 1}`,
+        async edit(nextPayload) { edited.push({ channelId: id, payload: nextPayload }); },
+        async delete() { deleted.push(this.id); messages.delete(this.id); }
+      };
+      messages.set(message.id, message);
+      sent.push({ channelId: id, payload });
+      return message;
+    }
+  });
+  const pingChannel = makeChannel(ids.channels.pingContent);
+  const staffChannel = makeChannel(ids.channels.staff);
+  let tempRole = null;
+  const staffMember = { id: staffId, roles: { cache: new Map([[ids.roles.staff, {}]]) } };
+  const guild = {
+    ownerId: 'owner',
+    members: { cache: new Map([[staffId, staffMember]]), async fetch(id) { return id === staffId ? staffMember : null; } },
+    roles: {
+      async create() { tempRole = { id: 'event-temp-role', async delete() { tempRole = null; } }; return tempRole; },
+      async fetch() { return tempRole; }
+    }
+  };
+  const client = {
+    guilds: { cache: new Map([[ids.guildId, guild]]), async fetch() { return guild; } },
+    channels: { async fetch(id) { return id === ids.channels.staff ? staffChannel : pingChannel; } }
+  };
+
+  const created = await createStaffEvent(client, {
+    actorId: staffId,
+    title: 'Roaming pelo site',
+    description: 'Build 4.2',
+    location: 'Portal Martlock',
+    scheduledTime: '30/07 20:00 UTC',
+    audience: 'member',
+    tankSlots: 1,
+    healerSlots: 1,
+    supportSlots: 1,
+    dpsSlots: 17
+  });
+  assert.equal(created.event.audience, 'member');
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].channelId, ids.channels.pingContent);
+  assert.match(sent[0].payload.content, new RegExp(`<@&${ids.roles.member}>`));
+  assert.doesNotMatch(sent[0].payload.content, new RegExp(ids.roles.guest));
+
+  const updated = await editStaffEvent(client, {
+    actorId: staffId,
+    eventId: created.event.id,
+    title: 'Roaming interno',
+    description: 'Composição da staff',
+    location: 'Aguardando Evento',
+    scheduledTime: '30/07 21:00 UTC',
+    audience: 'staff',
+    tankSlots: 1,
+    healerSlots: 1,
+    supportSlots: 1,
+    dpsSlots: 17
+  });
+  assert.equal(updated.event.audience, 'staff');
+  assert.equal(eventsRepo.getEvent(created.event.id).title, 'Roaming interno');
+  assert.equal(sent.at(-1).channelId, ids.channels.staff);
+  assert.equal(deleted.length, 1);
 });
 
 test('portal solicita saque, avisa a staff e bloqueia duplicidade ou saldo insuficiente', async (t) => {

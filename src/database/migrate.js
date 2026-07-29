@@ -1546,6 +1546,24 @@ const migrations = [
           ON withdraw_requests (status, created_at DESC);
       `);
     }
+  },
+  {
+    version: 53,
+    name: 'event_web_management',
+    up(db) {
+      const columns = db.prepare('PRAGMA table_info(events)').all().map((column) => column.name);
+      if (!columns.includes('audience')) db.exec("ALTER TABLE events ADD COLUMN audience TEXT NOT NULL DEFAULT 'public'");
+      if (!columns.includes('finalized_by')) db.exec('ALTER TABLE events ADD COLUMN finalized_by TEXT');
+      if (!columns.includes('cancelled_by')) db.exec('ALTER TABLE events ADD COLUMN cancelled_by TEXT');
+      db.exec(`
+        UPDATE events
+        SET audience = 'public'
+        WHERE audience IS NULL OR audience NOT IN ('public', 'member', 'staff');
+
+        CREATE INDEX IF NOT EXISTS idx_events_audience_status
+          ON events (audience, status, id DESC);
+      `);
+    }
   }
 ];
 
