@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Portal pessoal da comunidade Notag.">
   <title>Meu portal — Notag</title>
-  <link rel="stylesheet" href="/assets/styles.css?v=20260729-5">
-  <script src="/assets/member.js?v=20260729-2" defer></script>
+  <link rel="stylesheet" href="/assets/styles.css?v=20260729-6">
+  <script src="/assets/member.js?v=20260729-3" defer></script>
 </head>
 <body class="dashboard-body member-portal-body">
   <div class="app-shell">
@@ -18,7 +18,7 @@
         <button class="nav-item active" data-view="overview"><span class="nav-symbol">⌂</span>Visão geral</button>
         <span class="nav-group-title">Minha conta</span>
         <button class="nav-item" data-view="registration"><span class="nav-symbol">✓</span>Cadastro</button>
-        <button class="nav-item" data-view="finance"><span class="nav-symbol">$</span>Saldo e pagamentos</button>
+        <button class="nav-item" data-view="finance"><span class="nav-symbol">$</span>Saldo e saque</button>
         <span class="nav-group-title">Atividades</span>
         <button class="nav-item" data-view="events"><span class="nav-symbol">◇</span>Eventos</button>
         <button class="nav-item member-only" data-view="rankings"><span class="nav-symbol">↗</span>Classificações</button>
@@ -32,7 +32,7 @@
         <div class="header-actions">
           <span class="refresh-state"><span class="status-dot"></span><span id="freshness-label">Carregando…</span></span>
           <button class="icon-button" id="refresh-button" type="button" aria-label="Atualizar">↻</button>
-          <div class="user-menu"><img id="session-avatar" src="/assets/notag-logo.jpeg" alt=""><span id="session-name">Conta</span><a href="/auth/logout">Sair</a></div>
+          <div class="user-menu"><img id="session-avatar" src="/assets/notag-logo.jpeg" alt=""><span id="session-name">Conta</span><a id="staff-switch" href="/dashboard" hidden>Área da staff</a><a href="/auth/logout">Sair</a></div>
         </div>
       </header>
 
@@ -74,17 +74,18 @@
           <article class="panel"><div class="table-controls"><input class="search-input" id="ranking-search" type="search" placeholder="Buscar jogador…" aria-label="Buscar jogador"></div><div class="table-wrap"><table><thead><tr><th>#</th><th>Jogador</th><th class="number-cell">Pontuação</th></tr></thead><tbody id="member-ranking-table"></tbody></table></div></article>
         </section>
 
-        <section class="view" id="view-finance" data-title="Saldo e pagamentos" data-kicker="Minha conta">
+        <section class="view" id="view-finance" data-title="Saldo e saque" data-kicker="Minha conta">
           <div class="finance-action-feedback" id="finance-action-feedback" hidden></div>
           <div class="view-heading"><div><h2>Meu financeiro</h2><p>Consulte saldo, pedidos e todo o histórico da sua conta.</p></div><span class="access-chip">Somente você</span></div>
           <div class="metric-grid compact" id="finance-metrics"></div>
           <div class="dashboard-grid equal">
             <article class="panel withdraw-panel">
-              <div class="panel-head"><div><span>Solicitações</span><h3>Pedir saque</h3></div><small id="withdraw-balance-hint"></small></div>
+              <div class="panel-head"><div><span>Solicitações</span><h3>Solicitar saque</h3></div><small id="withdraw-balance-hint"></small></div>
               <form class="withdraw-form" id="withdraw-form">
                 <label><span>Valor</span><input id="withdraw-amount" name="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="Ex: 850k ou 1.5m" required></label>
                 <label><span>Observação opcional</span><input id="withdraw-note" name="note" type="text" maxlength="180" autocomplete="off" placeholder="Ex: entregar no jogo hoje"></label>
                 <button class="button button-primary" id="withdraw-review-button" type="submit">Revisar saque</button>
+                <button class="button button-secondary" id="withdraw-edit-cancel-button" type="button" hidden>Cancelar edição</button>
               </form>
               <div class="withdraw-review" id="withdraw-review" hidden>
                 <span>Confira antes de enviar</span><strong id="withdraw-review-amount"></strong><p>O saldo será descontado somente quando a staff marcar o saque como pago.</p>

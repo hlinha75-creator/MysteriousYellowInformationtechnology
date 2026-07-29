@@ -916,7 +916,7 @@ async function handleButton(interaction) {
       afterValue: draft.amount,
       reason: draft.note
     });
-    await safeSend(interaction.client, ids.channels.finance, {
+    const staffMessage = await safeSend(interaction.client, ids.channels.finance, {
       content: withdrawRequestContent({
         id: request.lastInsertRowid,
         user_id: interaction.user.id,
@@ -932,6 +932,13 @@ async function handleButton(interaction) {
         )
       ]
     });
+    if (staffMessage) {
+      financeRepo.setWithdrawStaffMessage({
+        id: Number(request.lastInsertRowid),
+        channelId: staffMessage.channelId || staffMessage.channel?.id || ids.channels.finance,
+        messageId: staffMessage.id
+      });
+    }
     return interaction.update({ content: `Saque solicitado para a staff: ${formatSilver(draft.amount)}.`, components: [] });
   }
 
@@ -1046,6 +1053,14 @@ async function handleButton(interaction) {
     const user = await interaction.client.users.fetch(request.user_id).catch(() => null);
     await user?.send(`Seu pedido de pagamento #${id} no valor de ${formatSilver(request.amount)} foi recusado pela staff. Servico: ${request.service}`).catch(() => {});
     return interaction.reply({ content: 'Pedido recusado. Nenhum saldo foi alterado.', flags: MessageFlags.Ephemeral });
+  }
+
+  if (scope === 'finance' && ['approve_withdraw', 'refuse_withdraw', 'pay_withdraw'].includes(action) && interaction.message?.id) {
+    financeRepo.setWithdrawStaffMessage({
+      id: Number(id),
+      channelId: interaction.channelId,
+      messageId: interaction.message.id
+    });
   }
 
   if (scope === 'finance' && action === 'approve_withdraw') {

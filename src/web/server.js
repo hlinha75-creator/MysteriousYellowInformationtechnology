@@ -8,7 +8,8 @@ const { baseEmbed, safeSend } = require('../utils/discord');
 const { getDashboardData } = require('./dashboard.repository');
 const { getPortalData } = require('./portal.repository');
 const { changePortalParticipation } = require('./portal-events.service');
-const { requestPortalWithdraw } = require('./portal-finance.service');
+const { cancelPortalWithdraw, editPortalWithdraw, requestPortalWithdraw } = require('./portal-finance.service');
+const { manageStaffWithdraw } = require('./staff-finance.service');
 const { completeOnboarding, ensureGuestMember, handleOnboardingIssue, onboardingConfigured } = require('./onboarding');
 const {
   JOIN_OAUTH_STATE_COOKIE,
@@ -161,9 +162,10 @@ async function portalAccess(client, discordId) {
   const member = guild.members.cache?.get(discordId) || await guild.members.fetch(discordId).catch(() => null);
   if (!member) return null;
   const roles = [...member.roles.cache.keys()];
+  const staffAllowed = member.id === guild.ownerId || roles.some((roleId) => ALLOWED_STAFF_ROLES.has(roleId));
   const privileged = member.id === guild.ownerId || roles.some((roleId) => PRIVILEGED_PORTAL_ROLES.has(roleId));
   const accessLevel = member.roles.cache.has(ids.roles.member) || privileged ? 'member' : 'guest';
-  return { accessLevel, privileged, roles };
+  return { accessLevel, privileged, roles, staffAllowed };
 }
 
 function configuredForOAuth() {
@@ -283,6 +285,73 @@ function createRequestHandler(client, options = {}) {
           return json(res, Number(error.statusCode || 400), { error: error.message || 'Não foi possível solicitar o saque.' }, isProduction);
         }
       }
+      if (req.method === 'POST' && url.pathname === '/api/portal/withdrawals/manage') {
+        if (!portalSession) return json(res, 401, { error: 'Entre com o Discord para acessar seu portal.' }, isProduction);
+        const access = await portalAccess(client, portalSession.id);
+        if (!access) return json(res, 403, { error: 'Você precisa estar no Discord da Notag.' }, isProduction);
+        const expectedOrigin = new URL(env.dashboardBaseUrl).origin;
+        if (req.headers.origin !== expectedOrigin) return json(res, 403, { error: 'Origem inválida.' }, isProduction);
+        if (!String(req.headers['content-type'] || '').startsWith('application/x-www-form-urlencoded')) {
+          return json(res, 415, { error: 'Formato de formulário inválido.' }, isProduction);
+        }
+        const form = await readFormBody(req);
+        if (!portalSession.csrf || form.get('csrf') !== portalSession.csrf) {
+          return json(res, 403, { error: 'Sua sessão precisa ser renovada. Atualize a página e tente novamente.' }, isProduction);
+        }
+        try {
+          const action = form.get('action');
+          const input = {
+            discordId: portalSession.id,
+            requestId: form.get('requestId'),
+            rawAmount: form.get('amount'),
+            note: form.get('note')
+          };
+          let result;
+          if (action === 'edit') result = await editPortalWithdraw(client, input);
+          else if (action === 'cancel') result = await cancelPortalWithdraw(client, input);
+          else {
+            const error = new Error('Ação de saque inválida.');
+            error.statusCode = 400;
+            throw error;
+          }
+          const renewedPortal = createPortalSession(portalSession, env.dashboardSessionSecret, access);
+          const renewedMaxAge = access.privileged ? PORTAL_PRIVILEGED_MAX_AGE_SECONDS : PORTAL_MEMBER_MAX_AGE_SECONDS;
+          return json(res, 200, {
+            result,
+            portal: getPortalData(portalSession.id, access.accessLevel)
+          }, isProduction, {
+            'Set-Cookie': cookie(PORTAL_SESSION_COOKIE, renewedPortal, { maxAge: renewedMaxAge, secure: secureCookie })
+          });
+        } catch (error) {
+          return json(res, Number(error.statusCode || 400), { error: error.message || 'Não foi possível alterar o saque.' }, isProduction);
+        }
+      }
+      if (req.method === 'POST' && url.pathname === '/api/staff/withdrawals') {
+        if (!session) return json(res, 401, { error: 'Sessão da staff necessária.' }, isProduction);
+        if (!await sessionStillAuthorized(client, session)) return json(res, 403, { error: 'Acesso de staff necessário.' }, isProduction);
+        const expectedOrigin = new URL(env.dashboardBaseUrl).origin;
+        if (req.headers.origin !== expectedOrigin) return json(res, 403, { error: 'Origem inválida.' }, isProduction);
+        if (!String(req.headers['content-type'] || '').startsWith('application/x-www-form-urlencoded')) {
+          return json(res, 415, { error: 'Formato de formulário inválido.' }, isProduction);
+        }
+        const form = await readFormBody(req);
+        if (!session.csrf || form.get('csrf') !== session.csrf) {
+          return json(res, 403, { error: 'Sua sessão precisa ser renovada. Atualize a página e tente novamente.' }, isProduction);
+        }
+        try {
+          const result = await manageStaffWithdraw(client, {
+            actorId: session.id,
+            requestId: form.get('requestId'),
+            action: form.get('action')
+          });
+          const renewedSession = createSession(session, env.dashboardSessionSecret);
+          return json(res, 200, { result, dashboard: getDashboardData() }, isProduction, {
+            'Set-Cookie': cookie(SESSION_COOKIE, renewedSession, { maxAge: SESSION_MAX_AGE_SECONDS, secure: secureCookie })
+          });
+        } catch (error) {
+          return json(res, Number(error.statusCode || 400), { error: error.message || 'Não foi possível atualizar o saque.' }, isProduction);
+        }
+      }
       if (req.method === 'POST' && url.pathname.startsWith('/api/fame/')) {
         if (!session) return json(res, 401, { error: 'Sessão da staff necessária.' }, isProduction);
         if (!await sessionStillAuthorized(client, session)) return json(res, 403, { error: 'Acesso de staff necessário.' }, isProduction);
@@ -350,6 +419,13 @@ function createRequestHandler(client, options = {}) {
         return serveFile(res, 'join.html', isProduction, 'private, no-store');
       }
       if (url.pathname === '/dashboard') {
+        if (!session && portalSession && await sessionStillAuthorized(client, portalSession)) {
+          const access = await portalAccess(client, portalSession.id);
+          const sessionToken = createSession({ ...portalSession, roles: access?.roles || portalSession.roles }, env.dashboardSessionSecret);
+          return redirect(res, '/dashboard', {
+            'Set-Cookie': cookie(SESSION_COOKIE, sessionToken, { maxAge: SESSION_MAX_AGE_SECONDS, secure: secureCookie })
+          }, isProduction);
+        }
         if (!session) return redirect(res, '/?login=required', {}, isProduction);
         if (!await sessionStillAuthorized(client, session)) {
           return redirect(res, '/?auth=forbidden', { 'Set-Cookie': clearCookie(SESSION_COOKIE, secureCookie) }, isProduction);
@@ -357,6 +433,16 @@ function createRequestHandler(client, options = {}) {
         return serveFile(res, 'dashboard.html', isProduction, 'private, no-store');
       }
       if (url.pathname === '/portal') {
+        if (!portalSession && session) {
+          const access = await portalAccess(client, session.id);
+          if (access) {
+            const portalToken = createPortalSession(session, env.dashboardSessionSecret, access);
+            const portalMaxAge = access.privileged ? PORTAL_PRIVILEGED_MAX_AGE_SECONDS : PORTAL_MEMBER_MAX_AGE_SECONDS;
+            return redirect(res, '/portal', {
+              'Set-Cookie': cookie(PORTAL_SESSION_COOKIE, portalToken, { maxAge: portalMaxAge, secure: secureCookie })
+            }, isProduction);
+          }
+        }
         if (!portalSession) return redirect(res, '/?portal=required', {}, isProduction);
         const access = await portalAccess(client, portalSession.id);
         if (!access) {
@@ -365,6 +451,14 @@ function createRequestHandler(client, options = {}) {
         return serveFile(res, 'member.html', isProduction, 'private, no-store');
       }
       if (url.pathname === '/auth/discord') {
+        if (session && await sessionStillAuthorized(client, session)) return redirect(res, '/dashboard', {}, isProduction);
+        if (portalSession && await sessionStillAuthorized(client, portalSession)) {
+          const access = await portalAccess(client, portalSession.id);
+          const sessionToken = createSession({ ...portalSession, roles: access?.roles || portalSession.roles }, env.dashboardSessionSecret);
+          return redirect(res, '/dashboard', {
+            'Set-Cookie': cookie(SESSION_COOKIE, sessionToken, { maxAge: SESSION_MAX_AGE_SECONDS, secure: secureCookie })
+          }, isProduction);
+        }
         if (!configuredForOAuth()) return redirect(res, '/?auth=unavailable', {}, isProduction);
         const state = createOAuthState(env.dashboardSessionSecret);
         const redirectUri = `${env.dashboardBaseUrl}/auth/discord/callback`;
@@ -392,14 +486,29 @@ function createRequestHandler(client, options = {}) {
         const access = await authorizeStaff(client, discordUser);
         if (!access.allowed) return redirect(res, '/?auth=forbidden', { 'Set-Cookie': clearCookie(OAUTH_STATE_COOKIE, secureCookie) }, isProduction);
         const sessionToken = createSession({ ...discordUser, roles: access.roles }, env.dashboardSessionSecret);
+        const portalAccessResult = await portalAccess(client, discordUser.id);
+        const portalToken = createPortalSession(discordUser, env.dashboardSessionSecret, portalAccessResult || { accessLevel: 'member', privileged: true, roles: access.roles });
+        const portalMaxAge = portalAccessResult?.privileged ? PORTAL_PRIVILEGED_MAX_AGE_SECONDS : PORTAL_MEMBER_MAX_AGE_SECONDS;
         return redirect(res, '/dashboard', {
           'Set-Cookie': [
             cookie(SESSION_COOKIE, sessionToken, { maxAge: SESSION_MAX_AGE_SECONDS, secure: secureCookie }),
+            cookie(PORTAL_SESSION_COOKIE, portalToken, { maxAge: portalMaxAge, secure: secureCookie }),
             clearCookie(OAUTH_STATE_COOKIE, secureCookie)
           ]
         }, isProduction);
       }
       if (url.pathname === '/join/discord') {
+        if (portalSession && await portalAccess(client, portalSession.id)) return redirect(res, '/portal', {}, isProduction);
+        if (session) {
+          const access = await portalAccess(client, session.id);
+          if (access) {
+            const portalToken = createPortalSession(session, env.dashboardSessionSecret, access);
+            const portalMaxAge = access.privileged ? PORTAL_PRIVILEGED_MAX_AGE_SECONDS : PORTAL_MEMBER_MAX_AGE_SECONDS;
+            return redirect(res, '/portal', {
+              'Set-Cookie': cookie(PORTAL_SESSION_COOKIE, portalToken, { maxAge: portalMaxAge, secure: secureCookie })
+            }, isProduction);
+          }
+        }
         if (!configuredForOAuth() || !onboardingConfigured()) return redirect(res, '/?join=unavailable', {}, isProduction);
         const state = createOAuthState(env.dashboardSessionSecret);
         const redirectUri = `${env.dashboardBaseUrl}/join/discord/callback`;
@@ -429,12 +538,16 @@ function createRequestHandler(client, options = {}) {
         const joinToken = createJoinSession(discordUser, env.dashboardSessionSecret);
         const portalToken = createPortalSession(discordUser, env.dashboardSessionSecret, access || {});
         const portalMaxAge = access?.privileged ? PORTAL_PRIVILEGED_MAX_AGE_SECONDS : PORTAL_MEMBER_MAX_AGE_SECONDS;
+        const staffToken = access?.staffAllowed
+          ? createSession({ ...discordUser, roles: access.roles }, env.dashboardSessionSecret)
+          : null;
         const existingProfile = getPortalData(discordUser.id, access?.accessLevel || 'guest').profile;
         const destination = access?.accessLevel === 'member' || existingProfile.albionName ? '/portal' : '/join';
         return redirect(res, destination, {
           'Set-Cookie': [
             cookie(JOIN_SESSION_COOKIE, joinToken, { maxAge: JOIN_SESSION_MAX_AGE_SECONDS, secure: secureCookie }),
             cookie(PORTAL_SESSION_COOKIE, portalToken, { maxAge: portalMaxAge, secure: secureCookie }),
+            ...(staffToken ? [cookie(SESSION_COOKIE, staffToken, { maxAge: SESSION_MAX_AGE_SECONDS, secure: secureCookie })] : []),
             clearCookie(JOIN_OAUTH_STATE_COOKIE, secureCookie)
           ]
         }, isProduction);
@@ -480,7 +593,8 @@ function createRequestHandler(client, options = {}) {
           username: portalSession.username,
           avatarUrl: avatarUrl(portalSession),
           accessLevel: access.accessLevel,
-          privileged: access.privileged
+          privileged: access.privileged,
+          canAccessStaff: access.staffAllowed
         }, csrf: portalSession.csrf }, isProduction, {
           'Set-Cookie': cookie(PORTAL_SESSION_COOKIE, renewedPortal, { maxAge: renewedMaxAge, secure: secureCookie })
         });

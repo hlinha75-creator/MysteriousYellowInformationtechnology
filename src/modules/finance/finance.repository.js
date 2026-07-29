@@ -118,15 +118,27 @@ function createWithdrawRequest({ userId, amount, note }) {
 }
 
 function updateWithdrawStatus({ id, status, actorId }) {
-  const column = status === 'paid' ? 'paid_by' : 'reviewed_by';
-  const dateColumn = status === 'paid' ? 'paid_at' : 'reviewed_at';
+  const column = status === 'paid' ? 'paid_by' : status === 'cancelled' ? 'cancelled_by' : 'reviewed_by';
+  const dateColumn = status === 'paid' ? 'paid_at' : status === 'cancelled' ? 'cancelled_at' : 'reviewed_at';
   return getDatabase()
-    .prepare(`UPDATE withdraw_requests SET status = ?, ${column} = ?, ${dateColumn} = CURRENT_TIMESTAMP WHERE id = ?`)
+    .prepare(`UPDATE withdraw_requests SET status = ?, ${column} = ?, ${dateColumn} = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
     .run(status, actorId, id);
 }
 
 function getWithdrawRequest(id) {
   return getDatabase().prepare('SELECT * FROM withdraw_requests WHERE id = ?').get(id);
+}
+
+function updateWithdrawRequest({ id, amount, note }) {
+  return getDatabase()
+    .prepare('UPDATE withdraw_requests SET amount = ?, note = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = \'requested\'')
+    .run(amount, note || null, id);
+}
+
+function setWithdrawStaffMessage({ id, channelId, messageId }) {
+  return getDatabase()
+    .prepare('UPDATE withdraw_requests SET staff_channel_id = ?, staff_message_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+    .run(channelId || null, messageId || null, id);
 }
 
 function createPaymentRequest({ userId, amount, service, description, evidence }) {
@@ -179,6 +191,8 @@ module.exports = {
   listBalances,
   listTransactions,
   setBalance,
+  setWithdrawStaffMessage,
   updatePaymentRequestStatus,
+  updateWithdrawRequest,
   updateWithdrawStatus
 };

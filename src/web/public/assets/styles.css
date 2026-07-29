@@ -34,6 +34,10 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .button-primary:hover { background: var(--blue-strong); }
 .button-secondary { border-color: var(--line); background: var(--surface-2); }
 .button-secondary:hover, .button-ghost:hover { border-color: #626775; background: #2b2d33; }
+.button-success { color: #d8f7e4; border-color: rgba(35,165,90,.55); background: rgba(35,165,90,.2); }
+.button-success:hover { background: rgba(35,165,90,.32); }
+.button-danger { color: #ffd7d8; border-color: rgba(242,63,66,.5); background: rgba(242,63,66,.16); }
+.button-danger:hover { background: rgba(242,63,66,.28); }
 .button-ghost { min-height: 38px; padding-inline: 15px; border-color: var(--line); background: transparent; }
 .kicker { display: inline-flex; align-items: center; gap: 9px; color: #c7cad2; font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
 .kicker i { width: 22px; height: 2px; background: var(--blue); box-shadow: 0 0 14px var(--blue); }
@@ -387,7 +391,7 @@ tbody tr:hover td { background: #222429; }
 .finance-action-feedback { margin-bottom: 12px; padding: 12px 14px; border: 1px solid rgba(35,165,90,.45); border-radius: 9px; color: #b8ebca; background: rgba(35,165,90,.1); font-size: 11px; }
 .finance-action-feedback.error { border-color: rgba(240,124,126,.48); color: #ffc1c2; background: rgba(240,124,126,.1); }
 .withdraw-panel .panel-head small { color: #8d929d; font-size: 9px; white-space: nowrap; }
-.withdraw-form { display: grid; grid-template-columns: minmax(120px, .7fr) minmax(180px, 1fr) auto; align-items: end; gap: 8px; }
+.withdraw-form { display: grid; grid-template-columns: minmax(120px, .7fr) minmax(180px, 1fr) auto auto; align-items: end; gap: 8px; }
 .withdraw-form label { display: grid; gap: 5px; min-width: 0; }
 .withdraw-form label span, .withdraw-review > span { color: #858b96; font-size: 9px; font-weight: 750; letter-spacing: .05em; text-transform: uppercase; }
 .withdraw-form input { width: 100%; height: 44px; padding: 0 11px; border: 1px solid #3b3e45; border-radius: 9px; outline: none; color: #eceef2; background: #191a1e; font-size: 11px; }
@@ -400,8 +404,18 @@ tbody tr:hover td { background: #222429; }
 .withdraw-review .button { min-height: 38px; padding-inline: 13px; font-size: 11px; cursor: pointer; }
 .withdraw-review .button:disabled { cursor: wait; opacity: .6; transform: none; }
 .withdraw-blocked { margin: 0; padding: 12px; border: 1px solid rgba(217,154,67,.35); border-radius: 9px; color: #e0bc83; background: rgba(217,154,67,.08); }
+.withdraw-request-actions { display: flex; gap: 8px; margin-top: 11px; }
+.withdraw-request-actions .button { min-height: 36px; padding-inline: 12px; font-size: 10px; cursor: pointer; }
 .withdraw-history { margin-top: 18px; padding-top: 14px; border-top: 1px solid #303238; }
 .withdraw-history h4 { margin: 0 0 10px; color: #aeb2bc; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; }
+.request-value { display: flex; align-items: center; gap: 8px; }
+.staff-withdraw-list { display: grid; gap: 8px; }
+.staff-withdraw-row { display: grid; grid-template-columns: minmax(210px, 1.4fr) minmax(120px, .55fr) auto minmax(250px, auto); align-items: center; gap: 14px; padding: 12px; border: 1px solid #303238; border-radius: 9px; background: #202125; }
+.staff-withdraw-main strong, .staff-withdraw-values b { display: block; color: #eceef2; font-size: 11px; }
+.staff-withdraw-main small, .staff-withdraw-values small { display: block; margin-top: 4px; color: #858b96; font-size: 9px; }
+.staff-withdraw-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.staff-withdraw-actions .button { min-height: 34px; padding-inline: 11px; font-size: 10px; cursor: pointer; white-space: nowrap; }
+.staff-withdraw-actions .button:disabled { cursor: wait; opacity: .55; transform: none; }
 
 @media (max-width: 920px) {
   .event-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -430,6 +444,11 @@ tbody tr:hover td { background: #222429; }
   .withdraw-form .button { width: 100%; }
   .withdraw-review > div { flex-direction: column; }
   .withdraw-review .button { width: 100%; }
+  .withdraw-request-actions { flex-direction: column; }
+  .withdraw-request-actions .button { width: 100%; }
+  .staff-withdraw-row { grid-template-columns: 1fr; }
+  .staff-withdraw-actions { justify-content: stretch; flex-wrap: wrap; }
+  .staff-withdraw-actions .button { flex: 1 1 120px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

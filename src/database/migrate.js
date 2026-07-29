@@ -1526,6 +1526,26 @@ const migrations = [
           ON albion_fame_category_rows (albion_key, import_id DESC);
       `);
     }
+  },
+  {
+    version: 52,
+    name: 'withdraw_request_portal_management',
+    up(db) {
+      const columns = db.prepare('PRAGMA table_info(withdraw_requests)').all().map((column) => column.name);
+      if (!columns.includes('staff_channel_id')) db.exec('ALTER TABLE withdraw_requests ADD COLUMN staff_channel_id TEXT');
+      if (!columns.includes('staff_message_id')) db.exec('ALTER TABLE withdraw_requests ADD COLUMN staff_message_id TEXT');
+      if (!columns.includes('cancelled_by')) db.exec('ALTER TABLE withdraw_requests ADD COLUMN cancelled_by TEXT');
+      if (!columns.includes('cancelled_at')) db.exec('ALTER TABLE withdraw_requests ADD COLUMN cancelled_at TEXT');
+      if (!columns.includes('updated_at')) db.exec('ALTER TABLE withdraw_requests ADD COLUMN updated_at TEXT');
+      db.exec(`
+        UPDATE withdraw_requests
+        SET updated_at = COALESCE(updated_at, created_at)
+        WHERE updated_at IS NULL;
+
+        CREATE INDEX IF NOT EXISTS idx_withdraw_requests_status_created
+          ON withdraw_requests (status, created_at DESC);
+      `);
+    }
   }
 ];
 

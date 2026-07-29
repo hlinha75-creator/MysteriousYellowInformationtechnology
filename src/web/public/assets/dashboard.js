@@ -73,7 +73,8 @@ function badge(status) {
   const labels = {
     member: 'Membro', pending: 'Pendente', unregistered: 'Sem cadastro', guest: 'Convidado',
     created: 'Criado', running: 'Em andamento', approved: 'Aprovado', cancelled: 'Cancelado',
-    draft: 'Rascunho', submitted: 'Em revisão', review: 'Revisão', requested: 'Solicitado'
+    draft: 'Rascunho', submitted: 'Em revisão', review: 'Revisão', requested: 'Aguardando aprovação',
+    paid: 'Pago', refused: 'Recusado'
   };
   const safe = escapeHtml(status || 'sem status');
   return `<span class="badge ${safe}">${escapeHtml(labels[status] || status || 'Sem status')}</span>`;
@@ -218,17 +219,41 @@ function renderOperations(operations) {
     metricCard('Eventos ativos', number.format(operations.activeEvents), 'Criados, em andamento ou revisão', '#5865f2'),
     metricCard('Revisões pendentes', number.format(operations.reviewsPending), 'Loot splits aguardando conclusão', '#f0b232'),
     metricCard('Cadastros pendentes', number.format(operations.registrationsPending), 'Solicitações aguardando staff', '#37c9ef'),
-    metricCard('Pagamentos pendentes', number.format(operations.paymentRequestsPending), 'Pedidos em análise', '#23a55a')
+    metricCard('Financeiro pendente', number.format(Number(operations.paymentRequestsPending || 0) + Number(operations.withdrawRequestsPending || 0)), `${number.format(operations.withdrawRequestsPending || 0)} saque(s)`, '#23a55a')
   ].join('');
+}
+
+function withdrawActionButtons(request) {
+  if (request.status === 'requested') {
+    return `<button class="button button-success staff-withdraw-action" type="button" data-action="approve" data-request-id="${request.id}">Aprovar</button><button class="button button-primary staff-withdraw-action" type="button" data-action="pay" data-request-id="${request.id}">Pagar</button><button class="button button-danger staff-withdraw-action" type="button" data-action="refuse" data-request-id="${request.id}">Recusar</button>`;
+  }
+  if (request.status === 'approved') {
+    return `<button class="button button-primary staff-withdraw-action" type="button" data-action="pay" data-request-id="${request.id}">Marcar como pago</button><button class="button button-danger staff-withdraw-action" type="button" data-action="refuse" data-request-id="${request.id}">Recusar</button>`;
+  }
+  return '';
+}
+
+function renderWithdrawRequests(withdrawals) {
+  const pending = withdrawals.filter((request) => ['requested', 'approved'].includes(request.status));
+  document.querySelector('#withdrawals-summary').textContent = `${number.format(pending.length)} pendente(s)`;
+  document.querySelector('#staff-withdraw-list').innerHTML = pending.length ? pending.map((request) => `
+    <div class="staff-withdraw-row">
+      <div class="staff-withdraw-main"><strong>Saque #${request.id} · ${escapeHtml(request.member_name)}</strong><small>${formatDate(request.created_at)}${request.note ? ` · ${escapeHtml(request.note)}` : ''}</small></div>
+      <div class="staff-withdraw-values"><b>${escapeHtml(formatSilver(request.amount))}</b><small>Saldo: ${escapeHtml(formatSilver(request.current_balance))}</small></div>
+      <div>${badge(request.status)}</div>
+      <div class="staff-withdraw-actions">${withdrawActionButtons(request)}</div>
+    </div>`).join('') : '<div class="empty-row">Nenhum saque aguardando ação da staff.</div>';
 }
 
 function renderFinance(finance, totalBalance) {
   const campaign = finance.campaign;
+  const pendingWithdrawals = finance.withdrawals.filter((request) => ['requested', 'approved'].includes(request.status));
   document.querySelector('#finance-metrics').innerHTML = [
     metricCard('Saldo dos membros', formatSilver(totalBalance), 'Soma das contas individuais', '#23a55a'),
     metricCard('Campanha arrecadada', campaign ? formatSilver(campaign.raised) : '—', campaign?.title || 'Sem campanha ativa', '#f0b232'),
-    metricCard('Movimentações exibidas', number.format(finance.transactions.length), 'Registros mais recentes', '#5865f2')
+    metricCard('Saques pendentes', number.format(pendingWithdrawals.length), 'Aguardando aprovação ou pagamento', '#5865f2')
   ].join('');
+  renderWithdrawRequests(finance.withdrawals);
   const transactionQuery = controlValue('transaction-search');
   const kind = controlValue('transaction-kind');
   const transactionFiltered = finance.transactions.filter((row) => {
@@ -245,6 +270,35 @@ function renderFinance(finance, totalBalance) {
   const depositSorted = sortTransactions(depositFiltered, controlValue('deposit-sort', 'date-desc'));
   setSummary('deposits-summary', depositSorted.length, allDeposits.length);
   document.querySelector('#deposits-table').innerHTML = transactionRows(depositSorted, true);
+}
+
+function showStaffFinanceFeedback(message, error = false) {
+  const feedback = document.querySelector('#staff-finance-feedback');
+  feedback.textContent = message;
+  feedback.classList.toggle('error', error);
+  feedback.hidden = false;
+}
+
+async function manageStaffWithdrawal(button) {
+  const action = button.dataset.action;
+  const requestId = button.dataset.requestId;
+  const prompts = {
+    pay: `Confirmar que o saque #${requestId} já foi entregue? O valor será descontado do saldo agora.`,
+    refuse: `Recusar o saque #${requestId}? Nenhum saldo será alterado.`
+  };
+  if (prompts[action] && !window.confirm(prompts[action])) return;
+  button.disabled = true;
+  try {
+    const body = await postForm('/api/staff/withdrawals', { requestId, action });
+    state.data = body.dashboard;
+    state.lastLoadedAt = Date.now();
+    render(state.data);
+    switchView('finance');
+    showStaffFinanceFeedback(body.result.message);
+  } catch (error) {
+    showStaffFinanceFeedback(error.message, true);
+    button.disabled = false;
+  }
 }
 
 function sortTransactions(rows, sort) {
@@ -585,6 +639,10 @@ document.querySelector('#fame-file').addEventListener('change', async (event) =>
 document.querySelector('#fame-analyze').addEventListener('click', analyzeFameTable);
 document.querySelector('#fame-confirm').addEventListener('click', confirmFameImport);
 document.querySelector('#fame-undo').addEventListener('click', undoFameImport);
+document.querySelector('#staff-withdraw-list').addEventListener('click', (event) => {
+  const button = event.target.closest('.staff-withdraw-action');
+  if (button) manageStaffWithdrawal(button);
+});
 document.querySelectorAll('.ranking-tab').forEach((button) => button.addEventListener('click', () => {
   state.rankingCategory = button.dataset.rankingCategory;
   document.querySelectorAll('.ranking-tab').forEach((item) => {

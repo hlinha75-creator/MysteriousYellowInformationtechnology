@@ -295,6 +295,185 @@ test('portal solicita saque, avisa a staff e bloqueia duplicidade ou saldo insuf
   assert.equal(rejectedWithdraw.status, 403);
 });
 
+test('solicitante edita e cancela somente antes da aprovação, e a staff conclui pelo painel', async (t) => {
+  const db = getDatabase();
+  const discordId = 'portal-withdraw-manage-member';
+  const staffId = 'portal-withdraw-manage-staff';
+  db.prepare("INSERT OR REPLACE INTO users (discord_id, discord_name, albion_name, registration_status) VALUES (?, 'Membro Gerencia Saque', 'HeroiGerenciaSaque', 'member')").run(discordId);
+  db.prepare('INSERT OR REPLACE INTO balances (discord_id, balance) VALUES (?, ?)').run(discordId, 2000000);
+
+  const members = new Map([
+    [discordId, { id: discordId, roles: { cache: new Map([['1481251365131911314', {}]]) } }],
+    [staffId, { id: staffId, roles: { cache: new Map([['1481251363013791754', {}]]) } }]
+  ]);
+  const guild = {
+    ownerId: 'owner',
+    members: {
+      cache: members,
+      async fetch(id) { return members.get(id) || null; }
+    }
+  };
+  const sentPayloads = [];
+  const editedPayloads = [];
+  const staffMessage = {
+    id: 'staff-withdraw-manage-message',
+    channelId: 'staff-finance-channel',
+    async edit(payload) { editedPayloads.push(payload); return this; }
+  };
+  const financeChannel = {
+    id: 'staff-finance-channel',
+    isTextBased: () => true,
+    messages: { async fetch(id) { return id === staffMessage.id ? staffMessage : null; } },
+    async send(payload) { sentPayloads.push(payload); return staffMessage; }
+  };
+  const directMessages = [];
+  const client = {
+    guilds: { cache: new Map(), async fetch() { return guild; } },
+    channels: { async fetch() { return financeChannel; } },
+    users: { async fetch(id) { return { async send(message) { directMessages.push({ id, message }); } }; } }
+  };
+  const server = require('node:http').createServer(createRequestHandler(client));
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const portalToken = createPortalSession({ id: discordId, username: 'Membro Gerencia Saque' }, process.env.DASHBOARD_SESSION_SECRET, { accessLevel: 'member' });
+  const portalSession = readPortalSession(portalToken, process.env.DASHBOARD_SESSION_SECRET);
+  const portalHeaders = {
+    Cookie: `${PORTAL_SESSION_COOKIE}=${portalToken}`,
+    Origin: new URL(env.dashboardBaseUrl).origin,
+    'Content-Type': 'application/x-www-form-urlencoded'
+  };
+
+  const createResponse = await fetch(`${base}/api/portal/withdrawals`, {
+    method: 'POST',
+    headers: portalHeaders,
+    body: new URLSearchParams({ csrf: portalSession.csrf, amount: '1m', note: 'Primeiro valor' })
+  });
+  const created = await createResponse.json();
+  const requestId = created.result.request.id;
+  assert.equal(createResponse.status, 200);
+  assert.equal(sentPayloads.length, 1);
+
+  const editResponse = await fetch(`${base}/api/portal/withdrawals/manage`, {
+    method: 'POST',
+    headers: portalHeaders,
+    body: new URLSearchParams({ csrf: portalSession.csrf, action: 'edit', requestId, amount: '900k', note: 'Valor corrigido' })
+  });
+  const edited = await editResponse.json();
+  assert.equal(editResponse.status, 200);
+  assert.equal(edited.result.request.amount, 900000);
+  assert.equal(editedPayloads.length, 1);
+  assert.match(editedPayloads[0].content, /900k/);
+
+  const cancelResponse = await fetch(`${base}/api/portal/withdrawals/manage`, {
+    method: 'POST',
+    headers: portalHeaders,
+    body: new URLSearchParams({ csrf: portalSession.csrf, action: 'cancel', requestId })
+  });
+  const cancelled = await cancelResponse.json();
+  assert.equal(cancelResponse.status, 200);
+  assert.equal(cancelled.result.request.status, 'cancelled');
+  assert.equal(cancelled.portal.overview.pendingWithdraws, 0);
+  assert.equal(db.prepare('SELECT balance FROM balances WHERE discord_id = ?').get(discordId).balance, 2000000);
+  assert.match(editedPayloads.at(-1).content, /Cancelado/);
+
+  const editCancelled = await fetch(`${base}/api/portal/withdrawals/manage`, {
+    method: 'POST',
+    headers: portalHeaders,
+    body: new URLSearchParams({ csrf: portalSession.csrf, action: 'edit', requestId, amount: '800k' })
+  });
+  assert.equal(editCancelled.status, 409);
+
+  const secondResponse = await fetch(`${base}/api/portal/withdrawals`, {
+    method: 'POST',
+    headers: portalHeaders,
+    body: new URLSearchParams({ csrf: portalSession.csrf, amount: '500k', note: 'Pedido do painel' })
+  });
+  const second = await secondResponse.json();
+  const secondId = second.result.request.id;
+  const staffToken = createSession({ id: staffId, username: 'Staff Saque' }, process.env.DASHBOARD_SESSION_SECRET);
+  const staffSession = readSession(staffToken, process.env.DASHBOARD_SESSION_SECRET);
+  const staffHeaders = {
+    Cookie: `${SESSION_COOKIE}=${staffToken}`,
+    Origin: new URL(env.dashboardBaseUrl).origin,
+    'Content-Type': 'application/x-www-form-urlencoded'
+  };
+  const approveResponse = await fetch(`${base}/api/staff/withdrawals`, {
+    method: 'POST',
+    headers: staffHeaders,
+    body: new URLSearchParams({ csrf: staffSession.csrf, action: 'approve', requestId: secondId })
+  });
+  const approved = await approveResponse.json();
+  assert.equal(approveResponse.status, 200);
+  assert.equal(approved.result.request.status, 'approved');
+  assert.equal(approved.dashboard.finance.withdrawals.find((row) => row.id === secondId).status, 'approved');
+
+  const cancelApproved = await fetch(`${base}/api/portal/withdrawals/manage`, {
+    method: 'POST',
+    headers: portalHeaders,
+    body: new URLSearchParams({ csrf: portalSession.csrf, action: 'cancel', requestId: secondId })
+  });
+  assert.equal(cancelApproved.status, 409);
+
+  const payResponse = await fetch(`${base}/api/staff/withdrawals`, {
+    method: 'POST',
+    headers: staffHeaders,
+    body: new URLSearchParams({ csrf: staffSession.csrf, action: 'pay', requestId: secondId })
+  });
+  const paid = await payResponse.json();
+  assert.equal(payResponse.status, 200);
+  assert.equal(paid.result.request.status, 'paid');
+  assert.equal(db.prepare('SELECT balance FROM balances WHERE discord_id = ?').get(discordId).balance, 1500000);
+  assert.equal(directMessages.length >= 2, true);
+});
+
+test('sessões existentes alternam entre portal e staff sem novo OAuth', async (t) => {
+  const staffId = 'staff-session-bridge';
+  const staffMember = { id: staffId, roles: { cache: new Map([['1481251363013791754', {}]]) } };
+  const guild = {
+    ownerId: 'owner',
+    members: {
+      cache: new Map([[staffId, staffMember]]),
+      async fetch(id) { return id === staffId ? staffMember : null; }
+    }
+  };
+  const client = { guilds: { cache: new Map(), async fetch() { return guild; } } };
+  const server = require('node:http').createServer(createRequestHandler(client));
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const staffToken = createSession({ id: staffId, username: 'Staff Bridge' }, process.env.DASHBOARD_SESSION_SECRET);
+  const portalToken = createPortalSession({ id: staffId, username: 'Staff Bridge' }, process.env.DASHBOARD_SESSION_SECRET, { accessLevel: 'member', privileged: true });
+
+  const portalFromStaff = await fetch(`${base}/portal`, {
+    redirect: 'manual',
+    headers: { Cookie: `${SESSION_COOKIE}=${staffToken}` }
+  });
+  assert.equal(portalFromStaff.status, 302);
+  assert.equal(portalFromStaff.headers.get('location'), '/portal');
+  assert.match(portalFromStaff.headers.get('set-cookie'), new RegExp(`${PORTAL_SESSION_COOKIE}=`));
+
+  const staffFromPortal = await fetch(`${base}/dashboard`, {
+    redirect: 'manual',
+    headers: { Cookie: `${PORTAL_SESSION_COOKIE}=${portalToken}` }
+  });
+  assert.equal(staffFromPortal.status, 302);
+  assert.equal(staffFromPortal.headers.get('location'), '/dashboard');
+  assert.match(staffFromPortal.headers.get('set-cookie'), new RegExp(`${SESSION_COOKIE}=`));
+
+  const existingStaffLogin = await fetch(`${base}/auth/discord`, {
+    redirect: 'manual',
+    headers: { Cookie: `${SESSION_COOKIE}=${staffToken}` }
+  });
+  assert.equal(existingStaffLogin.headers.get('location'), '/dashboard');
+
+  const existingPortalLogin = await fetch(`${base}/join/discord`, {
+    redirect: 'manual',
+    headers: { Cookie: `${PORTAL_SESSION_COOKIE}=${portalToken}` }
+  });
+  assert.equal(existingPortalLogin.headers.get('location'), '/portal');
+});
+
 test('staff autenticada gera prévia de tabela com proteção CSRF', async (t) => {
   const staffId = 'staff-fame-web';
   const member = { id: staffId, roles: { cache: new Map([['1481251363013791754', {}]]) } };

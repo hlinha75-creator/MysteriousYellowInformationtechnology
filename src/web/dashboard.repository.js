@@ -234,6 +234,23 @@ function listTransactions(limit = 50) {
   `).all(limit);
 }
 
+function listWithdrawRequests(limit = 100) {
+  return getDatabase().prepare(`
+    SELECT
+      wr.*,
+      COALESCE(u.albion_name, u.discord_name, wr.user_id) AS member_name,
+      COALESCE(u.discord_name, wr.user_id) AS discord_name,
+      COALESCE(b.balance, 0) AS current_balance
+    FROM withdraw_requests wr
+    LEFT JOIN users u ON u.discord_id = wr.user_id
+    LEFT JOIN balances b ON b.discord_id = wr.user_id
+    ORDER BY
+      CASE wr.status WHEN 'requested' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END,
+      wr.id DESC
+    LIMIT ?
+  `).all(limit);
+}
+
 function listAudit(limit = 50) {
   return getDatabase().prepare(`
     SELECT id, type, actor_id, target_id, reason, created_at
@@ -301,6 +318,7 @@ function getDashboardData() {
     events: listEvents(),
     finance: {
       transactions: listTransactions(),
+      withdrawals: listWithdrawRequests(),
       campaign
     },
     operations: {
@@ -308,7 +326,8 @@ function getDashboardData() {
       reviewsPending: scalar("SELECT COUNT(*) AS value FROM event_reviews WHERE status IN ('draft', 'submitted')"),
       registrationsPending: scalar("SELECT COUNT(*) AS value FROM registrations WHERE status = 'pending'"),
       paymentRequestsPending: tableExists('payment_requests')
-        ? scalar("SELECT COUNT(*) AS value FROM payment_requests WHERE status = 'requested'") : 0
+        ? scalar("SELECT COUNT(*) AS value FROM payment_requests WHERE status = 'requested'") : 0,
+      withdrawRequestsPending: scalar("SELECT COUNT(*) AS value FROM withdraw_requests WHERE status IN ('requested', 'approved')")
     },
     audit: listAudit()
   };

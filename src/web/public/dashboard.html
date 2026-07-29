@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Central da staff — Notag</title>
-  <link rel="stylesheet" href="/assets/styles.css?v=20260728-7">
-  <script src="/assets/dashboard.js?v=20260728-6" defer></script>
+  <link rel="stylesheet" href="/assets/styles.css?v=20260729-6">
+  <script src="/assets/dashboard.js?v=20260729-1" defer></script>
 </head>
 <body class="dashboard-body">
   <div class="app-shell">
@@ -29,7 +29,7 @@
         </div>
         <div class="nav-group">
           <p>Financeiro</p>
-          <button class="nav-item" data-view="finance"><span class="nav-symbol">$</span>Saldos e campanha</button>
+          <button class="nav-item" data-view="finance"><span class="nav-symbol">$</span>Saldos e saques</button>
           <button class="nav-item" data-view="deposits"><span class="nav-symbol">↓</span>Depósitos</button>
         </div>
         <div class="nav-group">
@@ -42,7 +42,7 @@
           <button class="nav-item" data-view="audit"><span class="nav-symbol">≡</span>Auditoria</button>
         </div>
       </nav>
-      <div class="sidebar-footer"><span class="status-dot"></span><span>Dados somente leitura</span></div>
+      <div class="sidebar-footer"><span class="status-dot"></span><span>Dados sincronizados</span></div>
     </aside>
 
     <div class="app-main">
@@ -55,6 +55,7 @@
           <div class="user-menu">
             <img id="user-avatar" alt="" hidden>
             <span id="user-name">Staff</span>
+            <a href="/portal">Meu portal</a>
             <a href="/auth/logout">Sair</a>
           </div>
         </div>
@@ -63,7 +64,7 @@
       <main class="dashboard-content" id="dashboard-content">
         <div class="loading-panel" id="loading-panel"><span class="loader"></span><p>Organizando os dados da guilda…</p></div>
         <section class="view active" id="view-overview" data-title="Visão geral" data-kicker="Central da staff">
-          <div class="welcome-row"><div><h2>Panorama da guilda</h2><p>Os indicadores que a staff precisa acompanhar agora.</p></div><span class="readonly-badge">Somente leitura</span></div>
+          <div class="welcome-row"><div><h2>Panorama da guilda</h2><p>Os indicadores que a staff precisa acompanhar agora.</p></div><span class="readonly-badge">Visão geral</span></div>
           <div class="metric-grid" id="overview-metrics"></div>
           <div class="dashboard-grid two-one">
             <article class="panel"><div class="panel-head"><div><span>Atividade</span><h3>Participações nos últimos 7 dias</h3></div></div><div class="bar-chart" id="activity-chart"></div></article>
@@ -80,7 +81,7 @@
         <section class="view" id="view-registrations" data-title="Cadastros" data-kicker="Gestão"><div class="view-heading"><div><h2>Cadastros</h2><p>Visão dos vínculos entre Discord e Albion.</p></div><div class="table-controls"><input class="search-input" id="registration-search" type="search" placeholder="Buscar cadastro…" aria-label="Buscar cadastro"><select id="registration-status" aria-label="Filtrar cadastros por status"><option value="">Todos os status</option><option value="member">Membros</option><option value="pending">Pendentes</option><option value="guest">Convidados</option><option value="unregistered">Sem cadastro</option></select><select id="registration-sort" aria-label="Classificar cadastros"><option value="updated-desc">Atualização: recente</option><option value="updated-asc">Atualização: antiga</option><option value="name-asc">Nome: A–Z</option><option value="name-desc">Nome: Z–A</option></select></div></div><div class="metric-grid compact" id="registration-metrics"></div><article class="panel"><div class="result-summary" id="registrations-summary"></div><div class="table-wrap"><table><thead><tr><th>Jogador</th><th>Discord</th><th>Status</th><th>Atualizado</th></tr></thead><tbody id="registrations-table"></tbody></table></div></article></section>
         <section class="view" id="view-events" data-title="Eventos" data-kicker="Atividades"><div class="view-heading"><div><h2>Eventos</h2><p>Histórico recente, participação e revisão financeira.</p></div><div class="table-controls"><input class="search-input" id="event-search" type="search" placeholder="Buscar evento…" aria-label="Buscar evento"><select id="event-status" aria-label="Filtrar eventos por status"><option value="">Todos os status</option><option value="created">Criados</option><option value="running">Em andamento</option><option value="review">Em revisão</option><option value="approved">Aprovados</option><option value="cancelled">Cancelados</option></select><select id="event-sort" aria-label="Classificar eventos"><option value="date-desc">Data: recente</option><option value="date-asc">Data: antiga</option><option value="participants-desc">Participantes: maior–menor</option><option value="participants-asc">Participantes: menor–maior</option><option value="name-asc">Nome: A–Z</option><option value="name-desc">Nome: Z–A</option></select></div></div><article class="panel"><div class="result-summary" id="events-summary"></div><div class="table-wrap"><table><thead><tr><th>Evento</th><th>Local</th><th>Status</th><th>Participantes</th><th>Revisão</th><th>Data</th></tr></thead><tbody id="events-table"></tbody></table></div></article></section>
         <section class="view" id="view-operations" data-title="Operações" data-kicker="Atividades"><div class="view-heading"><div><h2>Fila operacional</h2><p>Itens que merecem atenção da staff.</p></div></div><div class="metric-grid" id="operations-metrics"></div><article class="panel empty-guidance"><span class="empty-icon">✓</span><h3>Acompanhamento centralizado</h3><p>Esta primeira versão reúne os totais. As ações administrativas serão adicionadas na próxima etapa.</p></article></section>
-        <section class="view" id="view-finance" data-title="Saldos e campanha" data-kicker="Financeiro"><div class="view-heading"><div><h2>Financeiro</h2><p>Saldos dos membros, campanha ativa e movimentações.</p></div><div class="table-controls"><input class="search-input" id="transaction-search" type="search" placeholder="Buscar movimentação…" aria-label="Buscar movimentação"><select id="transaction-kind" aria-label="Filtrar movimentações"><option value="">Créditos e débitos</option><option value="credit">Somente créditos</option><option value="debit">Somente débitos</option></select><select id="transaction-sort" aria-label="Classificar movimentações"><option value="date-desc">Data: recente</option><option value="date-asc">Data: antiga</option><option value="amount-desc">Valor: maior–menor</option><option value="amount-asc">Valor: menor–maior</option><option value="name-asc">Nome: A–Z</option><option value="name-desc">Nome: Z–A</option></select></div></div><div class="metric-grid compact" id="finance-metrics"></div><article class="panel"><div class="panel-head"><div><span>Extrato</span><h3>Movimentações recentes</h3></div></div><div class="result-summary" id="transactions-summary"></div><div class="table-wrap"><table><thead><tr><th>Jogador</th><th>Tipo</th><th>Motivo</th><th>Data</th><th class="number-cell">Valor</th></tr></thead><tbody id="transactions-table"></tbody></table></div></article></section>
+        <section class="view" id="view-finance" data-title="Saldos e saques" data-kicker="Financeiro"><div id="staff-finance-feedback" class="finance-action-feedback" hidden></div><div class="view-heading"><div><h2>Financeiro</h2><p>Aprove saques, acompanhe saldos e confira as movimentações.</p></div><div class="table-controls"><input class="search-input" id="transaction-search" type="search" placeholder="Buscar movimentação…" aria-label="Buscar movimentação"><select id="transaction-kind" aria-label="Filtrar movimentações"><option value="">Créditos e débitos</option><option value="credit">Somente créditos</option><option value="debit">Somente débitos</option></select><select id="transaction-sort" aria-label="Classificar movimentações"><option value="date-desc">Data: recente</option><option value="date-asc">Data: antiga</option><option value="amount-desc">Valor: maior–menor</option><option value="amount-asc">Valor: menor–maior</option><option value="name-asc">Nome: A–Z</option><option value="name-desc">Nome: Z–A</option></select></div></div><div class="metric-grid compact" id="finance-metrics"></div><article class="panel"><div class="panel-head"><div><span>Fila da staff</span><h3>Saques para analisar</h3></div><small id="withdrawals-summary"></small></div><div class="staff-withdraw-list" id="staff-withdraw-list"></div></article><article class="panel"><div class="panel-head"><div><span>Extrato</span><h3>Movimentações recentes</h3></div></div><div class="result-summary" id="transactions-summary"></div><div class="table-wrap"><table><thead><tr><th>Jogador</th><th>Tipo</th><th>Motivo</th><th>Data</th><th class="number-cell">Valor</th></tr></thead><tbody id="transactions-table"></tbody></table></div></article></section>
         <section class="view" id="view-deposits" data-title="Depósitos" data-kicker="Financeiro"><div class="view-heading"><div><h2>Depósitos recentes</h2><p>Créditos identificados no histórico financeiro.</p></div><div class="table-controls"><input class="search-input" id="deposit-search" type="search" placeholder="Buscar depósito…" aria-label="Buscar depósito"><select id="deposit-sort" aria-label="Classificar depósitos"><option value="date-desc">Data: recente</option><option value="date-asc">Data: antiga</option><option value="amount-desc">Valor: maior–menor</option><option value="amount-asc">Valor: menor–maior</option><option value="name-asc">Nome: A–Z</option><option value="name-desc">Nome: Z–A</option></select></div></div><article class="panel"><div class="result-summary" id="deposits-summary"></div><div class="table-wrap"><table><thead><tr><th>Jogador</th><th>Tipo</th><th>Motivo</th><th>Data</th><th class="number-cell">Valor</th></tr></thead><tbody id="deposits-table"></tbody></table></div></article></section>
         <section class="view" id="view-rankings" data-title="Rankings" data-kicker="Desempenho">
           <div class="view-heading">

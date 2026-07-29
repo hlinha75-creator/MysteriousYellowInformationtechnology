@@ -24,8 +24,7 @@ function pendingWithdraw(userId) {
   `).get(userId) || null;
 }
 
-const createPortalWithdraw = transaction(({ discordId, rawAmount, note }) => {
-  const userId = accountLinks.resolvePrimaryUserId(discordId);
+function parsePortalAmount(rawAmount) {
   let amount;
   try {
     amount = parseSilver(rawAmount);
@@ -35,9 +34,26 @@ const createPortalWithdraw = transaction(({ discordId, rawAmount, note }) => {
   if (!Number.isSafeInteger(amount) || amount <= 0) {
     throw actionError('O valor do saque precisa ser maior que zero.');
   }
+  return amount;
+}
 
+function cleanPortalNote(note) {
   const cleanNote = String(note || '').replace(/\s+/g, ' ').trim();
   if (cleanNote.length > 180) throw actionError('A observação pode ter no máximo 180 caracteres.');
+  return cleanNote;
+}
+
+function ownedWithdraw(discordId, requestId) {
+  const userId = accountLinks.resolvePrimaryUserId(discordId);
+  const request = financeRepo.getWithdrawRequest(Number(requestId));
+  if (!request || request.user_id !== userId) throw actionError('Pedido de saque não encontrado.', 404);
+  return { request, userId };
+}
+
+const createPortalWithdraw = transaction(({ discordId, rawAmount, note }) => {
+  const userId = accountLinks.resolvePrimaryUserId(discordId);
+  const amount = parsePortalAmount(rawAmount);
+  const cleanNote = cleanPortalNote(note);
 
   const existing = pendingWithdraw(userId);
   if (existing) {
@@ -62,28 +78,104 @@ const createPortalWithdraw = transaction(({ discordId, rawAmount, note }) => {
   return request;
 });
 
+const editPortalWithdrawRequest = transaction(({ discordId, requestId, rawAmount, note }) => {
+  const { request, userId } = ownedWithdraw(discordId, requestId);
+  if (request.status !== 'requested') {
+    throw actionError('Este saque já foi analisado pela staff e não pode mais ser alterado.', 409);
+  }
+  const amount = parsePortalAmount(rawAmount);
+  const cleanNote = cleanPortalNote(note);
+  const balance = financeRepo.getBalance(userId);
+  if (amount > balance) {
+    throw actionError(`Seu saldo disponível é ${formatSilver(balance)}. Escolha um valor igual ou menor.`, 409);
+  }
+  const updated = financeRepo.updateWithdrawRequest({ id: request.id, amount, note: cleanNote });
+  if (!updated.changes) throw actionError('Este saque não está mais disponível para alteração.', 409);
+  audit.createAuditLog({
+    type: 'withdraw_edited_by_requester',
+    actorId: discordId,
+    targetId: userId,
+    beforeValue: request.amount,
+    afterValue: amount,
+    reason: cleanNote || 'Alterado pelo solicitante no portal',
+    metadata: { source: 'portal', requestId: request.id, previousNote: request.note || null }
+  });
+  return financeRepo.getWithdrawRequest(request.id);
+});
+
+const cancelPortalWithdrawRequest = transaction(({ discordId, requestId }) => {
+  const { request, userId } = ownedWithdraw(discordId, requestId);
+  if (request.status !== 'requested') {
+    throw actionError('Este saque já foi analisado pela staff e não pode mais ser cancelado.', 409);
+  }
+  financeRepo.updateWithdrawStatus({ id: request.id, status: 'cancelled', actorId: discordId });
+  audit.createAuditLog({
+    type: 'withdraw_cancelled_by_requester',
+    actorId: discordId,
+    targetId: userId,
+    beforeValue: request.amount,
+    afterValue: 0,
+    reason: `Saque #${request.id} cancelado pelo solicitante`,
+    metadata: { source: 'portal', requestId: request.id }
+  });
+  return financeRepo.getWithdrawRequest(request.id);
+});
+
 function staffRequestContent(request) {
   const note = request.note ? ` | Obs: ${request.note}` : '';
-  return `Saque #${request.id} | <@${request.user_id}> | ${formatSilver(request.amount)} | Aguardando aprovacao${note}`;
+  const status = {
+    requested: 'Aguardando aprovação',
+    approved: `Aprovado${request.reviewed_by ? ` por <@${request.reviewed_by}>` : ''} | Aguardando pagamento`,
+    refused: `Recusado${request.reviewed_by ? ` por <@${request.reviewed_by}>` : ''}`,
+    paid: `Pago${request.paid_by ? ` por <@${request.paid_by}>` : ''}`,
+    cancelled: `Cancelado pelo solicitante${request.cancelled_by ? ` <@${request.cancelled_by}>` : ''}`
+  }[request.status] || request.status;
+  return `Saque #${request.id} | <@${request.user_id}> | ${formatSilver(request.amount)} | ${status}${note}`;
 }
 
-function staffRequestComponents(requestId) {
+function staffRequestComponents(request) {
+  if (!['requested', 'approved'].includes(request.status)) return [];
+  const buttons = [];
+  if (request.status === 'requested') {
+    buttons.push(new ButtonBuilder().setCustomId(`finance:approve_withdraw:${request.id}`).setLabel('Aprovar saque').setStyle(ButtonStyle.Success));
+  }
+  buttons.push(
+    new ButtonBuilder().setCustomId(`finance:pay_withdraw:${request.id}`).setLabel('Pagar saque').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`finance:refuse_withdraw:${request.id}`).setLabel('Recusar saque').setStyle(ButtonStyle.Danger)
+  );
   return [
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`finance:approve_withdraw:${requestId}`).setLabel('Aprovar saque').setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId(`finance:pay_withdraw:${requestId}`).setLabel('Pagar saque').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId(`finance:refuse_withdraw:${requestId}`).setLabel('Recusar saque').setStyle(ButtonStyle.Danger)
-    )
+    new ActionRowBuilder().addComponents(...buttons)
   ];
+}
+
+async function syncWithdrawStaffNotice(client, request) {
+  const payload = {
+    content: staffRequestContent(request),
+    components: staffRequestComponents(request),
+    allowedMentions: { parse: [], users: [], roles: [] }
+  };
+  if (request.staff_channel_id && request.staff_message_id) {
+    const channel = await client.channels.fetch(request.staff_channel_id).catch(() => null);
+    const message = await channel?.messages?.fetch(request.staff_message_id).catch(() => null);
+    if (message) {
+      await message.edit(payload);
+      return message;
+    }
+  }
+  const message = await safeSend(client, ids.channels.finance, payload);
+  if (message) {
+    financeRepo.setWithdrawStaffMessage({
+      id: request.id,
+      channelId: message.channelId || message.channel?.id || ids.channels.finance,
+      messageId: message.id
+    });
+  }
+  return message;
 }
 
 async function requestPortalWithdraw(client, input) {
   const request = createPortalWithdraw(input);
-  const staffMessage = await safeSend(client, ids.channels.finance, {
-    content: staffRequestContent(request),
-    components: staffRequestComponents(request.id),
-    allowedMentions: { parse: [], users: [request.user_id], roles: [] }
-  });
+  const staffMessage = await syncWithdrawStaffNotice(client, request);
   if (!staffMessage) {
     audit.createAuditLog({
       type: 'withdraw_staff_notice_failed',
@@ -101,4 +193,23 @@ async function requestPortalWithdraw(client, input) {
   };
 }
 
-module.exports = { requestPortalWithdraw };
+async function editPortalWithdraw(client, input) {
+  const request = editPortalWithdrawRequest(input);
+  await syncWithdrawStaffNotice(client, request);
+  return { request, message: `Saque #${request.id} atualizado para ${formatSilver(request.amount)}.` };
+}
+
+async function cancelPortalWithdraw(client, input) {
+  const request = cancelPortalWithdrawRequest(input);
+  await syncWithdrawStaffNotice(client, request);
+  return { request, message: `Saque #${request.id} cancelado. Nenhum saldo foi alterado.` };
+}
+
+module.exports = {
+  cancelPortalWithdraw,
+  editPortalWithdraw,
+  requestPortalWithdraw,
+  staffRequestComponents,
+  staffRequestContent,
+  syncWithdrawStaffNotice
+};
