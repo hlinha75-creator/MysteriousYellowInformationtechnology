@@ -274,6 +274,7 @@ function createRequestHandler(client, options = {}) {
           const result = await changePortalParticipation(client, {
             discordId: portalSession.id,
             accessLevel: access.accessLevel,
+            privileged: access.privileged,
             eventId: form.get('eventId'),
             action: form.get('action'),
             role: form.get('role')
@@ -282,7 +283,7 @@ function createRequestHandler(client, options = {}) {
           const renewedMaxAge = access.privileged ? PORTAL_PRIVILEGED_MAX_AGE_SECONDS : PORTAL_MEMBER_MAX_AGE_SECONDS;
           return json(res, 200, {
             result,
-            portal: getPortalData(portalSession.id, access.accessLevel)
+            portal: getPortalData(portalSession.id, access.accessLevel, access.privileged)
           }, isProduction, {
             'Set-Cookie': cookie(PORTAL_SESSION_COOKIE, renewedPortal, { maxAge: renewedMaxAge, secure: secureCookie })
           });
@@ -313,7 +314,7 @@ function createRequestHandler(client, options = {}) {
           const renewedMaxAge = access.privileged ? PORTAL_PRIVILEGED_MAX_AGE_SECONDS : PORTAL_MEMBER_MAX_AGE_SECONDS;
           return json(res, 200, {
             result,
-            portal: getPortalData(portalSession.id, access.accessLevel)
+            portal: getPortalData(portalSession.id, access.accessLevel, access.privileged)
           }, isProduction, {
             'Set-Cookie': cookie(PORTAL_SESSION_COOKIE, renewedPortal, { maxAge: renewedMaxAge, secure: secureCookie })
           });
@@ -354,7 +355,7 @@ function createRequestHandler(client, options = {}) {
           const renewedMaxAge = access.privileged ? PORTAL_PRIVILEGED_MAX_AGE_SECONDS : PORTAL_MEMBER_MAX_AGE_SECONDS;
           return json(res, 200, {
             result,
-            portal: getPortalData(portalSession.id, access.accessLevel)
+            portal: getPortalData(portalSession.id, access.accessLevel, access.privileged)
           }, isProduction, {
             'Set-Cookie': cookie(PORTAL_SESSION_COOKIE, renewedPortal, { maxAge: renewedMaxAge, secure: secureCookie })
           });
@@ -685,7 +686,7 @@ function createRequestHandler(client, options = {}) {
         const staffToken = access?.staffAllowed
           ? createSession({ ...discordUser, roles: access.roles }, env.dashboardSessionSecret)
           : null;
-        const existingProfile = getPortalData(discordUser.id, access?.accessLevel || 'guest').profile;
+        const existingProfile = getPortalData(discordUser.id, access?.accessLevel || 'guest', access?.privileged || false).profile;
         const destination = access?.accessLevel === 'member' || existingProfile.albionName ? '/portal' : '/join';
         return redirect(res, destination, {
           'Set-Cookie': [
@@ -753,7 +754,7 @@ function createRequestHandler(client, options = {}) {
         if (!access) return json(res, 403, { error: 'Você precisa estar no Discord da Notag.' }, isProduction);
         const renewedPortal = createPortalSession(portalSession, env.dashboardSessionSecret, access);
         const renewedMaxAge = access.privileged ? PORTAL_PRIVILEGED_MAX_AGE_SECONDS : PORTAL_MEMBER_MAX_AGE_SECONDS;
-        return json(res, 200, getPortalData(portalSession.id, access.accessLevel), isProduction, {
+        return json(res, 200, getPortalData(portalSession.id, access.accessLevel, access.privileged), isProduction, {
           'Set-Cookie': cookie(PORTAL_SESSION_COOKIE, renewedPortal, { maxAge: renewedMaxAge, secure: secureCookie })
         });
       }

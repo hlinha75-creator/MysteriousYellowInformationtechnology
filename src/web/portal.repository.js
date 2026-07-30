@@ -8,7 +8,7 @@ function placeholders(values) {
   return values.map(() => '?').join(',');
 }
 
-function getPortalData(discordId, accessLevel = 'guest') {
+function getPortalData(discordId, accessLevel = 'guest', privileged = false) {
   const db = getDatabase();
   const link = accountLinks.linkInfo(discordId);
   const linkedIds = link.linkedIds.length ? link.linkedIds : [discordId];
@@ -83,11 +83,12 @@ function getPortalData(discordId, accessLevel = 'guest') {
       AND (
         COALESCE(e.audience, 'public') = 'public'
         OR (? = 'member' AND COALESCE(e.audience, 'public') = 'member')
+        OR (? = 1 AND COALESCE(e.audience, 'public') = 'staff')
       )
     GROUP BY e.id
     ORDER BY CASE WHEN e.status = 'running' THEN 0 ELSE 1 END, e.id DESC
     LIMIT 50
-  `).all(accessLevel);
+  `).all(accessLevel, privileged ? 1 : 0);
 
   const openEventIds = eventRows.map((event) => event.id);
   const openParticipants = openEventIds.length ? db.prepare(`

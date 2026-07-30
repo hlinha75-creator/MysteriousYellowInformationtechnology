@@ -1275,11 +1275,17 @@ async function startEventWithGuild({ client, guild, eventId, actorId }) {
   await deleteWarningMessage(client, startedEvent).catch(() => {});
   const participants = repo.listParticipants(eventId).filter((participant) => !participant.is_spectator);
   for (const participant of participants) {
-    const member = await guild.members.fetch(participant.discord_id).catch(() => null);
-    if (member?.voice?.channel) {
-      await member.voice.setChannel(voice).catch(() => {});
-      repo.startVoiceSession({ eventId, discordId: participant.discord_id, joinedAt: now });
-    }
+    const member = guild.members.cache?.get(participant.discord_id)
+      || await guild.members.fetch(participant.discord_id).catch(() => null);
+    const connectedChannelId = member?.voice?.channelId || member?.voice?.channel?.id || null;
+    if (!connectedChannelId) continue;
+    const moved = await member.voice.setChannel(voice.id)
+      .then(() => true)
+      .catch((error) => {
+        console.error(`[EVENTO] Nao foi possivel mover ${participant.discord_id} para ${voice.id}:`, error);
+        return false;
+      });
+    if (moved) repo.startVoiceSession({ eventId, discordId: participant.discord_id, joinedAt: now });
   }
 
   audit.createAuditLog({ type: 'event_started', actorId, targetId: String(eventId), afterValue: voice.id });

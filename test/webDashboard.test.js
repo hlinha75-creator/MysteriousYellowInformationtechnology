@@ -20,6 +20,7 @@ const {
   approveStaffEventPayment,
   createStaffEvent,
   editStaffEvent,
+  startStaffEvent,
   submitStaffEventToFinance,
   validateEventInput
 } = require('../src/web/staff-events.service');
@@ -242,15 +243,18 @@ test('portal respeita eventos públicos, exclusivos de membros e internos da sta
   const db = getDatabase();
   const guestId = 'portal-audience-guest';
   const memberId = 'portal-audience-member';
+  const staffId = 'portal-audience-staff';
   db.prepare("INSERT OR REPLACE INTO users (discord_id, discord_name, albion_name, registration_status) VALUES (?, 'Convidado Publico', 'ConvidadoPublico', 'guest')").run(guestId);
   db.prepare("INSERT OR REPLACE INTO users (discord_id, discord_name, albion_name, registration_status) VALUES (?, 'Membro Exclusivo', 'MembroExclusivo', 'member')").run(memberId);
+  db.prepare("INSERT OR REPLACE INTO users (discord_id, discord_name, albion_name, registration_status) VALUES (?, 'Staff Portal', 'StaffPortal', 'member')").run(staffId);
   const publicEvent = db.prepare("INSERT INTO events (event_code, creator_id, title, audience, dps_slots) VALUES ('EVT-AUDIENCE-PUBLIC', 'staff', 'Evento Publico', 'public', 20)").run().lastInsertRowid;
   const memberEvent = db.prepare("INSERT INTO events (event_code, creator_id, title, audience, dps_slots) VALUES ('EVT-AUDIENCE-MEMBER', 'staff', 'Evento Membro', 'member', 20)").run().lastInsertRowid;
-  db.prepare("INSERT INTO events (event_code, creator_id, title, audience, dps_slots) VALUES ('EVT-AUDIENCE-STAFF', 'staff', 'Evento Staff', 'staff', 20)").run();
+  const staffEvent = db.prepare("INSERT INTO events (event_code, creator_id, title, audience, dps_slots) VALUES ('EVT-AUDIENCE-STAFF', 'staff', 'Evento Staff', 'staff', 20)").run().lastInsertRowid;
 
   const members = new Map([
     [guestId, { id: guestId, roles: { cache: new Map([[ids.roles.guest, {}]]) }, voice: { channel: null, channelId: null } }],
-    [memberId, { id: memberId, roles: { cache: new Map([[ids.roles.member, {}]]) }, voice: { channel: null, channelId: null } }]
+    [memberId, { id: memberId, roles: { cache: new Map([[ids.roles.member, {}]]) }, voice: { channel: null, channelId: null } }],
+    [staffId, { id: staffId, roles: { cache: new Map([[ids.roles.staff, {}]]) }, voice: { channel: null, channelId: null } }]
   ]);
   const guild = { ownerId: 'owner', members: { cache: members, async fetch(id) { return members.get(id); } } };
   const client = { guilds: { cache: new Map([[ids.guildId, guild]]), async fetch() { return guild; } } };
@@ -283,6 +287,26 @@ test('portal respeita eventos públicos, exclusivos de membros e internos da sta
     memberPortal.events.map((event) => event.id).filter((id) => [publicEvent, memberEvent].includes(id)).sort((a, b) => a - b),
     [publicEvent, memberEvent].sort((a, b) => a - b)
   );
+
+  const staffToken = createPortalSession({ id: staffId, username: 'Staff Portal' }, process.env.DASHBOARD_SESSION_SECRET, { accessLevel: 'member', privileged: true });
+  const staffSession = readPortalSession(staffToken, process.env.DASHBOARD_SESSION_SECRET);
+  const staffResponse = await fetch(`${base}/api/portal`, { headers: { Cookie: `${PORTAL_SESSION_COOKIE}=${staffToken}` } });
+  const staffPortal = await staffResponse.json();
+  assert.deepEqual(
+    staffPortal.events.map((event) => event.id).filter((id) => [publicEvent, memberEvent, staffEvent].includes(id)).sort((a, b) => a - b),
+    [publicEvent, memberEvent, staffEvent].sort((a, b) => a - b)
+  );
+
+  const staffJoin = await fetch(`${base}/api/portal/events/participation`, {
+    method: 'POST',
+    headers: {
+      Cookie: `${PORTAL_SESSION_COOKIE}=${staffToken}`,
+      Origin: new URL(env.dashboardBaseUrl).origin,
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: new URLSearchParams({ csrf: staffSession.csrf, eventId: staffEvent, action: 'join', role: 'dps' })
+  });
+  assert.equal(staffJoin.status, 200);
 });
 
 test('staff cria e edita evento no site com publicação sincronizada no Discord', async () => {
@@ -361,6 +385,46 @@ test('staff cria e edita evento no site com publicação sincronizada no Discord
   assert.equal(eventsRepo.getEvent(created.event.id).title, 'Roaming interno');
   assert.equal(sent.at(-1).channelId, ids.channels.staff);
   assert.equal(deleted.length, 1);
+});
+
+test('inicio pelo site move participante conectado mesmo sem objeto de canal de voz em cache', async () => {
+  const db = getDatabase();
+  const staffId = 'staff-event-start-web';
+  const participantId = 'participant-event-start-web';
+  const eventId = Number(db.prepare(`
+    INSERT INTO events (event_code, creator_id, title, status, audience, tank_slots)
+    VALUES ('EVT-WEB-START', ?, 'Inicio pelo site', 'created', 'staff', 1)
+  `).run(staffId).lastInsertRowid);
+  db.prepare(`
+    INSERT INTO event_participants (event_id, discord_id, role)
+    VALUES (?, ?, 'tank')
+  `).run(eventId, participantId);
+
+  const moves = [];
+  const staffMember = { id: staffId, roles: { cache: new Map([[ids.roles.staff, {}]]) }, voice: { channelId: null, channel: null } };
+  const participantMember = {
+    id: participantId,
+    roles: { cache: new Map([[ids.roles.staff, {}]]) },
+    voice: {
+      channelId: ids.channels.waitingVoice,
+      channel: null,
+      async setChannel(channelId) { moves.push(channelId); this.channelId = channelId; }
+    }
+  };
+  const members = new Map([[staffId, staffMember], [participantId, participantMember]]);
+  const voice = { id: 'event-voice-from-site', name: 'Inicio pelo site' };
+  const guild = {
+    ownerId: 'owner',
+    members: { cache: members, async fetch(id) { return members.get(id) || null; } },
+    channels: { async create() { return voice; } }
+  };
+  const client = { guilds: { cache: new Map([[ids.guildId, guild]]), async fetch() { return guild; } } };
+
+  const result = await startStaffEvent(client, { actorId: staffId, eventId });
+  assert.equal(result.event.status, 'running');
+  assert.equal(result.voiceChannelId, voice.id);
+  assert.deepEqual(moves, [voice.id]);
+  assert.ok(eventsRepo.getOpenVoiceSession({ eventId, discordId: participantId }));
 });
 
 test('staff envia revisão e aprova pagamento de evento pelo site', async () => {

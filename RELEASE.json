@@ -1,7 +1,7 @@
 {
   "enabled": true,
-  "version": "1.28",
-  "title": "Evolução de fama e aprovação de eventos pelo site",
+  "version": "1.30",
+  "title": "Movimentação de voz ao iniciar pelo site",
   "notes": [
     "A tela Cadastros aceita a lista de membros exportada do Albion por arquivo ou texto colado.",
     "A prévia mostra membros vinculados, sem Discord, entradas, saídas e cadastros fora da lista antes da confirmação.",
@@ -12,6 +12,8 @@
     "Jogadores novos sem valor na importação anterior ficam fora do Top 5 de evolução.",
     "Uma página aberta verifica atualizações dos rankings a cada cinco minutos.",
     "A staff pode enviar uma revisão ao financeiro, devolver e aprovar o pagamento diretamente pela página Eventos.",
-    "A aprovação pelo site mantém notificações, campanha, recompensas, backup e auditoria sincronizados com o Discord."
+    "A aprovação pelo site mantém notificações, campanha, recompensas, backup e auditoria sincronizados com o Discord.",
+    "Usuários da Staff agora podem visualizar eventos internos no Meu portal, escolher função e participar; esses eventos continuam ocultos para membros e convidados comuns.",
+    "Ao iniciar um evento pelo site, o bot também reconhece participantes conectados quando apenas o identificador da call está em cache e os move para a sala criada."
   ]
 }
