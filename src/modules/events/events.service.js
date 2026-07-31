@@ -4,6 +4,7 @@ const {
   ButtonStyle,
   ChannelType,
   EmbedBuilder,
+  OverwriteType,
   PermissionFlagsBits
 } = require('discord.js');
 const ids = require('../../config/ids');
@@ -1440,13 +1441,30 @@ function saveLootReview({ eventId, lootTotal, repair, silverBags, taxPercent, ev
 }
 
 async function createPostEventReviewSpace(interaction, eventId) {
+  return ensurePostEventReviewSpace(interaction.guild, interaction.client, eventId);
+}
+
+async function ensurePostEventReviewSpace(guild, client, eventId) {
   const event = repo.getEvent(eventId);
   if (!event) throw new Error('Evento nao encontrado.');
-  const reviewChannel = await createReviewChannel(interaction.guild, eventId);
-  repo.updateReviewMetadata(eventId, {
-    review_channel_id: reviewChannel.id
-  });
-  const reviewMessage = await reviewChannel.send({
+  let review = repo.getReview(eventId);
+  if (!review) throw new Error('Revisao do evento nao encontrada.');
+
+  let reviewChannel = review.review_channel_id
+    ? await guild.channels.fetch(review.review_channel_id).catch(() => null)
+    : null;
+  if (!reviewChannel) {
+    reviewChannel = await createReviewChannel(guild, eventId);
+    review = repo.updateReviewMetadata(eventId, {
+      review_channel_id: reviewChannel.id,
+      review_message_id: null
+    });
+  }
+
+  let reviewMessage = review?.review_message_id && reviewChannel.messages?.fetch
+    ? await reviewChannel.messages.fetch(review.review_message_id).catch(() => null)
+    : null;
+  const payload = {
     content: [
       `Revisao do evento ${event.event_code}.`,
       'Anexe aqui o CSV do loot logger e prints complementares se precisar.',
@@ -1454,8 +1472,13 @@ async function createPostEventReviewSpace(interaction, eventId) {
     ].join('\n'),
     embeds: [reviewEmbed(eventId)],
     components: reviewComponents(eventId, 'review')
-  });
-  repo.updateReviewMetadata(eventId, { review_message_id: reviewMessage.id });
+  };
+  if (reviewMessage) {
+    await reviewMessage.edit(payload);
+  } else {
+    reviewMessage = await reviewChannel.send(payload);
+    repo.updateReviewMetadata(eventId, { review_message_id: reviewMessage.id });
+  }
   return reviewChannel;
 }
 
@@ -1468,10 +1491,12 @@ async function createReviewChannel(guild, eventId) {
   const overwrites = [
     {
       id: guild.roles.everyone.id,
+      type: OverwriteType.Role,
       deny: [PermissionFlagsBits.ViewChannel]
     },
     ...reviewStaffRoleIds().map((roleId) => ({
       id: roleId,
+      type: OverwriteType.Role,
       allow: [
         PermissionFlagsBits.ViewChannel,
         PermissionFlagsBits.SendMessages,
@@ -1481,6 +1506,7 @@ async function createReviewChannel(guild, eventId) {
     })),
     {
       id: event.creator_id,
+      type: OverwriteType.Member,
       allow: [
         PermissionFlagsBits.ViewChannel,
         PermissionFlagsBits.SendMessages,
@@ -1490,6 +1516,7 @@ async function createReviewChannel(guild, eventId) {
     },
     ...participants.map((participant) => ({
       id: participant.discord_id,
+      type: OverwriteType.Member,
       allow: [
         PermissionFlagsBits.ViewChannel,
         PermissionFlagsBits.SendMessages,
@@ -1625,6 +1652,75 @@ async function reconcileEventWorkflowMessages(client, limit = 200) {
     }
   }
 
+  return result;
+}
+
+async function configuredGuild(client) {
+  const cached = client.guilds?.cache?.get?.(ids.guildId);
+  if (cached) return cached;
+  return client.guilds?.fetch ? client.guilds.fetch(ids.guildId).catch(() => null) : null;
+}
+
+async function recoverInterruptedEventReviews(client, limit = 200) {
+  const guild = await configuredGuild(client);
+  const reviewEvents = repo.listReviewEvents(limit);
+  const result = { checked: reviewEvents.length, recovered: 0, failed: 0 };
+  if (!guild) {
+    result.failed = reviewEvents.length;
+    return result;
+  }
+
+  for (const event of reviewEvents) {
+    try {
+      await ensurePostEventReviewSpace(guild, client, event.id);
+      result.recovered += 1;
+    } catch (error) {
+      result.failed += 1;
+      console.error(`Falha ao recuperar revisao do evento ${event.event_code}:`, error);
+    }
+  }
+  return result;
+}
+
+async function recoverRunningEventsOnStartup(client) {
+  const guild = await configuredGuild(client);
+  const runningEvents = repo.listActiveEvents();
+  const result = { checked: runningEvents.length, restored: 0, sessions: 0, failed: 0 };
+  if (!guild) {
+    result.failed = runningEvents.length;
+    return result;
+  }
+
+  for (const event of runningEvents) {
+    try {
+      const voiceChannel = event.voice_channel_id
+        ? await guild.channels.fetch(event.voice_channel_id).catch(() => null)
+        : null;
+      await refreshEventMessage(client, event.id);
+      if (!voiceChannel) {
+        result.failed += 1;
+        continue;
+      }
+
+      const participants = repo.listParticipants(event.id).filter((participant) => !participant.is_spectator);
+      for (const participant of participants) {
+        const member = voiceChannel.members?.get?.(participant.discord_id)
+          || await guild.members.fetch(participant.discord_id).catch(() => null);
+        if (member?.voice?.channelId !== voiceChannel.id) continue;
+        const started = repo.startVoiceSession({
+          eventId: event.id,
+          discordId: participant.discord_id,
+          joinedAt: new Date().toISOString()
+        });
+        if (started.changes > 0) result.sessions += 1;
+      }
+      repo.updateEvent(event.id, { review_required: 0 });
+      result.restored += 1;
+    } catch (error) {
+      result.failed += 1;
+      console.error(`Falha ao recuperar evento ${event.event_code}:`, error);
+    }
+  }
   return result;
 }
 
@@ -2697,6 +2793,8 @@ module.exports = {
   refreshEventMessage,
   refreshRaidAvalonCareerPanel,
   reconcileEventWorkflowMessages,
+  recoverInterruptedEventReviews,
+  recoverRunningEventsOnStartup,
   refreshRunningEventMessages,
   removeWorldBossSlot,
   removeParticipantReview,

@@ -269,6 +269,19 @@ function listWorkflowReviews(limit = 200) {
     .all(Math.max(1, Math.min(Number(limit) || 200, 500)));
 }
 
+function listReviewEvents(limit = 200) {
+  return getDatabase()
+    .prepare(`
+      SELECT e.*
+      FROM events e
+      JOIN event_reviews er ON er.event_id = e.id
+      WHERE e.status = 'review'
+      ORDER BY e.id DESC
+      LIMIT ?
+    `)
+    .all(Math.max(1, Math.min(Number(limit) || 200, 500)));
+}
+
 function updateReviewMetadata(eventId, patch) {
   const entries = Object.entries(patch).filter(([, value]) => value !== undefined);
   if (entries.length === 0) return getReview(eventId);
@@ -645,6 +658,7 @@ module.exports = {
   listRaidAvalonParticipants,
   listWorldBossAssignments,
   listWorkflowReviews,
+  listReviewEvents,
   markReviewApproved,
   refreshParticipantSeconds,
   removeParticipant,

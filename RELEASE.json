@@ -1,8 +1,12 @@
 {
   "enabled": true,
-  "version": "1.36",
-  "title": "Espectadores acompanham a call do evento",
+  "version": "1.37",
+  "title": "Recuperacao segura de eventos apos atualizacoes",
   "notes": [
+    "Eventos que continuam em andamento durante uma atualizacao voltam a publicar a mensagem e retomam a contagem de voz de quem ainda esta na sala.",
+    "Se a finalizacao for interrompida depois de salvar a revisao, o bot recria automaticamente o canal e a mensagem de revisao sem duplicar o evento.",
+    "A criacao do canal privado agora identifica explicitamente cargos e membros, corrigindo o erro Supplied parameter is not a cached User or Role.",
+    "A recuperacao e idempotente: reiniciar novamente nao cria outro canal, outra revisao ou outro pagamento.",
     "Ao iniciar um evento pelo site ou pelo Discord, espectadores inscritos e conectados em voz agora também são movidos para a sala do evento.",
     "Espectadores continuam sem ocupar vaga, sem contabilizar tempo de participação e sem receber parte do loot.",
     "Eventos personalizados agora exibem no portal as mesmas vagas nomeadas publicadas no Discord, como Tank - INCUBUS e Healer - QUEIJA-SANTA.",
