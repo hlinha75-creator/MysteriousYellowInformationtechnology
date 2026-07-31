@@ -27,11 +27,11 @@ const firstRoster = [
   '"newhero"\t"07/29/2026 03:35:40"\t"Officer;Member"'
 ].join('\n');
 
-test('analisa e confirma a lista atual sem salvar antes da confirmação', () => {
+test('analisa e confirma a lista atual sem salvar antes da confirmação', async () => {
   registrationRepo.upsertUser({ discordId: 'linked-1', discordName: 'linked', albionName: 'HeroOne', registrationStatus: 'member' });
   registrationRepo.upsertUser({ discordId: 'outside-1', discordName: 'outside', albionName: 'OutsideHero', registrationStatus: 'member' });
 
-  const previewResult = manageMemberRoster({ action: 'preview', rosterText: firstRoster, sourceName: 'membros.tsv', actorId: 'staff-1' });
+  const previewResult = await manageMemberRoster({ action: 'preview', rosterText: firstRoster, sourceName: 'membros.tsv', actorId: 'staff-1' });
   assert.equal(previewResult.preview.memberCount, 2);
   assert.equal(previewResult.preview.onlineCount, 1);
   assert.equal(previewResult.preview.linkedCount, 1);
@@ -40,8 +40,8 @@ test('analisa e confirma a lista atual sem salvar antes da confirmação', () =>
   assert.deepEqual(previewResult.preview.registeredOutside.map((row) => row.albionName), ['OutsideHero']);
   assert.equal(snapshots.latestSnapshot(), undefined);
 
-  const confirmed = manageMemberRoster({ action: 'confirm', rosterText: firstRoster, sourceName: 'membros.tsv', actorId: 'staff-1' });
-  assert.match(confirmed.message, /Nenhum cargo do Discord foi removido/);
+  const confirmed = await manageMemberRoster({ action: 'confirm', rosterText: firstRoster, sourceName: 'membros.tsv', actorId: 'staff-1' });
+  assert.match(confirmed.message, /Lista atualizada com 2 membros/);
   assert.equal(confirmed.roster.memberCount, 2);
   assert.equal(confirmed.roster.linkedCount, 1);
   assert.equal(getDatabase().prepare("SELECT COUNT(*) AS total FROM audit_logs WHERE type = 'website_member_roster_imported'").get().total, 1);

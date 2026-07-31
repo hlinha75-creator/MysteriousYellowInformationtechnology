@@ -1,8 +1,16 @@
 {
   "enabled": true,
-  "version": "1.30",
-  "title": "Movimentação de voz ao iniciar pelo site",
+  "version": "1.33",
+  "title": "Sincronização de eventos entre site e Discord",
   "notes": [
+    "A importação da lista atual agora procura correspondências exatas e únicas entre o personagem Albion e os nomes usados no Discord.",
+    "Correspondências exatas promovem automaticamente para Membro, removem Convidado/Sem Tag, ajustam o apelido e avisam o usuário por DM.",
+    "Nomes apenas parecidos recebem uma confirmação por DM com botões Sim e Não; nenhuma promoção aproximada acontece sem consentimento.",
+    "Conflitos, nomes ambíguos e pessoas já vinculadas a outro personagem permanecem para revisão manual da staff.",
+    "A prévia do painel separa vínculo automático, confirmação por DM e revisão da staff antes de confirmar a lista.",
+    "Ao finalizar ou cancelar um evento, o bot agora aguarda a reconexão de voz antes de apagar a sala antiga.",
+    "O bot confirma a chegada em Aguardando Evento e tenta novamente quando o Discord demora para atualizar o canal.",
+    "Se alguém não puder ser movido, a sala anterior é preservada e o erro aparece nos logs para evitar desconexão forçada.",
     "A tela Cadastros aceita a lista de membros exportada do Albion por arquivo ou texto colado.",
     "A prévia mostra membros vinculados, sem Discord, entradas, saídas e cadastros fora da lista antes da confirmação.",
     "Cada confirmação mantém o histórico de snapshots e nunca remove cargos do Discord automaticamente.",
@@ -14,6 +22,9 @@
     "A staff pode enviar uma revisão ao financeiro, devolver e aprovar o pagamento diretamente pela página Eventos.",
     "A aprovação pelo site mantém notificações, campanha, recompensas, backup e auditoria sincronizados com o Discord.",
     "Usuários da Staff agora podem visualizar eventos internos no Meu portal, escolher função e participar; esses eventos continuam ocultos para membros e convidados comuns.",
-    "Ao iniciar um evento pelo site, o bot também reconhece participantes conectados quando apenas o identificador da call está em cache e os move para a sala criada."
+    "Ao iniciar um evento pelo site, o bot também reconhece participantes conectados quando apenas o identificador da call está em cache e os move para a sala criada.",
+    "Ações concluídas pelo site agora sincronizam as mensagens de revisão e financeiro no Discord.",
+    "Botões antigos são removidos automaticamente quando o evento muda de etapa, evitando cliques duplicados e mensagens de erro.",
+    "As mensagens de revisão e financeiro passam a ter seus identificadores salvos para manter site, banco e Discord alinhados."
   ]
 }

@@ -477,12 +477,12 @@ function createRequestHandler(client, options = {}) {
           return json(res, 403, { error: 'Sua sessão precisa ser renovada. Atualize a página e tente novamente.' }, isProduction);
         }
         try {
-          const result = manageMemberRoster({
+          const result = await manageMemberRoster({
             actorId: session.id,
             action: form.get('action'),
             sourceName: form.get('sourceName'),
             rosterText: form.get('rosterText')
-          });
+          }, { client });
           const renewedSession = createSession(session, env.dashboardSessionSecret);
           return json(res, 200, {
             result,

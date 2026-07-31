@@ -427,6 +427,62 @@ test('inicio pelo site move participante conectado mesmo sem objeto de canal de 
   assert.ok(eventsRepo.getOpenVoiceSession({ eventId, discordId: participantId }));
 });
 
+test('finalizacao confirma retorno para Aguardando Evento antes de apagar a sala', async () => {
+  const db = getDatabase();
+  const staffId = 'staff-event-finish-voice';
+  const participantId = 'participant-event-finish-voice';
+  const eventVoiceId = 'event-voice-finish-test';
+  const eventId = Number(db.prepare(`
+    INSERT INTO events (event_code, creator_id, title, status, audience, tank_slots, voice_channel_id, started_at)
+    VALUES ('EVT-WEB-FINISH-VOICE', ?, 'Retorno de voz', 'running', 'staff', 1, ?, CURRENT_TIMESTAMP)
+  `).run(staffId, eventVoiceId).lastInsertRowid);
+  db.prepare(`
+    INSERT INTO event_participants (event_id, discord_id, role)
+    VALUES (?, ?, 'tank')
+  `).run(eventId, participantId);
+
+  const order = [];
+  const moves = [];
+  const member = {
+    id: participantId,
+    voice: {
+      channelId: eventVoiceId,
+      async setChannel(channelId) {
+        moves.push(channelId);
+        order.push(`move-${moves.length}`);
+        // Simula o Discord demorando para confirmar a primeira troca de canal.
+        if (moves.length > 1) this.channelId = channelId;
+      }
+    }
+  };
+  const waiting = { id: ids.channels.waitingVoice };
+  const voice = {
+    id: eventVoiceId,
+    members: new Map([[participantId, member]]),
+    async delete() { order.push('delete'); }
+  };
+  const guild = {
+    channels: {
+      async fetch(channelId) {
+        if (channelId === eventVoiceId) return voice;
+        if (channelId === ids.channels.waitingVoice) return waiting;
+        return null;
+      }
+    }
+  };
+  const interaction = {
+    user: { id: staffId },
+    guild,
+    client: { channels: { async fetch() { return null; } } }
+  };
+
+  await events.finishEvent(interaction, eventId);
+
+  assert.deepEqual(moves, [ids.channels.waitingVoice, ids.channels.waitingVoice]);
+  assert.deepEqual(order, ['move-1', 'move-2', 'delete']);
+  assert.equal(eventsRepo.getEvent(eventId).status, 'review');
+});
+
 test('staff envia revisão e aprova pagamento de evento pelo site', async () => {
   const db = getDatabase();
   const staffId = 'staff-event-payment-web';
@@ -472,6 +528,7 @@ test('staff envia revisão e aprova pagamento de evento pelo site', async () => 
   try {
     const submitted = await submitStaffEventToFinance(client, { actorId: staffId, eventId });
     assert.equal(submitted.event.status, 'pending_payment');
+    assert.match(eventsRepo.getReview(eventId).finance_message_id, /^message-/);
     assert.equal(sent.some((item) => item.channelId === ids.channels.finance), true);
     assert.equal(sent.some((item) => item.channelId === ids.channels.dpsMeter), true);
 
@@ -487,6 +544,59 @@ test('staff envia revisão e aprova pagamento de evento pelo site', async () => 
     const restoreStatus = db.prepare('UPDATE campaigns SET status = ? WHERE id = ?');
     for (const campaign of campaignStatuses) restoreStatus.run(campaign.status, campaign.id);
   }
+});
+
+test('sincroniza botoes antigos de revisao e financeiro com o status do evento', async () => {
+  const db = getDatabase();
+  const eventId = Number(db.prepare(`
+    INSERT INTO events (event_code, creator_id, title, status, tank_slots, ended_at)
+    VALUES ('EVT-WORKFLOW-SYNC', 'staff-workflow-sync', 'Sincronizacao Discord', 'pending_payment', 1, CURRENT_TIMESTAMP)
+  `).run().lastInsertRowid);
+  db.prepare(`
+    INSERT INTO event_reviews
+      (event_id, loot_total, repair, silver_bags, tax_percent, net_loot, status,
+       review_channel_id, review_message_id, finance_message_id)
+    VALUES (?, 0, 0, 0, 0, 0, 'pending_approval', 'review-channel-sync', 'review-message-sync', 'finance-message-sync')
+  `).run(eventId);
+
+  const reviewEdits = [];
+  const financeEdits = [];
+  const reviewMessage = {
+    id: 'review-message-sync',
+    components: [{ components: [{ customId: `event_review:submit:${eventId}` }] }],
+    async edit(payload) { reviewEdits.push(payload); }
+  };
+  const financeMessage = {
+    id: 'finance-message-sync',
+    components: [{ components: [{ customId: `event:approve:${eventId}` }] }],
+    async edit(payload) { financeEdits.push(payload); }
+  };
+  const channel = (message) => ({
+    messages: {
+      async fetch(argument) {
+        if (typeof argument === 'string') return argument === message.id ? message : null;
+        return new Map([[message.id, message]]);
+      }
+    }
+  });
+  const client = {
+    channels: {
+      async fetch(channelId) {
+        if (channelId === 'review-channel-sync') return channel(reviewMessage);
+        if (channelId === ids.channels.finance) return channel(financeMessage);
+        return null;
+      }
+    }
+  };
+
+  await events.syncEventWorkflowMessages(client, eventId);
+  assert.deepEqual(reviewEdits.at(-1).components, []);
+  assert.equal(financeEdits.at(-1).components.length, 1);
+
+  eventsRepo.updateEvent(eventId, { status: 'approved' });
+  await events.syncEventWorkflowMessages(client, eventId);
+  assert.deepEqual(reviewEdits.at(-1).components, []);
+  assert.deepEqual(financeEdits.at(-1).components, []);
 });
 
 test('portal solicita saque, avisa a staff e bloqueia duplicidade ou saldo insuficiente', async (t) => {

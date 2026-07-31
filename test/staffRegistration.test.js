@@ -17,7 +17,7 @@ const accountLinks = require('../src/modules/accounts/accountLinks.service');
 const repo = require('../src/modules/registration/registration.repository');
 const { createSession, SESSION_COOKIE } = require('../src/web/auth');
 const { createRequestHandler } = require('../src/web/server');
-const { confirmRegistration, getRegistrationQueue, previewRegistration } = require('../src/web/staff-registration.service');
+const { approveRosterMember, confirmRegistration, getRegistrationQueue, previewRegistration } = require('../src/web/staff-registration.service');
 
 migrate();
 test.after(() => {
@@ -74,6 +74,30 @@ function albionFetch({ name = 'HeroNotag', guildName = 'NoTag' } = {}) {
     }
   });
 }
+
+test('lista atual promove correspondência exata sem aguardar cadastro manual', async () => {
+  const member = memberFixture('roster-auto-1', [ids.roles.guest, ids.roles.noTag]);
+  member.user.username = 'AutoHero';
+  member.user.tag = 'AutoHero';
+  const client = clientFixture(member);
+
+  const result = await approveRosterMember(client, {
+    actorId: 'staff-roster',
+    discordId: member.id,
+    albionName: 'AutoHero',
+    matchType: 'automatic'
+  });
+
+  const user = repo.getUser(member.id);
+  assert.equal(result.albionName, 'AutoHero');
+  assert.equal(user.albion_name, 'AutoHero');
+  assert.equal(user.registration_status, 'member');
+  assert.equal(member.nickname, 'AutoHero');
+  assert.equal(member.roles.cache.has(ids.roles.member), true);
+  assert.equal(member.roles.cache.has(ids.roles.guest), false);
+  assert.equal(member.roles.cache.has(ids.roles.noTag), false);
+  assert.match(member.lastDm, /aplicado automaticamente/);
+});
 
 test('staff só aprova personagem que está na NoTag e atualiza Discord, banco e auditoria', async () => {
   const member = memberFixture('candidate-1');

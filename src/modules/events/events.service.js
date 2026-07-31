@@ -25,6 +25,8 @@ const roleConfigs = {
 };
 const eventRoles = Object.keys(roleConfigs);
 const eventReminderDeleteAfterMs = 5 * 60 * 1000;
+const eventVoiceMoveSettleMs = process.env.NODE_ENV === 'test' ? 0 : 2500;
+const eventVoiceMoveRetrySettleMs = process.env.NODE_ENV === 'test' ? 0 : 1200;
 const emojiRefs = {
   role: {
     tank: { name: 'Tank', id: '1517095771659436153' },
@@ -1293,6 +1295,48 @@ async function startEventWithGuild({ client, guild, eventId, actorId }) {
   return voice;
 }
 
+function waitForVoiceState(milliseconds) {
+  if (!milliseconds) return Promise.resolve();
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function returnEventMembersToWaiting(voice, waiting, eventCode) {
+  const members = voice?.members ? [...voice.members.values()] : [];
+  if (!members.length) return { moved: [], stranded: [] };
+  if (!waiting?.id) {
+    console.error(`[EVENTO] Sala Aguardando Evento indisponivel ao encerrar ${eventCode}.`);
+    return { moved: [], stranded: members };
+  }
+
+  const requested = [];
+  for (const member of members) {
+    const moved = await member.voice.setChannel(waiting.id)
+      .then(() => true)
+      .catch((error) => {
+        console.error(`[EVENTO] Falha ao devolver ${member.id} para ${waiting.id}:`, error);
+        return false;
+      });
+    if (moved) requested.push(member);
+  }
+
+  // O cliente do Discord precisa terminar a troca de RTC antes da sala anterior ser apagada.
+  await waitForVoiceState(eventVoiceMoveSettleMs);
+
+  const retry = members.filter((member) => member.voice?.channelId !== waiting.id);
+  for (const member of retry) {
+    await member.voice.setChannel(waiting.id).catch((error) => {
+      console.error(`[EVENTO] Segunda tentativa falhou para ${member.id} em ${waiting.id}:`, error);
+    });
+  }
+  if (retry.length) await waitForVoiceState(eventVoiceMoveRetrySettleMs);
+
+  const stranded = members.filter((member) => member.voice?.channelId !== waiting.id);
+  return {
+    moved: members.filter((member) => member.voice?.channelId === waiting.id),
+    stranded
+  };
+}
+
 async function finishEvent(interaction, eventId) {
   const event = repo.getEvent(eventId);
   if (!event || event.status !== 'running') throw new Error('Evento nao esta em andamento.');
@@ -1309,12 +1353,14 @@ async function finishEvent(interaction, eventId) {
 
   const voice = await interaction.guild.channels.fetch(event.voice_channel_id).catch(() => null);
   const waiting = await interaction.guild.channels.fetch(ids.channels.waitingVoice).catch(() => null);
-  if (voice?.members && waiting) {
-    for (const member of voice.members.values()) {
-      await member.voice.setChannel(waiting).catch(() => {});
-    }
+  const movement = await returnEventMembersToWaiting(voice, waiting, event.event_code);
+  if (!movement.stranded.length) {
+    await voice?.delete(`Evento ${event.event_code} finalizado`).catch(() => {});
+  } else {
+    console.error(
+      `[EVENTO] Sala ${event.voice_channel_id} preservada: ${movement.stranded.length} membro(s) ainda nao chegaram em ${ids.channels.waitingVoice}.`
+    );
   }
-  await voice?.delete(`Evento ${event.event_code} finalizado`).catch(() => {});
   const reviewedEvent = repo.getEvent(eventId);
   await deleteWarningMessage(interaction.client, reviewedEvent).catch(() => {});
 
@@ -1332,7 +1378,15 @@ async function cancelEvent(interaction, eventId, reason) {
     cancelled_by: interaction.user.id
   });
   const voice = event.voice_channel_id ? await interaction.guild.channels.fetch(event.voice_channel_id).catch(() => null) : null;
-  await voice?.delete(`Evento cancelado: ${cancelReason}`).catch(() => {});
+  const waiting = await interaction.guild.channels.fetch(ids.channels.waitingVoice).catch(() => null);
+  const movement = await returnEventMembersToWaiting(voice, waiting, event.event_code);
+  if (!movement.stranded.length) {
+    await voice?.delete(`Evento cancelado: ${cancelReason}`).catch(() => {});
+  } else {
+    console.error(
+      `[EVENTO] Sala ${event.voice_channel_id} preservada apos cancelamento: ${movement.stranded.length} membro(s) ainda conectado(s).`
+    );
+  }
   await deleteWarningMessage(interaction.client, event).catch(() => {});
   await removeWarningRole(interaction.guild, event).catch(() => {});
   audit.createAuditLog({
@@ -1387,7 +1441,7 @@ async function createPostEventReviewSpace(interaction, eventId) {
   repo.updateReviewMetadata(eventId, {
     review_channel_id: reviewChannel.id
   });
-  await reviewChannel.send({
+  const reviewMessage = await reviewChannel.send({
     content: [
       `Revisao do evento ${event.event_code}.`,
       'Anexe aqui o CSV do loot logger e prints complementares se precisar.',
@@ -1396,6 +1450,7 @@ async function createPostEventReviewSpace(interaction, eventId) {
     embeds: [reviewEmbed(eventId)],
     components: reviewComponents(eventId, 'review')
   });
+  repo.updateReviewMetadata(eventId, { review_message_id: reviewMessage.id });
   return reviewChannel;
 }
 
@@ -1471,6 +1526,83 @@ async function moveReviewChannelToClosed(client, eventId) {
   await channel.setParent(ids.categories.closedEvents, { lockPermissions: false }).catch(() => {});
   await channel.permissionOverwrites.edit(channel.guild.roles.everyone.id, { ViewChannel: false }).catch(() => {});
   return channel;
+}
+
+function workflowComponentIds(message) {
+  return (message?.components || []).flatMap((row) => row.components || [])
+    .map((component) => component.customId || component.custom_id)
+    .filter(Boolean);
+}
+
+function workflowComponentPrefixes(eventId, mode) {
+  if (mode === 'finance') {
+    return [`event:approve:${eventId}`, `event:return_review:${eventId}`];
+  }
+  return [
+    `event_review:edit:${eventId}`,
+    `event_review:add:${eventId}`,
+    `event_review:remove:${eventId}`,
+    `event_review:submit:${eventId}`
+  ];
+}
+
+async function findEventWorkflowMessage(client, { channelId, messageId, eventId, mode }) {
+  if (!channelId) return null;
+  const channel = await client.channels.fetch(channelId).catch(() => null);
+  if (!channel?.messages?.fetch) return null;
+
+  if (messageId) {
+    const stored = await channel.messages.fetch(messageId).catch(() => null);
+    if (stored) return stored;
+  }
+
+  const recent = await channel.messages.fetch({ limit: mode === 'finance' ? 100 : 30 }).catch(() => null);
+  if (!recent?.values) return null;
+  const expected = workflowComponentPrefixes(eventId, mode);
+  return [...recent.values()].find((message) => {
+    const idsFound = workflowComponentIds(message);
+    return expected.some((customId) => idsFound.includes(customId));
+  }) || null;
+}
+
+async function syncEventWorkflowMessages(client, eventId) {
+  const event = repo.getEvent(eventId);
+  let review = repo.getReview(eventId);
+  if (!event || !review) return { review: false, finance: false };
+
+  const reviewMessage = await findEventWorkflowMessage(client, {
+    channelId: review.review_channel_id,
+    messageId: review.review_message_id,
+    eventId,
+    mode: 'review'
+  });
+  if (reviewMessage) {
+    await reviewMessage.edit({
+      embeds: [reviewEmbed(eventId)],
+      components: event.status === 'review' ? reviewComponents(eventId, 'review') : []
+    }).catch(() => {});
+    if (review.review_message_id !== reviewMessage.id) {
+      review = repo.updateReviewMetadata(eventId, { review_message_id: reviewMessage.id });
+    }
+  }
+
+  const financeMessage = await findEventWorkflowMessage(client, {
+    channelId: ids.channels.finance,
+    messageId: review.finance_message_id,
+    eventId,
+    mode: 'finance'
+  });
+  if (financeMessage) {
+    await financeMessage.edit({
+      embeds: [reviewEmbed(eventId)],
+      components: event.status === 'pending_payment' ? reviewComponents(eventId, 'finance') : []
+    }).catch(() => {});
+    if (review.finance_message_id !== financeMessage.id) {
+      repo.updateReviewMetadata(eventId, { finance_message_id: financeMessage.id });
+    }
+  }
+
+  return { review: Boolean(reviewMessage), finance: Boolean(financeMessage) };
 }
 
 async function scheduleReviewChannelDeletion(client, eventId, hours = 14) {
@@ -1599,13 +1731,18 @@ async function returnEventToReview({ client, eventId, actorId }) {
     : null;
   if (channel) {
     await channel.setParent(ids.categories.activeEvents, { lockPermissions: false }).catch(() => {});
-    await channel.send({
+    const reviewMessage = await channel.send({
       content: `Evento devolvido pelo financeiro para o criador revisar. <@${event.creator_id}>`,
       embeds: [reviewEmbed(eventId)],
       components: reviewComponents(eventId, 'review'),
       allowedMentions: { users: [event.creator_id] }
     }).catch(() => {});
+    if (reviewMessage?.id) {
+      repo.updateReviewMetadata(eventId, { review_message_id: reviewMessage.id });
+    }
   }
+
+  await syncEventWorkflowMessages(client, eventId);
 
   audit.createAuditLog({ type: 'event_payment_returned_to_review', actorId, targetId: String(eventId), reason: event.event_code });
   return channel;
@@ -2550,6 +2687,7 @@ module.exports = {
   spectateEvent,
   startEvent,
   startEventWithGuild,
+  syncEventWorkflowMessages,
   syncEventPublication,
   updateCreatedEvent,
   worldBossMemberSlotOptions,

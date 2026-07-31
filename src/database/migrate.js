@@ -1583,6 +1583,49 @@ const migrations = [
           ON registration_staff_alerts (resolved_at, updated_at DESC);
       `);
     }
+  },
+  {
+    version: 55,
+    name: 'guild_roster_link_proposals',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS guild_roster_link_proposals (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          snapshot_id INTEGER NOT NULL,
+          discord_id TEXT NOT NULL,
+          albion_name TEXT NOT NULL,
+          matched_name TEXT,
+          match_score REAL NOT NULL DEFAULT 0,
+          status TEXT NOT NULL DEFAULT 'pending',
+          created_by TEXT,
+          message_id TEXT,
+          resolved_at TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(snapshot_id, discord_id, albion_name),
+          FOREIGN KEY (snapshot_id) REFERENCES member_snapshots(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_roster_link_proposals_pending
+          ON guild_roster_link_proposals (status, snapshot_id DESC, id DESC);
+
+        CREATE INDEX IF NOT EXISTS idx_roster_link_proposals_discord
+          ON guild_roster_link_proposals (discord_id, status, id DESC);
+      `);
+    }
+  },
+  {
+    version: 56,
+    name: 'event_workflow_message_tracking',
+    up(db) {
+      const columns = db.prepare('PRAGMA table_info(event_reviews)').all().map((column) => column.name);
+      if (!columns.includes('review_message_id')) {
+        db.exec('ALTER TABLE event_reviews ADD COLUMN review_message_id TEXT');
+      }
+      if (!columns.includes('finance_message_id')) {
+        db.exec('ALTER TABLE event_reviews ADD COLUMN finance_message_id TEXT');
+      }
+    }
   }
 ];
 

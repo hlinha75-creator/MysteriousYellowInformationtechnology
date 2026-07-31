@@ -202,12 +202,16 @@ async function submitStaffEventToFinance(client, input) {
   events.submitEventToFinance({ eventId: event.id, actorId: input.actorId });
   const reviewChannel = await events.moveReviewChannelToClosed(client, event.id);
   await events.postDpsMeterSummary(client, event.id);
-  await safeSend(client, ids.channels.finance, {
+  const financeMessage = await safeSend(client, ids.channels.finance, {
     content: `Evento #${event.id} enviado para aprovacao financeira pelo painel web por <@${input.actorId}>.${reviewChannel ? ` Revisao: <#${reviewChannel.id}>` : ''}`,
     embeds: [events.reviewEmbed(event.id)],
     components: events.reviewComponents(event.id, 'finance'),
     allowedMentions: { users: [input.actorId] }
   });
+  if (financeMessage?.id) {
+    eventsRepo.updateReviewMetadata(event.id, { finance_message_id: financeMessage.id });
+  }
+  await events.syncEventWorkflowMessages(client, event.id);
   return {
     event: eventsRepo.getEvent(event.id),
     reviewChannelId: reviewChannel?.id || null,
@@ -224,6 +228,7 @@ async function returnStaffEventToReview(client, input) {
     embeds: [events.reviewEmbed(event.id)],
     allowedMentions: { users: [input.actorId] }
   });
+  await events.syncEventWorkflowMessages(client, event.id);
   return {
     event: eventsRepo.getEvent(event.id),
     reviewChannelId: reviewChannel?.id || null,
@@ -235,6 +240,7 @@ async function approveStaffEventPayment(client, input) {
   const event = numericEvent(input.eventId);
   const context = await actorContext(client, input.actorId);
   const paymentResult = events.approveEventPayment({ eventId: event.id, actorId: input.actorId });
+  await events.syncEventWorkflowMessages(client, event.id);
   const transactions = Array.isArray(paymentResult) ? paymentResult : (paymentResult.transactions || []);
   const raidRewards = await events.grantRaidAvalonRewards({
     guild: context.guild,

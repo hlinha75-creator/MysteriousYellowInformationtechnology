@@ -25,6 +25,8 @@ const accountLinks = require('../modules/accounts/accountLinks.service');
 const lochMarket = require('../modules/community/lochMarket.service');
 const hideoutDefense = require('../modules/operations/hideoutDefense.service');
 const giveaways = require('../modules/giveaways/giveaways.service');
+const rosterAutoLink = require('../modules/members/rosterAutoLink.service');
+const { approveRosterMember } = require('../web/staff-registration.service');
 
 const pausedButtonScopes = new Set([
   'auction',
@@ -158,6 +160,7 @@ async function handleButton(interaction) {
   }
 
   if (scope === 'giveaway') return giveaways.handleButton(interaction);
+  if (scope === 'roster_link') return rosterAutoLink.handleProposalButton(interaction, approveRosterMember);
 
   if (scope === 'custom_event' && action === 'details') {
     const draft = customEventWizard.getDraft(id, interaction.user.id);
@@ -693,6 +696,9 @@ async function handleButton(interaction) {
       if (!can(interaction.member, 'approvePayment')) {
         return interaction.reply({ content: 'Voce nao tem permissao para aprovar pagamento.', flags: MessageFlags.Ephemeral });
       }
+      if (interaction.message?.id) {
+        eventsRepo.updateReviewMetadata(eventId, { finance_message_id: interaction.message.id });
+      }
       const current = eventsRepo.getEvent(eventId);
       if (!current || current.status !== 'pending_payment') {
         await interaction.message.edit({ components: [] }).catch(() => {});
@@ -700,6 +706,7 @@ async function handleButton(interaction) {
       }
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const paymentResult = events.approveEventPayment({ eventId, actorId: interaction.user.id });
+      await events.syncEventWorkflowMessages(interaction.client, eventId);
       const transactions = Array.isArray(paymentResult) ? paymentResult : (paymentResult.transactions || []);
       const raidRewards = await events.grantRaidAvalonRewards({ guild: interaction.guild, eventId, actorId: interaction.user.id });
       if (transactions.length > 0) {
@@ -735,6 +742,9 @@ async function handleButton(interaction) {
     if (action === 'return_review') {
       if (!can(interaction.member, 'approvePayment')) {
         return interaction.reply({ content: 'Voce nao tem permissao para devolver evento.', flags: MessageFlags.Ephemeral });
+      }
+      if (interaction.message?.id) {
+        eventsRepo.updateReviewMetadata(eventId, { finance_message_id: interaction.message.id });
       }
       const current = eventsRepo.getEvent(eventId);
       if (!current || current.status !== 'pending_payment') {
@@ -858,19 +868,26 @@ async function handleButton(interaction) {
 
     if (action === 'submit') {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      if (interaction.message?.id) {
+        eventsRepo.updateReviewMetadata(eventId, { review_message_id: interaction.message.id });
+      }
       events.submitEventToFinance({ eventId, actorId: interaction.user.id });
       const reviewChannel = await events.moveReviewChannelToClosed(interaction.client, eventId);
       await events.postDpsMeterSummary(interaction.client, eventId);
-      await safeSend(interaction.client, ids.channels.finance, {
+      const financeMessage = await safeSend(interaction.client, ids.channels.finance, {
         content: `Evento #${eventId} enviado para aprovacao financeira.${reviewChannel ? ` Revisao: <#${reviewChannel.id}>` : ''}`,
         embeds: [events.reviewEmbed(eventId)],
         components: events.reviewComponents(eventId, 'finance')
       });
+      if (financeMessage?.id) {
+        eventsRepo.updateReviewMetadata(eventId, { finance_message_id: financeMessage.id });
+      }
       await interaction.message.edit({
         content: `Evento #${eventId} enviado para aprovacao financeira.${reviewChannel ? ` Canal movido para finalizados: <#${reviewChannel.id}>` : ''}`,
         embeds: [events.reviewEmbed(eventId)],
         components: []
       });
+      await events.syncEventWorkflowMessages(interaction.client, eventId);
       return interaction.editReply({ content: 'Evento enviado ao financeiro para aprovacao.' });
     }
   }

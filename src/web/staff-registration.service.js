@@ -195,6 +195,50 @@ async function applyMemberRoles(member, albionName) {
   if (ids.roles.member) await member.roles.add(ids.roles.member, 'Cadastro aprovado pelo painel').catch(() => null);
 }
 
+async function approveRosterMember(client, { actorId, discordId, albionName, matchType = 'automatic' }) {
+  const cleanAlbionName = String(albionName || '').trim();
+  if (!cleanAlbionName) fail('Personagem da lista não informado.');
+  const { member } = await getGuildMember(client, discordId);
+  const current = repo.getUser(discordId);
+  const owner = repo.findUserByAlbionName(cleanAlbionName, discordId);
+  if (owner) fail(`O personagem ${cleanAlbionName} já está vinculado a outra conta Discord.`, 409);
+  if (current?.albion_name && normalize(current.albion_name) !== normalize(cleanAlbionName)) {
+    fail(`Essa conta Discord já está vinculada ao personagem ${current.albion_name}.`, 409);
+  }
+
+  repo.resolvePendingRegistrations({
+    discordId,
+    status: 'approved_member',
+    reviewedBy: actorId,
+    note: matchType === 'automatic'
+      ? 'Vínculo automático pela lista atual da guilda'
+      : 'Vínculo confirmado pelo próprio usuário'
+  });
+  repo.updateUserRegistration({
+    discordId,
+    discordName: memberDiscordName(member),
+    albionName: cleanAlbionName,
+    registrationStatus: 'member'
+  });
+  await applyMemberRoles(member, cleanAlbionName);
+  await clearStaffAlert(client, discordId);
+  if (matchType === 'automatic' && member?.send) {
+    await member.send(
+      `A lista atual da guilda confirmou uma correspondência exata com **${cleanAlbionName}**. Seu apelido foi atualizado e o cargo Membro foi aplicado automaticamente. Se essa conta não for sua, avise a staff.`
+    ).catch(() => null);
+  }
+  audit.createAuditLog({
+    type: matchType === 'automatic' ? 'roster_member_auto_linked' : 'roster_member_self_confirmed',
+    actorId,
+    targetId: discordId,
+    beforeValue: current?.registration_status || null,
+    afterValue: 'member',
+    reason: 'Lista atual de membros da guilda',
+    metadata: { albionName: cleanAlbionName, matchType }
+  });
+  return { member, albionName: cleanAlbionName };
+}
+
 async function logStaffResolution(client, { title, color, actorId, discordId, albionName, detail }) {
   const embed = baseEmbed(title).setColor(color).addFields(
     { name: 'Discord', value: `<@${discordId}> (${discordId})` },
@@ -333,6 +377,8 @@ async function manageStaffRegistration(client, input, options = {}) {
 
 module.exports = {
   EXPECTED_GUILD_NAME,
+  approveRosterMember,
+  applyMemberRoles,
   clearStaffAlert,
   confirmRegistration,
   getRegistrationQueue,

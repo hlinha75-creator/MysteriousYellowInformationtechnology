@@ -262,11 +262,14 @@ function renderMemberRosterPreview(preview) {
   document.querySelector('#member-roster-preview-content').hidden = false;
   document.querySelector('#member-roster-metrics').innerHTML = [
     metricCard('Membros no jogo', number.format(preview.memberCount), `${number.format(preview.onlineCount)} online`, '#5865f2'),
-    metricCard('Vinculados', number.format(preview.linkedCount), 'Personagem ligado ao Discord', '#23a55a'),
-    metricCard('Sem vínculo', number.format(preview.unlinkedCount), 'Na guilda, sem conta ligada', '#f0b232'),
-    metricCard('Fora da nova lista', number.format(preview.registeredOutside.length), 'Somente conferência', '#ed4245')
+    metricCard('Vínculo automático', number.format(preview.automaticCount), 'Nome exato e único no Discord', '#23a55a'),
+    metricCard('Pedir confirmação', number.format(preview.confirmationCount), 'Correspondência parecida por DM', '#f0b232'),
+    metricCard('Revisão da staff', number.format(preview.pendingMatchCount), 'Sem correspondência segura', '#ed4245')
   ].join('');
   document.querySelector('#member-roster-differences').innerHTML = [
+    rosterDifference('Promoções automáticas', preview.automaticMatches, 'positive'),
+    rosterDifference('Confirmações por DM', preview.confirmationMatches, 'warning'),
+    rosterDifference('Sem correspondência segura', preview.pendingMatches),
     rosterDifference('Entraram desde a lista anterior', preview.additions, 'positive'),
     rosterDifference('Saíram desde a lista anterior', preview.removals, 'negative'),
     rosterDifference('Na guilda sem vínculo Discord', preview.unlinked),
@@ -274,7 +277,13 @@ function renderMemberRosterPreview(preview) {
     ...(preview.duplicates.length ? [rosterDifference('Duplicados ignorados', preview.duplicates, 'warning')] : [])
   ].join('');
   setSummary('member-roster-preview-summary', preview.sample.length, preview.memberCount);
-  document.querySelector('#member-roster-preview-table').innerHTML = preview.sample.map((row) => `<tr><td class="primary-cell">${escapeHtml(row.characterName)}</td><td>${escapeHtml(row.lastSeen || '—')}</td><td>${escapeHtml(row.roles.join(', ') || '—')}</td><td>${row.linked ? '<span class="badge member">Vinculado</span>' : '<span class="badge pending">Sem Discord</span>'}</td></tr>`).join('') || emptyRow(4);
+  const matchBadge = (row) => {
+    if (row.matchType === 'linked') return '<span class="badge member">Já vinculado</span>';
+    if (row.matchType === 'automatic') return `<span class="badge member">Automático: ${escapeHtml(row.match?.discordName || '')}</span>`;
+    if (row.matchType === 'confirmation') return `<span class="badge pending">Confirmar: ${escapeHtml(row.match?.discordName || '')}</span>`;
+    return '<span class="badge rejected">Revisão da staff</span>';
+  };
+  document.querySelector('#member-roster-preview-table').innerHTML = preview.sample.map((row) => `<tr><td class="primary-cell">${escapeHtml(row.characterName)}</td><td>${escapeHtml(row.lastSeen || '—')}</td><td>${escapeHtml(row.roles.join(', ') || '—')}</td><td>${matchBadge(row)}</td></tr>`).join('') || emptyRow(4);
 }
 
 async function analyzeMemberRoster() {
@@ -322,7 +331,7 @@ async function confirmMemberRoster() {
     showRegistrationFeedback(error.message, true);
   } finally {
     button.disabled = false;
-    button.textContent = 'Confirmar lista atual';
+    button.textContent = 'Confirmar e automatizar';
   }
 }
 
