@@ -254,6 +254,21 @@ function getReview(eventId) {
   return getDatabase().prepare('SELECT * FROM event_reviews WHERE event_id = ?').get(eventId);
 }
 
+function listWorkflowReviews(limit = 200) {
+  return getDatabase()
+    .prepare(`
+      SELECT er.event_id, e.status
+      FROM event_reviews er
+      JOIN events e ON e.id = er.event_id
+      WHERE er.review_message_id IS NOT NULL
+         OR er.finance_message_id IS NOT NULL
+         OR e.status IN ('review', 'pending_payment')
+      ORDER BY er.event_id DESC
+      LIMIT ?
+    `)
+    .all(Math.max(1, Math.min(Number(limit) || 200, 500)));
+}
+
 function updateReviewMetadata(eventId, patch) {
   const entries = Object.entries(patch).filter(([, value]) => value !== undefined);
   if (entries.length === 0) return getReview(eventId);
@@ -629,6 +644,7 @@ module.exports = {
   listRaidAvalonCareerByWeapon,
   listRaidAvalonParticipants,
   listWorldBossAssignments,
+  listWorkflowReviews,
   markReviewApproved,
   refreshParticipantSeconds,
   removeParticipant,

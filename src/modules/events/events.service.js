@@ -1605,6 +1605,24 @@ async function syncEventWorkflowMessages(client, eventId) {
   return { review: Boolean(reviewMessage), finance: Boolean(financeMessage) };
 }
 
+async function reconcileEventWorkflowMessages(client, limit = 200) {
+  const reviews = repo.listWorkflowReviews(limit);
+  const result = { checked: reviews.length, review: 0, finance: 0, failed: 0 };
+
+  for (const item of reviews) {
+    try {
+      const synced = await syncEventWorkflowMessages(client, item.event_id);
+      if (synced.review) result.review += 1;
+      if (synced.finance) result.finance += 1;
+    } catch (error) {
+      result.failed += 1;
+      console.error(`Falha ao sincronizar mensagens do evento ${item.event_id}:`, error);
+    }
+  }
+
+  return result;
+}
+
 async function scheduleReviewChannelDeletion(client, eventId, hours = 14) {
   const review = repo.getReview(eventId);
   if (!review?.review_channel_id) return;
@@ -2673,6 +2691,7 @@ module.exports = {
   raidWeaponSuggestions,
   refreshEventMessage,
   refreshRaidAvalonCareerPanel,
+  reconcileEventWorkflowMessages,
   refreshRunningEventMessages,
   removeWorldBossSlot,
   removeParticipantReview,

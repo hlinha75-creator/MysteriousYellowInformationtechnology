@@ -59,6 +59,13 @@ client.once('clientReady', () => {
     }
   }
   events.cleanupExpiredReviewChannels(client).catch((error) => console.error('Falha ao limpar canais de revisao:', error));
+  events.reconcileEventWorkflowMessages(client)
+    .then((result) => {
+      if (result.checked > 0) {
+        console.log(`[EVENTOS] Mensagens sincronizadas no inicio: ${result.review} revisao, ${result.finance} financeiro, ${result.failed} falha(s).`);
+      }
+    })
+    .catch((error) => console.error('Falha ao reconciliar mensagens de eventos:', error));
   balanceBackup.postDailyBackupIfNeeded(client).catch((error) => console.error('Falha ao postar backup diario de saldos:', error));
   operations.postDailyAdminReportIfNeeded(client).catch((error) => console.error('Falha ao enviar relatorio diario ADM:', error));
   operations.postReleaseAnnouncementIfNeeded(client).catch((error) => console.error('Falha ao anunciar atualizacao do bot:', error));

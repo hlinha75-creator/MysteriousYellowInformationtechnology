@@ -594,7 +594,10 @@ test('sincroniza botoes antigos de revisao e financeiro com o status do evento',
   assert.equal(financeEdits.at(-1).components.length, 1);
 
   eventsRepo.updateEvent(eventId, { status: 'approved' });
-  await events.syncEventWorkflowMessages(client, eventId);
+  const reconciled = await events.reconcileEventWorkflowMessages(client);
+  assert.ok(reconciled.checked >= 1);
+  assert.ok(reconciled.review >= 1);
+  assert.ok(reconciled.finance >= 1);
   assert.deepEqual(reviewEdits.at(-1).components, []);
   assert.deepEqual(financeEdits.at(-1).components, []);
 });

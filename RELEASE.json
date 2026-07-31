@@ -1,7 +1,7 @@
 {
   "enabled": true,
-  "version": "1.33",
-  "title": "Sincronização de eventos entre site e Discord",
+  "version": "1.34",
+  "title": "Reconciliação automática de eventos no Discord",
   "notes": [
     "A importação da lista atual agora procura correspondências exatas e únicas entre o personagem Albion e os nomes usados no Discord.",
     "Correspondências exatas promovem automaticamente para Membro, removem Convidado/Sem Tag, ajustam o apelido e avisam o usuário por DM.",
@@ -25,6 +25,8 @@
     "Ao iniciar um evento pelo site, o bot também reconhece participantes conectados quando apenas o identificador da call está em cache e os move para a sala criada.",
     "Ações concluídas pelo site agora sincronizam as mensagens de revisão e financeiro no Discord.",
     "Botões antigos são removidos automaticamente quando o evento muda de etapa, evitando cliques duplicados e mensagens de erro.",
-    "As mensagens de revisão e financeiro passam a ter seus identificadores salvos para manter site, banco e Discord alinhados."
+    "As mensagens de revisão e financeiro passam a ter seus identificadores salvos para manter site, banco e Discord alinhados.",
+    "Ao reiniciar, o bot verifica revisões e pagamentos recentes e corrige automaticamente os botões antigos no Discord.",
+    "Eventos já aprovados ou devolvidos deixam de exibir ações incompatíveis mesmo quando a mudança ocorreu antes do reinício."
   ]
 }
