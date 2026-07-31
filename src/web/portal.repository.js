@@ -8,6 +8,14 @@ function placeholders(values) {
   return values.map(() => '?').join(',');
 }
 
+const portalRoleLabels = { tank: 'Tank', healer: 'Healer', support: 'Suporte', dps: 'DPS' };
+
+function customSlotLabel(event, slot) {
+  const isLooter = slot.role === 'dps' && Number(slot.slot_index) === Number(event.dps_slots);
+  const baseLabel = isLooter ? 'Looter' : `${portalRoleLabels[slot.role] || slot.role} ${slot.slot_index}`;
+  return slot.slot_label ? `${baseLabel} - ${slot.slot_label}` : baseLabel;
+}
+
 function getPortalData(discordId, accessLevel = 'guest', privileged = false) {
   const db = getDatabase();
   const link = accountLinks.linkInfo(discordId);
@@ -92,7 +100,7 @@ function getPortalData(discordId, accessLevel = 'guest', privileged = false) {
 
   const openEventIds = eventRows.map((event) => event.id);
   const openParticipants = openEventIds.length ? db.prepare(`
-    SELECT ep.event_id, ep.discord_id, ep.role, ep.is_spectator, ep.joined_at,
+    SELECT ep.event_id, ep.discord_id, ep.role, ep.is_spectator, ep.custom_slot_index, ep.joined_at,
            COALESCE(u.albion_name, u.discord_name, ep.discord_id) AS display_name
     FROM event_participants ep
     LEFT JOIN users u ON u.discord_id = ep.discord_id
@@ -106,6 +114,14 @@ function getPortalData(discordId, accessLevel = 'guest', privileged = false) {
     UNION ALL
     SELECT event_id, 'custom' AS mode FROM custom_events WHERE event_id IN (${placeholders(openEventIds)})
   `).all(...openEventIds, ...openEventIds, ...openEventIds).map((row) => [row.event_id, row.mode]) : []);
+  const customEventSlots = openEventIds.length ? db.prepare(`
+    SELECT event_id, role, slot_index, slot_label
+    FROM custom_event_slots
+    WHERE event_id IN (${placeholders(openEventIds)})
+    ORDER BY event_id,
+      CASE role WHEN 'tank' THEN 1 WHEN 'healer' THEN 2 WHEN 'support' THEN 3 WHEN 'dps' THEN 4 ELSE 99 END,
+      slot_index
+  `).all(...openEventIds) : [];
   const roleKeys = ['tank', 'healer', 'support', 'dps'];
   const events = eventRows.map((event) => {
     const eventParticipants = openParticipants.filter((participant) => participant.event_id === event.id);
@@ -118,11 +134,32 @@ function getPortalData(discordId, accessLevel = 'guest', privileged = false) {
       return [role, { slots, used, available: Math.max(0, slots - used) }];
     }));
     const configuredCapacity = roleKeys.reduce((total, role) => total + roles[role].slots, 0);
+    const signupMode = specialEventModes.get(event.id) || 'standard';
+    const customSlots = signupMode === 'custom'
+      ? customEventSlots
+        .filter((slot) => slot.event_id === event.id)
+        .map((slot) => {
+          const occupant = activeParticipants.find((participant) => (
+            participant.role === slot.role
+            && Number(participant.custom_slot_index) === Number(slot.slot_index)
+          ));
+          const current = Boolean(occupant && linkedIds.includes(occupant.discord_id));
+          return {
+            role: slot.role,
+            slotIndex: Number(slot.slot_index),
+            label: customSlotLabel(event, slot),
+            available: !occupant || current,
+            current
+          };
+        })
+        .filter((slot) => slot.available)
+      : [];
     return {
       ...event,
       capacity: Math.min(MAX_PARTICIPANTS, configuredCapacity || MAX_PARTICIPANTS),
-      signupMode: specialEventModes.get(event.id) || 'standard',
+      signupMode,
       roles,
+      customSlots,
       ownParticipation,
       participantList: activeParticipants,
       spectatorList: spectators

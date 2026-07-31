@@ -239,6 +239,76 @@ test('portal permite participar, trocar para espectador e respeita o limite de 2
   assert.equal(rejected.status, 403);
 });
 
+test('portal permite escolher vagas nomeadas de eventos personalizados', async (t) => {
+  const db = getDatabase();
+  const discordId = 'portal-custom-event-member';
+  db.prepare("INSERT OR REPLACE INTO users (discord_id, discord_name, albion_name, registration_status) VALUES (?, 'Membro Personalizado', 'HeroiPersonalizado', 'member')").run(discordId);
+  const customEvent = db.prepare(`
+    INSERT INTO events (event_code, creator_id, title, tank_slots, healer_slots, support_slots, dps_slots)
+    VALUES ('EVT-PORTAL-CUSTOM', 'staff', 'Evento personalizado pelo portal', 1, 1, 1, 2)
+  `).run().lastInsertRowid;
+  eventsRepo.createCustomEventMeta({
+    eventId: customEvent,
+    eventDay: '31/07',
+    timeRange: '13:30 UTC',
+    lootRules: 'Loot split',
+    consumables: 'T8/T9',
+    mountRequirement: '120%',
+    slots: [
+      { role: 'tank', index: 1, value: 'INCUBUS' },
+      { role: 'healer', index: 1, value: 'QUEIJA-SANTA' },
+      { role: 'support', index: 1, value: 'CHUVA-SOMBRAS' },
+      { role: 'dps', index: 1, value: 'FURA-BRUMA' },
+      { role: 'dps', index: 2, value: 'FURA-BRUMA' }
+    ]
+  });
+
+  const member = {
+    id: discordId,
+    roles: { cache: new Map([[ids.roles.member, {}]]) },
+    voice: { channel: null, channelId: null }
+  };
+  const guild = { ownerId: 'owner', members: { cache: new Map([[discordId, member]]), async fetch() { return member; } } };
+  const client = { guilds: { cache: new Map([[ids.guildId, guild]]), async fetch() { return guild; } } };
+  const server = require('node:http').createServer(createRequestHandler(client));
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const token = createPortalSession({ id: discordId, username: 'Membro Personalizado' }, process.env.DASHBOARD_SESSION_SECRET, { accessLevel: 'member' });
+  const portalSession = readPortalSession(token, process.env.DASHBOARD_SESSION_SECRET);
+  const headers = {
+    Cookie: `${PORTAL_SESSION_COOKIE}=${token}`,
+    Origin: new URL(env.dashboardBaseUrl).origin,
+    'Content-Type': 'application/x-www-form-urlencoded'
+  };
+
+  const portalResponse = await fetch(`${base}/api/portal`, { headers: { Cookie: `${PORTAL_SESSION_COOKIE}=${token}` } });
+  const portal = await portalResponse.json();
+  const eventBeforeJoin = portal.events.find((event) => event.id === customEvent);
+  assert.equal(eventBeforeJoin.signupMode, 'custom');
+  assert.equal(eventBeforeJoin.customSlots.find((slot) => slot.role === 'tank').label, 'Tank 1 - INCUBUS');
+
+  const joinResponse = await fetch(`${base}/api/portal/events/participation`, {
+    method: 'POST',
+    headers,
+    body: new URLSearchParams({
+      csrf: portalSession.csrf,
+      eventId: customEvent,
+      action: 'join',
+      role: 'tank',
+      slotIndex: '1'
+    })
+  });
+  const joined = await joinResponse.json();
+  assert.equal(joinResponse.status, 200);
+  assert.equal(joined.result.action, 'participant');
+  assert.equal(joined.result.slotIndex, 1);
+  const eventAfterJoin = joined.portal.events.find((event) => event.id === customEvent);
+  assert.equal(eventAfterJoin.ownParticipation.role, 'tank');
+  assert.equal(eventAfterJoin.ownParticipation.custom_slot_index, 1);
+  assert.equal(eventAfterJoin.customSlots.find((slot) => slot.current).label, 'Tank 1 - INCUBUS');
+});
+
 test('portal respeita eventos públicos, exclusivos de membros e internos da staff', async (t) => {
   const db = getDatabase();
   const guestId = 'portal-audience-guest';
@@ -391,6 +461,7 @@ test('inicio pelo site move participante conectado mesmo sem objeto de canal de 
   const db = getDatabase();
   const staffId = 'staff-event-start-web';
   const participantId = 'participant-event-start-web';
+  const spectatorId = 'spectator-event-start-web';
   const eventId = Number(db.prepare(`
     INSERT INTO events (event_code, creator_id, title, status, audience, tank_slots)
     VALUES ('EVT-WEB-START', ?, 'Inicio pelo site', 'created', 'staff', 1)
@@ -399,8 +470,13 @@ test('inicio pelo site move participante conectado mesmo sem objeto de canal de 
     INSERT INTO event_participants (event_id, discord_id, role)
     VALUES (?, ?, 'tank')
   `).run(eventId, participantId);
+  db.prepare(`
+    INSERT INTO event_participants (event_id, discord_id, role, is_spectator)
+    VALUES (?, ?, 'spectator', 1)
+  `).run(eventId, spectatorId);
 
-  const moves = [];
+  const participantMoves = [];
+  const spectatorMoves = [];
   const staffMember = { id: staffId, roles: { cache: new Map([[ids.roles.staff, {}]]) }, voice: { channelId: null, channel: null } };
   const participantMember = {
     id: participantId,
@@ -408,10 +484,23 @@ test('inicio pelo site move participante conectado mesmo sem objeto de canal de 
     voice: {
       channelId: ids.channels.waitingVoice,
       channel: null,
-      async setChannel(channelId) { moves.push(channelId); this.channelId = channelId; }
+      async setChannel(channelId) { participantMoves.push(channelId); this.channelId = channelId; }
     }
   };
-  const members = new Map([[staffId, staffMember], [participantId, participantMember]]);
+  const spectatorMember = {
+    id: spectatorId,
+    roles: { cache: new Map([[ids.roles.staff, {}]]) },
+    voice: {
+      channelId: ids.channels.waitingVoice,
+      channel: null,
+      async setChannel(channelId) { spectatorMoves.push(channelId); this.channelId = channelId; }
+    }
+  };
+  const members = new Map([
+    [staffId, staffMember],
+    [participantId, participantMember],
+    [spectatorId, spectatorMember]
+  ]);
   const voice = { id: 'event-voice-from-site', name: 'Inicio pelo site' };
   const guild = {
     ownerId: 'owner',
@@ -423,8 +512,10 @@ test('inicio pelo site move participante conectado mesmo sem objeto de canal de 
   const result = await startStaffEvent(client, { actorId: staffId, eventId });
   assert.equal(result.event.status, 'running');
   assert.equal(result.voiceChannelId, voice.id);
-  assert.deepEqual(moves, [voice.id]);
+  assert.deepEqual(participantMoves, [voice.id]);
+  assert.deepEqual(spectatorMoves, [voice.id]);
   assert.ok(eventsRepo.getOpenVoiceSession({ eventId, discordId: participantId }));
+  assert.equal(eventsRepo.getOpenVoiceSession({ eventId, discordId: spectatorId }), undefined);
 });
 
 test('finalizacao confirma retorno para Aguardando Evento antes de apagar a sala', async () => {

@@ -31,7 +31,7 @@ async function interactionFor(client, discordId) {
   return { client, guild, member, user: { id: discordId } };
 }
 
-async function changePortalParticipation(client, { discordId, accessLevel = 'guest', privileged = false, eventId, action, role }) {
+async function changePortalParticipation(client, { discordId, accessLevel = 'guest', privileged = false, eventId, action, role, slotIndex }) {
   const numericEventId = Number(eventId);
   if (!Number.isInteger(numericEventId) || numericEventId <= 0) throw actionError('Evento inválido.');
 
@@ -61,11 +61,6 @@ async function changePortalParticipation(client, { discordId, accessLevel = 'gue
   if (action !== 'join') throw actionError('Ação de evento inválida.');
   if (!STANDARD_ROLES.has(role)) throw actionError('Escolha uma função válida.');
 
-  const signupMode = specialSignupMode(numericEventId);
-  if (signupMode !== 'standard') {
-    throw actionError('Este evento possui vagas específicas. Escolha sua vaga pelo painel do evento no Discord.', 409);
-  }
-
   const participants = eventsRepo.listParticipants(numericEventId);
   const current = participants.find((participant) => participant.discord_id === discordId);
   const activeCount = participants.filter((participant) => !participant.is_spectator).length;
@@ -76,6 +71,27 @@ async function changePortalParticipation(client, { discordId, accessLevel = 'gue
       automatic: true,
       message: 'As 20 vagas de participante estão ocupadas. Você entrou automaticamente como espectador.'
     };
+  }
+
+  const signupMode = specialSignupMode(numericEventId);
+  if (signupMode === 'custom') {
+    const numericSlotIndex = Number(slotIndex);
+    if (!Number.isInteger(numericSlotIndex) || numericSlotIndex <= 0) {
+      throw actionError('Escolha uma vaga válida.');
+    }
+    const slot = await events.joinCustomEventSlot(interaction, numericEventId, role, numericSlotIndex);
+    return {
+      action: 'participant',
+      role,
+      slotIndex: numericSlotIndex,
+      slotLabel: slot.slot_label || null,
+      message: event.status === 'running'
+        ? 'Vaga atualizada. Se estiver em outra chamada de voz, o bot tentará movê-lo para o evento.'
+        : 'Vaga confirmada. Você pode trocar de função enquanto houver vaga.'
+    };
+  }
+  if (signupMode !== 'standard') {
+    throw actionError('Este evento possui uma composição especial que ainda deve ser escolhida pelo painel do Discord.', 409);
   }
 
   await events.joinEvent(interaction, numericEventId, role);

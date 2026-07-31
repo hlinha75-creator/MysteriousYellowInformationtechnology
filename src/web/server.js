@@ -277,7 +277,8 @@ function createRequestHandler(client, options = {}) {
             privileged: access.privileged,
             eventId: form.get('eventId'),
             action: form.get('action'),
-            role: form.get('role')
+            role: form.get('role'),
+            slotIndex: form.get('slotIndex')
           });
           const renewedPortal = createPortalSession(portalSession, env.dashboardSessionSecret, access);
           const renewedMaxAge = access.privileged ? PORTAL_PRIVILEGED_MAX_AGE_SECONDS : PORTAL_MEMBER_MAX_AGE_SECONDS;

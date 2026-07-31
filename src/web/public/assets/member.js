@@ -111,16 +111,29 @@ function eventPeople(event) {
 function eventActions(event) {
   const own = event.ownParticipation;
   const isSpectator = Boolean(own?.is_spectator);
-  const isSpecial = event.signupMode !== 'standard';
+  const isCustom = event.signupMode === 'custom';
+  const isDiscordOnly = !['standard', 'custom'].includes(event.signupMode);
   const options = Object.entries(event.roles || {}).map(([role, availability]) => {
     const ownRole = own && !isSpectator && own.role === role;
     const disabled = availability.available <= 0 && !ownRole;
     return `<option value="${escapeHtml(role)}" ${ownRole ? 'selected' : ''} ${disabled ? 'disabled' : ''}>${escapeHtml(roleLabel(role))} — ${integer.format(availability.available)} livre(s)</option>`;
   }).join('');
-  const current = own ? `<div class="event-current ${isSpectator ? 'spectator' : ''}">Sua inscrição: <strong>${escapeHtml(isSpectator ? 'Espectador' : roleLabel(own.role))}</strong></div>` : '';
-  const participantControl = isSpecial
-    ? '<p class="event-special-note">Este evento usa vagas específicas. Escolha a composição pelo painel do Discord.</p>'
-    : `<label class="event-role-field" for="event-role-${event.id}"><span>Função</span><select id="event-role-${event.id}">${options}</select></label><button class="button button-primary event-action" type="button" data-event-id="${event.id}" data-event-action="join">${own && !isSpectator ? 'Atualizar função' : 'Participar'}</button>`;
+  const customOptions = (event.customSlots || []).map((slot) => (
+    `<option value="${escapeHtml(`${slot.role}|${slot.slotIndex}`)}" ${slot.current ? 'selected' : ''}>${escapeHtml(slot.label)}</option>`
+  )).join('');
+  const currentSlot = (event.customSlots || []).find((slot) => slot.current);
+  const currentLabel = isSpectator ? 'Espectador' : (currentSlot?.label || roleLabel(own?.role));
+  const current = own ? `<div class="event-current ${isSpectator ? 'spectator' : ''}">Sua inscrição: <strong>${escapeHtml(currentLabel)}</strong></div>` : '';
+  let participantControl;
+  if (isCustom && customOptions) {
+    participantControl = `<label class="event-role-field" for="event-slot-${event.id}"><span>Função e equipamento</span><select id="event-slot-${event.id}">${customOptions}</select></label><button class="button button-primary event-action" type="button" data-event-id="${event.id}" data-event-action="join">${own && !isSpectator ? 'Atualizar função' : 'Participar'}</button>`;
+  } else if (isCustom) {
+    participantControl = '<p class="event-special-note">Não há vagas livres neste momento. Você ainda pode entrar como espectador.</p>';
+  } else if (isDiscordOnly) {
+    participantControl = '<p class="event-special-note">Este evento usa uma composição especial que ainda deve ser escolhida pelo painel do Discord.</p>';
+  } else {
+    participantControl = `<label class="event-role-field" for="event-role-${event.id}"><span>Função</span><select id="event-role-${event.id}">${options}</select></label><button class="button button-primary event-action" type="button" data-event-id="${event.id}" data-event-action="join">${own && !isSpectator ? 'Atualizar função' : 'Participar'}</button>`;
+  }
   return `<div class="event-signup">${current}${participantControl}<button class="button button-secondary event-action" type="button" data-event-id="${event.id}" data-event-action="spectate" ${isSpectator ? 'disabled' : ''}>${isSpectator ? 'Você é espectador' : 'Entrar como espectador'}</button><small>Espectadores não ocupam vaga nem recebem loot.</small></div>`;
 }
 
@@ -145,14 +158,22 @@ async function changeEventParticipation(button) {
   if (!state.session?.csrf) return showEventFeedback('Sua sessão precisa ser renovada. Saia e entre novamente.', true);
   const eventId = button.dataset.eventId;
   const action = button.dataset.eventAction;
-  const role = action === 'join' ? document.querySelector(`#event-role-${eventId}`)?.value : '';
+  const event = state.data?.events?.find((candidate) => String(candidate.id) === String(eventId));
+  let role = '';
+  let slotIndex = '';
+  if (action === 'join' && event?.signupMode === 'custom') {
+    const selectedSlot = document.querySelector(`#event-slot-${eventId}`)?.value || '';
+    [role, slotIndex] = selectedSlot.split('|');
+  } else if (action === 'join') {
+    role = document.querySelector(`#event-role-${eventId}`)?.value || '';
+  }
   button.disabled = true;
   button.classList.add('busy');
   try {
     const response = await fetch('/api/portal/events/participation', {
       method: 'POST',
       headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ csrf: state.session.csrf, eventId, action, role })
+      body: new URLSearchParams({ csrf: state.session.csrf, eventId, action, role, slotIndex })
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(body.error || 'Não foi possível atualizar sua participação.');

@@ -1275,8 +1275,11 @@ async function startEventWithGuild({ client, guild, eventId, actorId }) {
   repo.updateEvent(eventId, { status: 'running', voice_channel_id: voice.id, started_at: now });
   const startedEvent = repo.getEvent(eventId);
   await deleteWarningMessage(client, startedEvent).catch(() => {});
-  const participants = repo.listParticipants(eventId).filter((participant) => !participant.is_spectator);
-  for (const participant of participants) {
+  // Todos os inscritos acompanham o evento na mesma sala de voz. Espectadores
+  // sao movidos junto com o grupo, mas nao iniciam sessao e continuam fora do
+  // tempo contabilizado e da divisao do loot.
+  const registrations = repo.listParticipants(eventId);
+  for (const participant of registrations) {
     const member = guild.members.cache?.get(participant.discord_id)
       || await guild.members.fetch(participant.discord_id).catch(() => null);
     const connectedChannelId = member?.voice?.channelId || member?.voice?.channel?.id || null;
@@ -1287,7 +1290,9 @@ async function startEventWithGuild({ client, guild, eventId, actorId }) {
         console.error(`[EVENTO] Nao foi possivel mover ${participant.discord_id} para ${voice.id}:`, error);
         return false;
       });
-    if (moved) repo.startVoiceSession({ eventId, discordId: participant.discord_id, joinedAt: now });
+    if (moved && !participant.is_spectator) {
+      repo.startVoiceSession({ eventId, discordId: participant.discord_id, joinedAt: now });
+    }
   }
 
   audit.createAuditLog({ type: 'event_started', actorId, targetId: String(eventId), afterValue: voice.id });

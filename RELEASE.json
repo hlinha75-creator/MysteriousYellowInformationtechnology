@@ -1,8 +1,14 @@
 {
   "enabled": true,
-  "version": "1.34",
-  "title": "Reconciliação automática de eventos no Discord",
+  "version": "1.36",
+  "title": "Espectadores acompanham a call do evento",
   "notes": [
+    "Ao iniciar um evento pelo site ou pelo Discord, espectadores inscritos e conectados em voz agora também são movidos para a sala do evento.",
+    "Espectadores continuam sem ocupar vaga, sem contabilizar tempo de participação e sem receber parte do loot.",
+    "Eventos personalizados agora exibem no portal as mesmas vagas nomeadas publicadas no Discord, como Tank - INCUBUS e Healer - QUEIJA-SANTA.",
+    "Membros podem entrar ou trocar de vaga personalizada diretamente pelo site; a composição da mensagem no Discord é atualizada automaticamente.",
+    "Vagas já ocupadas por outras pessoas não aparecem como disponíveis, enquanto a vaga atual do próprio usuário continua visível para troca.",
+    "Eventos World Boss e Avalon continuam usando seus painéis especializados no Discord.",
     "A importação da lista atual agora procura correspondências exatas e únicas entre o personagem Albion e os nomes usados no Discord.",
     "Correspondências exatas promovem automaticamente para Membro, removem Convidado/Sem Tag, ajustam o apelido e avisam o usuário por DM.",
     "Nomes apenas parecidos recebem uma confirmação por DM com botões Sim e Não; nenhuma promoção aproximada acontece sem consentimento.",
