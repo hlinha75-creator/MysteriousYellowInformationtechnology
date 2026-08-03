@@ -31,10 +31,10 @@ jobs:
 
     steps:
       - name: Baixar codigo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Configurar Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -43,6 +43,10 @@ jobs:
         run: npm ci
 
       - name: Executar testes
+        env:
+          NODE_ENV: test
+          DASHBOARD_SESSION_SECRET: github-actions-test-secret-not-production
+          DASHBOARD_BASE_URL: http://127.0.0.1:8080
         run: npm test
 
       - name: Criar pacote da Discloud
