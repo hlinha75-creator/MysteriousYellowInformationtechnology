@@ -8,5 +8,10 @@ node_modules/
 data/*.sqlite
 data/*.sqlite-*
 data/backups/
+data/manual-download/
 *.log
 test/
+docs/
+data/reports/
+MEMORY.md
+README.md

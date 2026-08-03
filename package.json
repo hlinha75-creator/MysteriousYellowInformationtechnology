@@ -7,6 +7,8 @@
   "scripts": {
     "start": "node --no-warnings src/index.js",
     "test": "node --test",
+    "test:syntax": "node scripts/checkSyntax.js",
+    "test:coverage": "node --test --experimental-test-coverage --test-coverage-lines=70 --test-coverage-functions=65 --test-coverage-branches=65",
     "deploy:commands": "node --no-warnings scripts/deployCommands.js",
     "clear:commands": "node --no-warnings scripts/clearCommands.js",
     "audit:channels": "node --no-warnings scripts/auditChannels.js",
@@ -14,6 +16,7 @@
     "rename:channels": "node --no-warnings scripts/renameChannels.js",
     "import:members": "node --no-warnings scripts/importMemberSnapshot.js",
     "backup:db": "node --no-warnings scripts/backupDatabase.js",
+    "backup:prepare-download": "node --no-warnings scripts/prepareManualBackup.js",
     "restore:db": "node --no-warnings scripts/restoreDatabase.js",
     "restore:campaign900m": "node --no-warnings scripts/restoreCampaign900mSnapshot.js"
   },
@@ -21,7 +24,7 @@
     "@discordjs/builders": "^1.8.2",
     "@discordjs/voice": "^0.19.2",
     "better-sqlite3": "^11.9.1",
-    "discord.js": "^14.15.3",
+    "discord.js": "^14.27.0",
     "dotenv": "^16.4.5",
     "libsodium-wrappers": "^0.7.16",
     "opusscript": "^0.0.8"

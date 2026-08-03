@@ -66,7 +66,13 @@ function backupDatabase(reason = 'manual') {
 
   const safeReason = reason.replace(/[^a-z0-9_-]/gi, '_').slice(0, 50);
   const backupPath = path.join(backupDir, `notag-${timestamp()}-${safeReason}.sqlite`);
-  fs.copyFileSync(databasePath, backupPath);
+  const source = new Database(databasePath, { readonly: true, fileMustExist: true });
+  try {
+    const escapedBackupPath = backupPath.replace(/'/g, "''");
+    source.exec(`VACUUM INTO '${escapedBackupPath}'`);
+  } finally {
+    source.close();
+  }
   try {
     pruneBackups(backupDir);
   } catch (error) {

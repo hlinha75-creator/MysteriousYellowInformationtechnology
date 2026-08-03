@@ -163,7 +163,7 @@ Cuidados:
 - confirme ID correto no Discord;
 - mantenha nome legivel;
 - rode `/setup` se painel depender do canal;
-- rode `/auditar_canais` para conferir.
+- rode `npm run audit:channels` para conferir.
 
 ## Fluxos Que Exigem Mais Cuidado
 
@@ -255,10 +255,9 @@ Atualize `docs/` quando:
 - adicionar dado sensivel novo;
 - remover funcionalidade antiga.
 
-## Lista De Pendencias De Documentacao
+## Decisoes Confirmadas
 
-- Confirmar quais funcionalidades antigas devem aparecer para staff.
-- Confirmar politica oficial de backup.
-- Dashboard antigo removido; nao recriar sem decisao explicita.
-- Confirmar permissoes reais do bot no Discord.
-- Confirmar todos os arquivos que devem ser tratados como dados reais.
+- O portal e o dashboard atuais fazem parte do runtime oficial.
+- A defesa pontual da HO, comandos pausados e catalogo antigo de Builds PvE foram removidos.
+- O backup externo e feito por download manual periodico e deve ser guardado fora da Discloud.
+- `.env`, banco, backups, CSVs e relatorios reais sao dados sensiveis.

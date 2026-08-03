@@ -23,7 +23,6 @@ const registration = require('../modules/registration/registration.service');
 const { safeSend } = require('../utils/discord');
 const accountLinks = require('../modules/accounts/accountLinks.service');
 const lochMarket = require('../modules/community/lochMarket.service');
-const hideoutDefense = require('../modules/operations/hideoutDefense.service');
 const giveaways = require('../modules/giveaways/giveaways.service');
 const rosterAutoLink = require('../modules/members/rosterAutoLink.service');
 const { approveRosterMember } = require('../web/staff-registration.service');
@@ -189,62 +188,6 @@ async function handleButton(interaction) {
   if (scope === 'custom_event' && action === 'cancel') {
     customEventWizard.removeDraft(id, interaction.user.id);
     return interaction.update({ content: 'Criacao do evento personalizado cancelada.', components: [] });
-  }
-
-  if (interaction.customId === hideoutDefense.START_BUTTON_ID) {
-    if (!isOwner(interaction.member) && !hasRole(interaction.member, 'adm')) {
-      return interaction.reply({
-        content: 'Somente a ADM pode iniciar a defesa e mover os inscritos.',
-        flags: MessageFlags.Ephemeral
-      });
-    }
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const result = await hideoutDefense.startDefense({
-      client: interaction.client,
-      guild: interaction.guild,
-      actorId: interaction.user.id
-    });
-    return interaction.editReply({
-      content: [
-        `Sala temporária criada/atualizada: <#${result.voice.id}>.`,
-        `Movidos: ${result.moved.length}.`,
-        `Fora da call: ${result.notConnected.length}.`,
-        `Falhas ao mover: ${result.failed.length}.`
-      ].join(' '),
-      allowedMentions: { parse: [] }
-    });
-  }
-
-  if ([hideoutDefense.ACK_BUTTON_ID, hideoutDefense.PARTICIPATE_BUTTON_ID].includes(interaction.customId)) {
-    if (!hasRole(interaction.member, 'member')) {
-      return interaction.reply({
-        content: 'Somente membros da guilda podem responder a este aviso.',
-        flags: MessageFlags.Ephemeral
-      });
-    }
-
-    const isParticipation = interaction.customId === hideoutDefense.PARTICIPATE_BUTTON_ID;
-    const result = isParticipation
-      ? hideoutDefense.toggleParticipation(interaction.user.id)
-      : hideoutDefense.toggleAcknowledgement(interaction.user.id);
-    const payload = isParticipation
-      ? hideoutDefense.announcementPayload({ participations: result.participations })
-      : hideoutDefense.announcementPayload({ acknowledgements: result.acknowledgements });
-    await interaction.update(payload);
-    const roleResult = await hideoutDefense.syncMemberDefenseRole(interaction.guild, interaction.user.id).catch(() => null);
-    return interaction.followUp({
-      content: isParticipation
-        ? (result.added
-            ? `Presença confirmada. Você foi adicionado à lista de quem vai lutar${roleResult?.role ? ` e recebeu a tag <@&${roleResult.role.id}>` : ''}.`
-            : 'Sua confirmação para lutar foi removida.')
-        : (result.alreadyParticipating
-            ? 'Você já está na lista “Vão lutar”, então já está ciente do aviso.'
-            : result.added
-              ? `Leitura confirmada. Você foi adicionado à lista de membros cientes${roleResult?.role ? ` e recebeu a tag <@&${roleResult.role.id}>` : ''}.`
-              : 'Sua confirmação de leitura foi removida.'),
-      allowedMentions: { parse: [] },
-      flags: MessageFlags.Ephemeral
-    });
   }
 
   if (scope === 'accounts' && ['merge', 'cancel_merge'].includes(action)) {
@@ -1424,56 +1367,6 @@ async function handleButton(interaction) {
       return interaction.reply({ content: 'Sincronizacao cancelada. Nenhum vinculo foi alterado.', flags: MessageFlags.Ephemeral });
     }
   }
-  if (scope === 'albion_weekly') {
-    if (!can(interaction.member, 'importCsv')) {
-      return interaction.reply({ content: 'Voce nao tem permissao para importar dados do Albion.', flags: MessageFlags.Ephemeral });
-    }
-
-    if (action === 'help') {
-      const command = id === 'rank'
-        ? '/albion importar_rank arquivo:<rank pve.txt> semana:2026-W25'
-        : '/albion importar_logs arquivo:<logs geral albion.txt> semana:2026-W25';
-      return interaction.reply({
-        content: [
-          `Use o comando:`,
-          `\`${command}\``,
-          '',
-          'O bot vai mostrar uma previa antes de salvar.'
-        ].join('\n'),
-        flags: MessageFlags.Ephemeral
-      });
-    }
-
-    if (action === 'summary') {
-      return interaction.reply({
-        embeds: [albionWeekly.weeklySummaryEmbed()],
-        flags: MessageFlags.Ephemeral
-      });
-    }
-
-    if (action === 'export') {
-      const file = id === 'pve'
-        ? albionWeekly.pveRankReportAttachment()
-        : albionWeekly.guildLogsReportAttachment();
-      return interaction.reply({ content: 'Exportacao Albion gerada.', files: [file], flags: MessageFlags.Ephemeral });
-    }
-
-    if (action === 'confirm') {
-      const preview = albionWeekly.takePreview(id);
-      const saved = albionWeekly.applyPreview(preview);
-      return interaction.update({
-        content: `Importacao Albion salva. Tipo: ${preview.type}. Semana: ${preview.weekKey}. Linhas: ${saved.rows_count}.`,
-        embeds: [albionWeekly.weeklySummaryEmbed(preview.weekKey)],
-        components: []
-      });
-    }
-
-    if (action === 'cancel') {
-      albionWeekly.cancelPreview(id);
-      return interaction.update({ content: 'Importacao Albion cancelada.', components: [] });
-    }
-  }
-
   if (scope === 'registration') {
     if (!can(interaction.member, 'approveRegistration')) {
       return interaction.reply({ content: 'Voce nao tem permissao para aprovar registro.', flags: MessageFlags.Ephemeral });

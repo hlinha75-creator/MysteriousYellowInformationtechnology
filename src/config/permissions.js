@@ -2,7 +2,6 @@ const ids = require('./ids');
 
 const groups = {
   createEvent: ['caller', 'staff', 'adm', 'recruiter'],
-  createObjective: ['member', 'caller', 'staff', 'adm', 'recruiter', 'treasurer'],
   approvePayment: ['staff', 'adm', 'treasurer'],
   importCsv: ['staff', 'adm', 'treasurer'],
   withdrawBalance: ['staff', 'adm', 'treasurer'],

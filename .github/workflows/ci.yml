@@ -11,12 +11,8 @@ permissions:
 
 jobs:
   test:
-    name: Testes (Node ${{ matrix.node-version }})
+    name: Testes e qualidade (Node 22)
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        node-version: [20, 22]
 
     steps:
       - name: Baixar codigo
@@ -25,11 +21,17 @@ jobs:
       - name: Configurar Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 22
           cache: npm
 
       - name: Instalar dependencias
         run: npm ci
 
-      - name: Executar testes
-        run: npm test
+      - name: Verificar sintaxe
+        run: npm run test:syntax
+
+      - name: Executar testes com cobertura minima
+        run: npm run test:coverage
+
+      - name: Auditar vulnerabilidades de producao
+        run: npm audit --omit=dev --audit-level=high

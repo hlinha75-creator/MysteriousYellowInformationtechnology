@@ -18,7 +18,7 @@ Prioridade do projeto:
 ## Recursos Removidos
 
 Para simplificar o bot, nao manter nem recriar sem decisao explicita:
-- dashboard web/local antigo;
+- dashboard web/local legado anterior ao portal atual;
 - anuncio e agendamento unico da defesa da HO em Sunstrand Shoal de 22/07/2026;
 - leiloes;
 - enquetes manuais;
@@ -204,7 +204,7 @@ Painel do membro:
 - botoes para consultar pontos de influencia e temporada;
 - pontos sao lidos dos CSVs em `resources/season32`;
 - link de grafico: `https://notag.xyz/S32/pizza.html`;
-- builds PvE temporariamente apontam para `https://notag.xyz/builds/pve/Raid/`;
+- o catalogo antigo de Builds PvE foi removido;
 - pergunta para staff, denuncia anonima e sugestao vao para `1516030220073963520`;
 - staff pode responder pergunta pelo botao e o bot envia DM ao membro;
 - historico mostra eventos participados, horas em evento/voz, saldo acumulado positivo e saldo atual;
@@ -548,12 +548,12 @@ Preferir codigo dividido por modulos:
 - commands;
 - setup.
 
-Nao criar dashboard web agora.
-
-Dashboard/API:
-- dashboard web antigo removido;
-- nao recriar dashboard web/API agora;
-- manter relatorios HTML pontuais gerados sob demanda por comandos/botoes quando forem uteis para operacao.
+Dashboard/API atual:
+- o portal web hospedado na Discloud faz parte do runtime oficial;
+- membros podem consultar perfil, participar de eventos e solicitar saques;
+- cargos autorizados podem gerenciar eventos, financeiro, cadastros e importacoes;
+- toda operacao sensivel deve manter permissao por cargo, CSRF e auditoria;
+- relatorios HTML pontuais continuam disponiveis quando forem uteis para operacao.
 
 Interface de eventos:
 - evento aberto deve ser compacto e mais horizontal;
@@ -582,20 +582,15 @@ Interface de eventos:
 - novo anuncio de Raid Avalon deve ser compacto, sem duplicar DG/build/local em campos separados;
 - botoes da Raid Avalon ficam em linhas: Tank/Healer/Suporte/DPS, depois Assistir/Scout/Looter/Uper, depois gerenciamento;
 - emojis personalizados cadastrados no codigo para Tank, Healer, Support, DPS, Martelo, Incubus, RealBreaker, QuesaSanta, Fallen, Iron, Shadow, Damnation, Enig, LightCaller, Chill, Furabruma e Repetidor;
-- IDs corrigidos: QuesaSanta `1481801328161329152`, Fallen `1517097238336110742`, Iron `1517097588518813767`, Furabruma `1517189201232138240`;
+- IDs confirmados: QuesaSanta `1481801328161329152`, Fallen `1517097238336110742`, Iron `1517097588518813767`, Shadow `1517097701148459131`, Damnation `1517097839107379211`, Enig `1517098127490940968`, Furabruma `1517189201232138240`;
 - emoji Furabruma cadastrado com ID `1517189201232138240`;
-- IDs enviados para Shadow/Damnation/Enig sao iguais aos de QuesaSanta/Fallen/Iron e podem precisar correcao.
 - pontos de carreira sao por tempo: a cada 30 minutos conta +1 ponto;
 - ao aprovar pagamento, cada participante recebe pontos na classe e na funcao/arma;
 - exemplo: 3h de Tank/Martelo = +6 em Classe Tank e +6 em Martelo;
 - em eventos comuns sem arma, usar funcao padrao: Tank=Incubus, Healer=Hallow/Queda Santa, Suporte=SC/Chama Sombra, DPS=Furabruma;
 - financeiro tem botao `Recusar e devolver`, que volta evento para revisao e reabre/avisa o canal do criador.
 
-Painel do membro / Builds:
-- botao `Builds PvE` mostra catalogo por conteudo;
-- Furabruma preenchida com img `https://prnt.sc/ShmbQMoteKMi` e detalhes `https://albionfreemarket.com/builds/details/6a33dba765245f624c119f2e`;
-- Repetidor preenchido com img `https://prnt.sc/j8TM6Ug0Qsve` e detalhes `https://albionfreemarket.com/builds/details/6a3418bb65245f624c119f56`;
-- demais builds ficam como `img pendente` e `detalhes pendente` para preencher depois.
+- o catalogo antigo de Builds PvE foi removido do painel do membro;
 - botoes de evento sem parametro extra usam sufixo no custom_id (`:main` ou `:raid`) para evitar erro Discord `COMPONENT_CUSTOM_ID_DUPLICATED`.
 
 Tag temporaria de evento:
@@ -611,20 +606,13 @@ Antes de terminar uma alteracao:
 - nao alterar `.env`;
 - nao commitar banco real.
 
-## Backlog Futuro
+## Backup Oficial
 
-Itens anotados para implementar depois. Estes requisitos ainda nao representam funcionalidade pronta.
-
-### Dashboard Web - Discloud Platinum
-
-- preparar o bot e a arquitetura para usar um dashboard web hospedado com a versao Platinum da Discloud;
-- o dashboard deve facilitar para Staff, Caller e demais cargos autorizados gerenciarem:
-  - saldos;
-  - membros;
-  - eventos;
-  - configuracoes e operacao do bot;
-- definir permissoes por cargo e manter auditoria nas operacoes sensiveis, especialmente alteracoes de saldo;
-- este item e planejamento futuro aprovado e nao deve reativar o dashboard/API antigo sem uma implementacao nova e explicitamente solicitada.
+- backups locais continuam em `data/backups/` com retencao automatica;
+- a copia externa oficial e feita por download manual periodico do SQLite;
+- baixar uma copia antes de migrations, deploys sensiveis e mudancas financeiras;
+- guardar a copia fora da Discloud e testar periodicamente a restauracao;
+- nenhuma credencial externa de armazenamento faz parte do projeto.
 
 ## Duvidas Pendentes Para Confirmar
 

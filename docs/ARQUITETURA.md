@@ -9,6 +9,7 @@ Principais tecnologias:
 - `discord.js`: conexao com Discord, comandos, botoes, modais e eventos.
 - `better-sqlite3`: banco SQLite local.
 - `dotenv`: variaveis de ambiente.
+- `node:http`: servidor do portal e dashboard web.
 
 ## Entrada Principal
 
@@ -45,6 +46,7 @@ src/
   database/
   interactions/
   modules/
+  web/
   utils/
 data/
 resources/
@@ -119,6 +121,10 @@ Cada modulo concentra uma area de negocio.
 | `tutorials` | tutorial HTML para staff |
 | `voice` | sessoes de voz e recuperacao pos-reinicio |
 
+## `src/web`
+
+Servidor oficial do portal de membros e do dashboard da staff. Centraliza OAuth Discord, sessoes assinadas, CSRF, APIs do portal e arquivos publicos. Membros podem participar de eventos e solicitar saques; cargos autorizados gerenciam eventos, financeiro, cadastros e importacoes.
+
 ## Padrao Repository/Service
 
 Alguns modulos usam dois arquivos:
@@ -137,7 +143,7 @@ Quando adicionar comportamento novo, tente seguir esse padrao.
 ## Fluxo De Interacao
 
 ```text
-Discord
+Discord ou portal web
   -> src/index.js
   -> interactions/router.js
   -> commands/handlers.js ou interactions/buttons.js/modals.js/selects.js
@@ -167,4 +173,4 @@ Painel Criar Evento
 
 ## Recursos Removidos
 
-Dashboard, leiloes, enquetes e FAQ foram removidos para manter o bot mais simples.
+Foram removidos o dashboard legado anterior ao portal atual, leiloes, enquetes, FAQ automatica, objetivo temporario, comandos antigos de Albion e a defesa pontual da HO de Sunstrand Shoal. Migrations historicas podem permanecer para compatibilidade.

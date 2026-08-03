@@ -14,11 +14,6 @@ const csv = require('../modules/csv/csv.service');
 const { formatSilver } = require('../utils/silver');
 const albionVerification = require('../modules/albion/guildVerification.service');
 const ids = require('../config/ids');
-const { formatRenameResults, renameConfiguredChannels } = require('../modules/setup/channelRenamer');
-const { auditAttachment, auditGuildChannels, formatAuditSummary } = require('../modules/setup/channelAudit');
-const objectives = require('../modules/objectives/objectives.service');
-const dailyReport = require('../modules/reports/dailyReport.service');
-const albionWeekly = require('../modules/albion/weekly.service');
 const albionFame = require('../modules/albion/fame.service');
 const memberList = require('../modules/members/memberList.service');
 const inactiveEvents = require('../modules/members/inactiveEvents.service');
@@ -28,15 +23,6 @@ const accountLinks = require('../modules/accounts/accountLinks.service');
 const guildReverification = require('../modules/members/guildReverification.service');
 const guildReverificationRepo = require('../modules/members/guildReverification.repository');
 const giveaways = require('../modules/giveaways/giveaways.service');
-
-const pausedCommands = new Set([
-  'albion',
-  'auditar_canais',
-  'list',
-  'objetivo',
-  'relatorio_diario',
-  'renomear_canais'
-]);
 
 function input(id, label, style = TextInputStyle.Short, required = true) {
   return new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setRequired(required);
@@ -50,13 +36,6 @@ function modal(customId, title, inputs) {
 }
 
 async function handleCommand(interaction) {
-  if (pausedCommands.has(interaction.commandName)) {
-    return interaction.reply({
-      content: 'Esse comando foi pausado para simplificar o bot. Use os comandos principais de evento, saldo, registro, exportacao/importacao, sincronizacao ou inativos.',
-      flags: MessageFlags.Ephemeral
-    });
-  }
-
   if (interaction.commandName === 'give') {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const action = interaction.options.getSubcommand();
@@ -146,17 +125,6 @@ async function handleCommand(interaction) {
     });
   }
 
-  if (interaction.commandName === 'objetivo') {
-    if (!can(interaction.member, 'createObjective')) {
-      return interaction.reply({ content: 'Voce precisa ser membro para avisar objetivo.', flags: MessageFlags.Ephemeral });
-    }
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const result = await objectives.createObjective(interaction);
-    return interaction.editReply({
-      content: `Objetivo avisado em <#${result.message.channelId}>. A mensagem sera apagada quando o tempo acabar.`
-    });
-  }
-
   if (interaction.commandName === 'exportar') {
     if (!can(interaction.member, 'importCsv')) {
       return interaction.reply({ content: 'Voce nao tem permissao para exportar.', flags: MessageFlags.Ephemeral });
@@ -174,23 +142,8 @@ async function handleCommand(interaction) {
             ? csv.voiceDailyAttachment(date || undefined)
             : type === 'members_discord'
               ? await memberList.csvAttachment(interaction.guild)
-              : type === 'albion_pve'
-                ? albionWeekly.pveRankReportAttachment(date || undefined)
-                : type === 'albion_logs'
-                ? albionWeekly.guildLogsReportAttachment(date || undefined)
-                : csv.auditAttachment();
+              : csv.auditAttachment();
     return interaction.editReply({ content: 'Exportacao HTML gerada. Abra o arquivo e use Baixar CSV se precisar de planilha.', files: [attachment] });
-  }
-
-  if (interaction.commandName === 'list') {
-    if (!can(interaction.member, 'importCsv')) {
-      return interaction.reply({ content: 'Voce nao tem permissao para gerar a lista.', flags: MessageFlags.Ephemeral });
-    }
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    return interaction.editReply({
-      content: 'Lista HTML de saldos gerada.',
-      files: [await csv.balancesHtmlAttachment(interaction.guild)]
-    });
   }
 
   if (interaction.commandName === 'importar') {
@@ -304,32 +257,6 @@ async function handleCommand(interaction) {
     });
     return interaction.editReply(inactiveGuests.previewPayload(preview));
   }
-  if (interaction.commandName === 'inativos_evento') {
-    if (!can(interaction.member, 'approveRegistration')) {
-      return interaction.reply({ content: 'Voce nao tem permissao para verificar inativos de eventos.', flags: MessageFlags.Ephemeral });
-    }
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const preview = await inactiveEvents.createPreview({
-      guild: interaction.guild,
-      actorId: interaction.user.id,
-      daysMin: interaction.options.getInteger('dias_minimos') || inactiveEvents.defaultDaysMin,
-      minutesMin: interaction.options.getInteger('tempo_minimo') || inactiveEvents.defaultMinutesMin
-    });
-    return interaction.editReply(inactiveEvents.previewPayload(preview));
-  }
-
-  if (interaction.commandName === 'inativos_convidados') {
-    if (!can(interaction.member, 'approveRegistration')) {
-      return interaction.reply({ content: 'Voce nao tem permissao para verificar convidados inativos.', flags: MessageFlags.Ephemeral });
-    }
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const preview = await inactiveGuests.createPreview({
-      guild: interaction.guild,
-      actorId: interaction.user.id,
-      daysMin: interaction.options.getInteger('dias_minimos') || inactiveGuests.defaultDaysMin
-    });
-    return interaction.editReply(inactiveGuests.previewPayload(preview));
-  }
   if (interaction.commandName === 'verificacao_guild') {
     if (!can(interaction.member, 'approveRegistration')) {
       return interaction.reply({ content: 'Voce nao tem permissao para gerenciar a verificacao da guilda.', flags: MessageFlags.Ephemeral });
@@ -395,82 +322,6 @@ async function handleCommand(interaction) {
       return interaction.editReply({ content: `Campanha encerrada. Lista final publicada com ${result.pending.length} jogador(es) pendente(s).` });
     }
   }
-  if (interaction.commandName === 'albion') {
-    if (!can(interaction.member, 'importCsv')) {
-      return interaction.reply({ content: 'Voce nao tem permissao para importar dados do Albion.', flags: MessageFlags.Ephemeral });
-    }
-
-    const subcommand = interaction.options.getSubcommand();
-    const weekKey = interaction.options.getString('semana') || albionWeekly.currentWeekKey();
-
-    if (subcommand === 'resumo') {
-      return interaction.reply({ embeds: [albionWeekly.weeklySummaryEmbed(weekKey)], flags: MessageFlags.Ephemeral });
-    }
-
-    const attachment = interaction.options.getAttachment('arquivo');
-    if (!attachment?.url) {
-      return interaction.reply({ content: 'Anexe um arquivo TXT/CSV/TSV valido.', flags: MessageFlags.Ephemeral });
-    }
-
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const response = await fetch(attachment.url);
-    if (!response.ok) throw new Error('Nao consegui baixar o arquivo anexado.');
-    const text = await response.text();
-    const preview = subcommand === 'importar_rank'
-      ? albionWeekly.previewPveRank(text, { weekKey, sourceName: attachment.name, actorId: interaction.user.id })
-      : albionWeekly.previewGuildLogs(text, { weekKey, sourceName: attachment.name, actorId: interaction.user.id });
-    const previewId = albionWeekly.savePreview(preview);
-
-    return interaction.editReply({
-      content: albionWeekly.previewText(preview),
-      components: [
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId(`albion_weekly:confirm:${previewId}`).setLabel('Confirmar importacao').setStyle(ButtonStyle.Success),
-          new ButtonBuilder().setCustomId(`albion_weekly:cancel:${previewId}`).setLabel('Cancelar').setStyle(ButtonStyle.Secondary)
-        )
-      ]
-    });
-  }
-
-  if (interaction.commandName === 'relatorio_diario') {
-    if (!can(interaction.member, 'importCsv')) {
-      return interaction.reply({ content: 'Voce nao tem permissao para gerar relatorio diario.', flags: MessageFlags.Ephemeral });
-    }
-
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const result = await dailyReport.buildDailyReport({
-      currentAttachment: interaction.options.getAttachment('atual'),
-      previousAttachment: interaction.options.getAttachment('anterior'),
-      voiceAttachment: interaction.options.getAttachment('voz'),
-      dateText: interaction.options.getString('data')
-    });
-    return interaction.editReply({ content: result.content, files: result.files });
-  }
-
-  if (interaction.commandName === 'renomear_canais') {
-    if (!can(interaction.member, 'approvePayment')) {
-      return interaction.reply({ content: 'Voce nao tem permissao para renomear canais.', flags: MessageFlags.Ephemeral });
-    }
-
-    const apply = interaction.options.getBoolean('aplicar') ?? false;
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const results = await renameConfiguredChannels(interaction.guild, ids, { apply });
-    return interaction.editReply({ content: formatRenameResults(results, { apply }) });
-  }
-
-  if (interaction.commandName === 'auditar_canais') {
-    if (!can(interaction.member, 'approvePayment')) {
-      return interaction.reply({ content: 'Voce nao tem permissao para auditar canais.', flags: MessageFlags.Ephemeral });
-    }
-
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const rows = await auditGuildChannels(interaction.guild, ids);
-    return interaction.editReply({
-      content: formatAuditSummary(rows),
-      files: [auditAttachment(rows)]
-    });
-  }
-
 }
 
 module.exports = {

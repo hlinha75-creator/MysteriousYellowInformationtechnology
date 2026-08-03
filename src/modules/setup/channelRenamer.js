@@ -123,7 +123,7 @@ function formatRenameResults(results, { apply = false } = {}) {
     return `- ${item.kind}.${item.key}: "${item.oldName}" -> "${item.name}"`;
   });
 
-  const footer = apply ? null : 'Para aplicar, use /renomear_canais aplicar:sim';
+  const footer = apply ? null : 'Para aplicar, use npm run rename:channels no ambiente administrativo.';
   return [header, ...lines, footer].filter(Boolean).join('\n').slice(0, 1900);
 }
 

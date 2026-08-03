@@ -39,9 +39,8 @@ Por isso, ele nao e um bot generico para qualquer servidor sem ajustes. Para usa
 - Sincronizar Discord x Albion com CSV/TSV oficial.
 - Gerar listas de membros, convidados, pendentes e sem tag.
 - Verificar inatividade por eventos e por convidados.
-- Importar rank PvE e logs semanais do Albion.
-- Criar objetivos temporarios no chat.
-- Gerar relatorio diario de membros Albion e voz Discord.
+- Importar fama e rankings do Albion pelos fluxos atuais.
+- Operar portal de membros e dashboard da staff com OAuth Discord.
 - Manter painel ADM com pendencias e rotinas.
 - Gerar HTMLs auxiliares sob demanda.
 
@@ -61,14 +60,9 @@ O fluxo mais importante do projeto e:
 10. O bot deposita saldo para os participantes.
 11. O membro pode consultar saldo ou solicitar saque.
 
-## Pontos A Confirmar
+## Decisoes Operacionais
 
-Alguns detalhes nao estavam 100% lembrados no momento desta documentacao:
-
-- Funcionalidades antigas removidas: dashboard, leiloes, enquetes, FAQ, OCR e jogo de frutas.
-- Se existem variaveis secretas alem de `.env.example`.
-- Se o bot tem permissao administrativa completa no Discord.
-- Se existe rotina oficial de backup alem dos backups automaticos e manuais.
-- Quais dados podem ou nao ser versionados alem de `.env`, banco SQLite e backups.
-
-Enquanto isso nao for confirmado, trate tudo que envolve banco, CSV real, token e IDs da guild como sensivel.
+- O portal web atual faz parte do produto; apenas o dashboard legado foi removido.
+- A copia externa do banco e feita por download manual periodico.
+- `.env`, SQLite, backups, CSVs reais e relatorios com dados da guild sao sensiveis e nao devem entrar no deploy ou no Git.
+- Funcionalidades antigas removidas nao devem ser reativadas sem nova decisao explicita.

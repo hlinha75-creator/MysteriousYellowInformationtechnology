@@ -50,6 +50,8 @@ O bot cria backup:
 
 Tambem existe backup/export de saldos via bot, usado no painel de arquivos e rotinas automaticas.
 
+A copia externa oficial e manual: rode `npm run backup:prepare-download`, baixe o banco e o arquivo `.sha256` de `data/manual-download/` e guarde fora da Discloud. Frequencia minima: semanal e antes de operacoes sensiveis.
+
 ## Restore
 
 Comando:

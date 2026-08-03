@@ -73,7 +73,7 @@ No VS Code tambem existe uma configuracao de debug chamada `Iniciar bot`.
 - A pagina publica abre em `/` e nao expoe dados do banco.
 - O dashboard da staff abre em `/dashboard` apos o login com Discord.
 - O acesso e permitido apenas ao dono do servidor e aos cargos `ADM` ou `Staff` configurados em `src/config/ids.js`.
-- Todas as telas da primeira versao sao somente leitura.
+- O portal permite participar de eventos e solicitar saques. Cargos autorizados tambem podem gerenciar eventos, financeiro, cadastros e importacoes.
 - Os dados atualizam a cada 30 segundos enquanto a aba esta visivel e tambem podem ser atualizados manualmente.
 - Cadastre `https://notag.discloud.app/auth/discord/callback` como Redirect URI no Discord Developer Portal antes da publicacao.
 - Na Discloud, o projeto roda como `TYPE=site`, subdominio `notag`, escutando `0.0.0.0:8080`; o bot e o dashboard continuam no mesmo processo e compartilham o SQLite.
@@ -88,8 +88,16 @@ No VS Code tambem existe uma configuracao de debug chamada `Iniciar bot`.
 - `npm run rename:channels`: padroniza nomes de canais.
 - `npm run import:members`: importa snapshot de membros.
 - `npm run backup:db`: cria backup manual do SQLite.
+- `npm run backup:prepare-download`: cria uma copia consistente e checksum para baixar e guardar fora da Discloud.
 - `npm run restore:db`: restaura backup manual.
 - `npm run restore:campaign900m`: restaura snapshot da campanha 900m.
+
+## Backup Operacional
+
+- O bot mantem copias locais em `data/backups/`.
+- A politica oficial e executar `npm run backup:prepare-download` pelo menos uma vez por semana, baixar o `.sqlite` e o `.sha256` gerados em `data/manual-download/` e guardar ambos fora da Discloud.
+- Antes de migrations, deploys sensiveis ou alteracoes financeiras, gere e baixe uma copia atual.
+- Teste periodicamente a abertura do backup com a rotina disponivel no painel administrativo.
 
 ## Seguranca
 
@@ -102,4 +110,4 @@ No VS Code tambem existe uma configuracao de debug chamada `Iniciar bot`.
 
 ## Estado Atual
 
-Documentacao criada para uso pessoal do Lucas e da staff. Alguns pontos estao marcados como "a confirmar" porque dependem de decisao operacional ou memoria externa ao codigo.
+Documentacao operacional para uso do Lucas e da staff, atualizada para o bot e o portal web atuais.

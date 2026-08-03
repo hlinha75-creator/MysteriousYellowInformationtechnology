@@ -247,9 +247,8 @@ O painel ADM lembra a rotina:
 1. Enviar CSV/TSV atual da guild Albion para verificar registros pendentes.
 2. Enviar rank PvE e logs gerais do Albion quando tiver arquivo novo.
 3. Guardar prints de pontos de temporada quando virar ciclo.
-4. Revisar links pendentes de builds PvE.
-5. Conferir backup de saldos.
-6. Olhar eventos financeiros pendentes, saques e logs do Discloud.
+4. Conferir backup de saldos e o ultimo download manual do SQLite.
+5. Olhar eventos financeiros pendentes, saques e logs do Discloud.
 
 ## Regra De Ouro
 

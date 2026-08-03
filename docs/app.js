@@ -84,15 +84,14 @@ const commands = [
   ['slash', '/setup', 'Atualiza paineis fixos do bot.', 'staff adm treasurer'],
   ['slash', '/saldo', 'Consulta seu saldo ou, para staff/tesouraria, saldo de outro membro.', 'member staff treasurer'],
   ['slash', '/registro', 'Abre registro de nick Albion.', 'member'],
-  ['slash', '/objetivo', 'Avisa objetivo temporario no chat Notag.', 'member staff caller'],
-  ['slash', '/exportar', 'Exporta saldos, financeiro, voz, auditoria, Albion e membros.', 'staff treasurer'],
+  ['slash', '/exportar', 'Exporta saldos, financeiro, voz, auditoria e membros.', 'staff treasurer'],
   ['slash', '/importar', 'Importa CSV de saldos com previa e confirmacao.', 'staff treasurer'],
   ['slash', '/sincronizar_albion', 'Sincroniza Discord x Albion por CSV/TSV.', 'staff recruiter'],
   ['slash', '/inativos', 'Gera previa de Membro -> Convidado ou Convidado -> Sem Tag.', 'staff recruiter'],
-  ['slash', '/albion', 'Importa rank PvE, logs e mostra resumo semanal.', 'staff treasurer'],
-  ['slash', '/relatorio_diario', 'Compara membros Albion e voz Discord.', 'staff treasurer'],
-  ['slash', '/renomear_canais', 'Mostra ou aplica padronizacao de canais.', 'staff adm'],
-  ['slash', '/auditar_canais', 'Lista canais e marca os conhecidos pelo bot.', 'staff adm'],
+  ['slash', '/mesclar_contas', 'Consolida duas contas Discord do mesmo jogador.', 'staff recruiter'],
+  ['slash', '/publicar_rank', 'Publica ranking diario ou semanal.', 'staff treasurer'],
+  ['slash', '/give', 'Cria e gerencia sorteios.', 'member staff'],
+  ['slash', '/verificacao_guild', 'Gerencia confirmacao dos membros em voz.', 'staff recruiter'],
   ['painel', 'Criar Evento', 'Botoes Criar Evento e Raid Full.', 'caller staff recruiter'],
   ['painel', 'Saldo', 'Consultar, sacar e pedir pagamento.', 'member staff treasurer'],
   ['painel', 'ADM', 'Pendencias, financeiro, Albion, eventos, membros, arquivos e tutorial.', 'staff adm treasurer'],
@@ -103,7 +102,6 @@ const commands = [
 
 const permissions = [
   ['createEvent', ['caller', 'staff', 'adm', 'recruiter'], 'Criar evento normal ou Raid Full.'],
-  ['createObjective', ['member', 'caller', 'staff', 'adm', 'recruiter', 'treasurer'], 'Avisar objetivo.'],
   ['approvePayment', ['staff', 'adm', 'treasurer'], 'Aprovar pagamento, setup e rotinas sensiveis.'],
   ['importCsv', ['staff', 'adm', 'treasurer'], 'Importar/exportar CSV e relatorios.'],
   ['withdrawBalance', ['staff', 'adm', 'treasurer'], 'Consultar outro saldo e retirar saldo.'],
@@ -117,15 +115,13 @@ const ops = [
   ['Atualizar paineis', 'Use dentro do Discord para recriar mensagens fixas.', '/setup'],
   ['Backup manual', 'Cria copia do banco SQLite.', 'npm run backup:db'],
   ['Restore manual', 'Pare o bot e confira o backup antes.', 'npm run restore:db'],
-  ['Auditar canais', 'Confere IDs conhecidos pelo bot.', '/auditar_canais']
+  ['Auditar canais', 'Confere IDs conhecidos pelo bot.', 'npm run audit:channels']
 ];
 
 const openQuestions = [
-  'Funcionalidades antigas removidas: dashboard, leiloes, enquetes, FAQ, OCR e jogo de frutas.',
-  'Confirmar se existem variaveis secretas alem de .env.example.',
-  'Confirmar se o bot tem permissao administrativa completa no Discord.',
-  'Definir politica oficial de backup e restore em producao.',
-  'Mapear todos os arquivos que contem dados reais da guild.'
+  'Fazer download manual periodico do SQLite e guardar fora da Discloud.',
+  'Testar periodicamente a restauracao da copia baixada.',
+  'Manter banco, backups, CSVs e relatorios reais fora do Git e do deploy.'
 ];
 
 let currentStep = 0;

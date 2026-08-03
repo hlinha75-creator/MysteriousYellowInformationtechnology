@@ -114,6 +114,14 @@ Tambem existe backup manual:
 npm run backup:db
 ```
 
+Para preparar a copia externa oficial:
+
+```bash
+npm run backup:prepare-download
+```
+
+Baixe o `.sqlite` e o `.sha256` criados em `data/manual-download/` e guarde ambos fora da Discloud. Faça isso pelo menos uma vez por semana e também antes de migrations, deploys sensiveis ou mudanças financeiras.
+
 E restore manual:
 
 ```bash
@@ -125,6 +133,7 @@ Cuidados:
 - antes de restaurar, confira qual backup sera usado;
 - nunca restaure por impulso se o bot esta em producao;
 - se possivel, pare o bot antes de restaurar banco.
+- confira o SHA-256 da copia baixada e teste periodicamente sua abertura/restauracao.
 
 ## Rotinas Automaticas Do Bot
 
@@ -185,5 +194,5 @@ Antes de subir:
 3. Confira se o token nao expirou/trocou.
 4. Confira se o banco existe em `DATABASE_PATH`.
 5. Confira se os IDs de canais/cargos em `src/config/ids.js` ainda existem.
-6. Rode `/auditar_canais` para comparar canais conhecidos pelo bot.
+6. Rode `npm run audit:channels` para comparar canais conhecidos pelo bot.
 7. Se comandos sumiram, rode `npm run deploy:commands`.

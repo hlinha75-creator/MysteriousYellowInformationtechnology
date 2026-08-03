@@ -11,6 +11,7 @@ on:
       - "data/idle-audio/**"
       - "package.json"
       - "package-lock.json"
+      - "RELEASE.json"
       - "discloud.config"
       - ".discloudignore"
       - ".github/workflows/deploy-discloud.yml"
@@ -50,7 +51,7 @@ jobs:
           DISCORD_CLIENT_SECRET: github-actions-test-client-secret
           DASHBOARD_SESSION_SECRET: github-actions-test-secret-not-production
           DASHBOARD_BASE_URL: http://127.0.0.1:8080
-        run: npm test
+        run: npm run test:syntax && npm test && npm audit --omit=dev --audit-level=high
 
       - name: Criar pacote da Discloud
         shell: bash

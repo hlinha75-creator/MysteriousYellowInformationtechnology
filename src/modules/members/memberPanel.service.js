@@ -15,94 +15,14 @@ const { safeSend } = require('../../utils/discord');
 const pointsDir = path.resolve(__dirname, '..', '..', '..', 'resources', 'season32');
 const normalPointsPath = path.join(pointsDir, 'pontos_normais.csv');
 const seasonPointsPath = path.join(pointsDir, 'pontos_temporada.csv');
-const buildsUrl = 'https://notag.xyz/builds/pve/Raid/';
 const graphUrl = 'https://notag.xyz/S32/pizza.html';
-const buildCatalog = [
-  {
-    category: 'Padrao PVE universal',
-    items: [
-      ['Incubus'],
-      ['Queda Santa'],
-      ['Chama Sombra'],
-      ['Repetidor', 'https://prnt.sc/j8TM6Ug0Qsve', 'https://albionfreemarket.com/builds/details/6a3418bb65245f624c119f56'],
-      ['Prisma'],
-      ['Furabruma', 'https://prnt.sc/ShmbQMoteKMi', 'https://albionfreemarket.com/builds/details/6a33dba765245f624c119f2e'],
-      ['Fulgurante']
-    ]
-  },
-  {
-    category: 'Raid Full',
-    items: [
-      ['Tank Martelo'],
-      ['Tank Incubus'],
-      ['Tank Quebra Reinos'],
-      ['Healer Queda Santa'],
-      ['Healer Corrompido'],
-      ['Healer Raiz Ferrea'],
-      ['Suporte Chama Sombra'],
-      ['Suporte Danacao'],
-      ['Suporte Enig'],
-      ['DPS Aguia'],
-      ['DPS Uivo Frio'],
-      ['DPS Repetidor', 'https://prnt.sc/j8TM6Ug0Qsve', 'https://albionfreemarket.com/builds/details/6a3418bb65245f624c119f56'],
-      ['DPS Furabruma', 'https://prnt.sc/ShmbQMoteKMi', 'https://albionfreemarket.com/builds/details/6a33dba765245f624c119f2e']
-    ]
-  },
-  {
-    category: 'Raid Reduzida',
-    items: [
-      ['Tank Martelo'],
-      ['Tank Incubus'],
-      ['Healer Corrompido'],
-      ['Suporte Chama Sombra'],
-      ['Suporte Danacao'],
-      ['DPS Aguia'],
-      ['DPS Uivo Frio'],
-      ['DPS Repetidor', 'https://prnt.sc/j8TM6Ug0Qsve', 'https://albionfreemarket.com/builds/details/6a3418bb65245f624c119f56']
-    ]
-  },
-  {
-    category: 'DG Grupo',
-    items: [
-      ['Tank Incubus'],
-      ['Healer Queda Santa'],
-      ['Suporte Chama Sombra'],
-      ['DPS Repetidor', 'https://prnt.sc/j8TM6Ug0Qsve', 'https://albionfreemarket.com/builds/details/6a3418bb65245f624c119f56'],
-      ['DPS Furabruma', 'https://prnt.sc/ShmbQMoteKMi', 'https://albionfreemarket.com/builds/details/6a33dba765245f624c119f2e']
-    ]
-  },
-  {
-    category: 'Bau Dourado',
-    items: [
-      ['Tank Incubus'],
-      ['Healer Queda Santa'],
-      ['Suporte Chama Sombra'],
-      ['DPS Repetidor', 'https://prnt.sc/j8TM6Ug0Qsve', 'https://albionfreemarket.com/builds/details/6a3418bb65245f624c119f56'],
-      ['DPS Furabruma', 'https://prnt.sc/ShmbQMoteKMi', 'https://albionfreemarket.com/builds/details/6a33dba765245f624c119f2e'],
-      ['DPS Fulgurante'],
-      ['DPS Prisma']
-    ]
-  },
-  {
-    category: 'Cacada',
-    items: [
-      ['Tank Incubus'],
-      ['Healer Queda Santa'],
-      ['Suporte Chama Sombra'],
-      ['DPS Virotes'],
-      ['DPS Adaga 1H'],
-      ['DPS Susurrante'],
-      ['DPS Diabrete']
-    ]
-  }
-];
 
 function panelPayload() {
   return {
     embeds: [
       new EmbedBuilder()
         .setTitle('Painel do Membro')
-        .setDescription('Consultas rapidas, builds, atendimento com staff, sugestoes e historico pessoal.')
+        .setDescription('Consultas rapidas, atendimento com staff, sugestoes e historico pessoal.')
         .setColor(0x38a169)
     ],
     components: panelComponents()
@@ -114,7 +34,6 @@ function panelComponents() {
     new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('member_panel:points_normal').setLabel('Pontos influencia').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId('member_panel:points_season').setLabel('Pontos temporada').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId('member_panel:builds').setLabel('Builds PvE').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId('member_panel:history').setLabel('Meu historico').setStyle(ButtonStyle.Secondary)
     ),
     new ActionRowBuilder().addComponents(
@@ -157,28 +76,6 @@ function pointsEmbed(userId, kind) {
       { name: 'Grafico', value: graphUrl, inline: false },
       { name: 'Destaques', value: topPointColumns(row, kind).join('\n') || 'Sem detalhes.', inline: false }
     );
-}
-
-function buildsEmbed() {
-  return baseEmbed('Builds PvE')
-    .setDescription([
-      'Catalogo simples para consulta rapida.',
-      `Pagina geral temporaria: ${buildsUrl}`,
-      'Onde aparecer `pendente`, a staff ainda vai preencher os links.'
-    ].join('\n'))
-    .addFields(buildCatalog.map((section) => ({
-      name: section.category,
-      value: section.items.map(buildLine).join('\n'),
-      inline: false
-    })));
-}
-
-function buildLine([name, imageUrl, detailUrl]) {
-  const links = [
-    imageUrl ? `[img](${imageUrl})` : 'img pendente',
-    detailUrl ? `[detalhes](${detailUrl})` : 'detalhes pendente'
-  ].join(' | ');
-  return `**${name}** - ${links}`;
 }
 
 function historyEmbed(userId) {
@@ -300,7 +197,6 @@ function getUser(userId) {
 function keywordAnswer(text) {
   const value = normalize(text);
   if (value.includes('saldo')) return 'Use o painel de saldo ou clique em Meu historico para ver saldo atual e acumulado.';
-  if (value.includes('build')) return `As builds PvE estao aqui: ${buildsUrl}`;
   if (value.includes('registro') || value.includes('nick')) return 'Use o canal de registro para informar seu nick do Albion.';
   if (value.includes('evento')) return 'Os eventos ficam no canal ping-main. Clique em participar, assistir ou aguarde o caller iniciar.';
   if (value.includes('ponto')) return `Use os botoes Pontos influencia ou Pontos temporada. Grafico: ${graphUrl}`;
@@ -338,7 +234,6 @@ function normalize(value) {
 
 module.exports = {
   answerMember,
-  buildsEmbed,
   channelsEmbed,
   handleBotConversation,
   historyEmbed,
