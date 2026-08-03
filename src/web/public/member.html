@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Portal pessoal da comunidade Notag.">
   <title>Meu portal — Notag</title>
-  <link rel="stylesheet" href="/assets/styles.css?v=20260729-6">
-  <script src="/assets/member.js?v=20260729-4" defer></script>
+  <link rel="stylesheet" href="/assets/styles.css?v=20260801-1">
+  <script src="/assets/member.js?v=20260801-1" defer></script>
 </head>
 <body class="dashboard-body member-portal-body">
   <div class="app-shell">
@@ -45,8 +45,8 @@
             <div><span class="kicker"><i></i> Conta conectada</span><h2 id="welcome-title">Bem-vindo à Notag</h2><p id="welcome-copy">Acompanhe seu cadastro, eventos, desempenho e saldo em um só lugar.</p></div>
             <span class="access-chip" id="overview-access">Convidado</span>
           </div>
-          <div class="metric-grid" id="member-metrics"></div>
-          <div class="dashboard-grid equal">
+          <div class="metric-grid portal-overview-metrics" id="member-metrics"></div>
+          <div class="dashboard-grid equal portal-overview-grid">
             <article class="panel"><div class="panel-head"><div><span>Próximas atividades</span><h3>Eventos abertos</h3></div></div><div class="portal-card-list" id="overview-events"></div></article>
             <article class="panel"><div class="panel-head"><div><span>Minha conta</span><h3>Movimentações recentes</h3></div></div><div class="portal-card-list" id="overview-transactions"></div></article>
           </div>
@@ -63,15 +63,15 @@
         <section class="view" id="view-events" data-title="Eventos" data-kicker="Atividades">
           <div class="event-action-feedback" id="event-action-feedback" role="status" aria-live="polite" hidden></div>
           <div class="view-heading"><div><h2>Eventos da guilda</h2><p>Veja atividades abertas e seu histórico de participação.</p></div></div>
-          <article class="panel"><div class="panel-head"><div><span>Inscrições abertas</span><h3>Eventos disponíveis</h3></div></div><div class="event-card-grid" id="portal-events"></div></article>
+          <article class="panel portal-events-panel"><div class="panel-head"><div><span>Inscrições abertas</span><h3>Eventos disponíveis</h3></div></div><div class="event-card-grid" id="portal-events"></div></article>
           <article class="panel"><div class="panel-head"><div><span>Histórico pessoal</span><h3>Minhas participações</h3></div></div><div class="table-wrap"><table><thead><tr><th>Evento</th><th>Função</th><th>Status</th><th>Tempo</th><th class="number-cell">Loot</th></tr></thead><tbody id="event-history"></tbody></table></div></article>
         </section>
 
         <section class="view member-only" id="view-rankings" data-title="Classificações" data-kicker="Desempenho">
           <div class="view-heading"><div><h2>Classificações Albion</h2><p>Sua posição e o ranking da guilda em cada categoria.</p></div></div>
           <div class="ranking-tabs" id="member-ranking-tabs"><button class="ranking-tab active" data-category="overall">Geral</button><button class="ranking-tab" data-category="pve">PvE</button><button class="ranking-tab" data-category="pvp">PvP</button><button class="ranking-tab" data-category="gathering">Coleta</button><button class="ranking-tab" data-category="crafting">Craft</button></div>
-          <div class="metric-grid compact" id="personal-ranks"></div>
-          <article class="panel"><div class="table-controls"><input class="search-input" id="ranking-search" type="search" placeholder="Buscar jogador…" aria-label="Buscar jogador"></div><div class="table-wrap"><table><thead><tr><th>#</th><th>Jogador</th><th class="number-cell">Pontuação</th></tr></thead><tbody id="member-ranking-table"></tbody></table></div></article>
+          <div class="metric-grid compact portal-ranking-metrics" id="personal-ranks"></div>
+          <article class="panel portal-ranking-panel"><div class="table-controls"><input class="search-input" id="ranking-search" type="search" placeholder="Buscar jogador…" aria-label="Buscar jogador"></div><div class="table-wrap"><table><thead><tr><th>#</th><th>Jogador</th><th class="number-cell">Pontuação</th></tr></thead><tbody id="member-ranking-table"></tbody></table></div></article>
         </section>
 
         <section class="view" id="view-finance" data-title="Saldo e saque" data-kicker="Minha conta">

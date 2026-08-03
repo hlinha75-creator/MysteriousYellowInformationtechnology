@@ -1,8 +1,15 @@
 {
   "enabled": true,
-  "version": "1.37",
-  "title": "Recuperacao segura de eventos apos atualizacoes",
+  "version": "1.39",
+  "title": "Refinamento visual do portal",
   "notes": [
+    "O portal de membros agora aproveita melhor a largura do desktop, com textos maiores, cartoes compactos e menos espacos vazios.",
+    "As classificacoes foram reorganizadas em uma faixa de cinco categorias e destacam visualmente a categoria selecionada.",
+    "Os eventos usam cartoes mais compactos e links de build do Discord aparecem como uma acao clara, sem exibir a URL completa.",
+    "Valores financeiros continuam iguais, mas o sufixo repetido prata foi removido das telas para melhorar a leitura.",
+    "A coluna Alteracao da previa de importacao agora e ordenada do maior ganho para o menor por padrao.",
+    "Um clique no cabecalho Alteracao inverte a ordem; a seta mostra se a lista esta crescente ou decrescente.",
+    "A ordenacao acontece somente na tela e nao modifica os valores que serao confirmados na importacao.",
     "Eventos que continuam em andamento durante uma atualizacao voltam a publicar a mensagem e retomam a contagem de voz de quem ainda esta na sala.",
     "Se a finalizacao for interrompida depois de salvar a revisao, o bot recria automaticamente o canal e a mensagem de revisao sem duplicar o evento.",
     "A criacao do canal privado agora identifica explicitamente cargos e membros, corrigindo o erro Supplied parameter is not a cached User or Role.",

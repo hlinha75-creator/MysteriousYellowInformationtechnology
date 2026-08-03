@@ -1,4 +1,4 @@
-const state = { data: null, lastLoadedAt: 0, currentView: 'overview', csrf: null, userId: null, permissions: { full: true, registrations: true }, registrationPreview: null, memberRosterPreview: null, memberRosterSourceName: null, famePreview: null, fameCategory: 'pve', fameSourceName: null, rankingCategory: 'overall', editingEventId: null };
+const state = { data: null, lastLoadedAt: 0, currentView: 'overview', csrf: null, userId: null, permissions: { full: true, registrations: true }, registrationPreview: null, memberRosterPreview: null, memberRosterSourceName: null, famePreview: null, famePreviewSort: 'delta-desc', fameCategory: 'pve', fameSourceName: null, rankingCategory: 'overall', editingEventId: null };
 const number = new Intl.NumberFormat('pt-BR');
 const collator = new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base' });
 
@@ -602,6 +602,7 @@ function renderFameRankings(fameData) {
 
 function resetFamePreview() {
   state.famePreview = null;
+  state.famePreviewSort = 'delta-desc';
   document.querySelector('#fame-preview-empty').hidden = false;
   document.querySelector('#fame-preview-content').hidden = true;
   document.querySelector('#fame-preview-status').textContent = 'Aguardando tabela';
@@ -639,8 +640,22 @@ function renderFamePreview(preview) {
     ? preview.errors.slice(0, 3).map((error) => `Linha ${error.line}: ${error.message}`).join(' · ')
     : '';
   document.querySelector('#fame-confirm').disabled = preview.errors.length > 0;
-  document.querySelector('#fame-preview-table').innerHTML = preview.rows.length
-    ? preview.rows.map((row) => {
+  const deltaDescending = state.famePreviewSort !== 'delta-asc';
+  const deltaHeader = document.querySelector('#fame-delta-header');
+  const deltaSort = document.querySelector('#fame-delta-sort');
+  deltaHeader.setAttribute('aria-sort', deltaDescending ? 'descending' : 'ascending');
+  deltaSort.innerHTML = `Alteração <span aria-hidden="true">${deltaDescending ? '↓' : '↑'}</span>`;
+  deltaSort.title = deltaDescending
+    ? 'Ordenado do maior para o menor. Clique para inverter.'
+    : 'Ordenado do menor para o maior. Clique para inverter.';
+  const sortedRows = [...preview.rows].sort((left, right) => {
+    const difference = deltaDescending
+      ? Number(right.delta || 0) - Number(left.delta || 0)
+      : Number(left.delta || 0) - Number(right.delta || 0);
+    return difference || collator.compare(left.albionName || '', right.albionName || '');
+  });
+  document.querySelector('#fame-preview-table').innerHTML = sortedRows.length
+    ? sortedRows.map((row) => {
       const deltaClass = row.delta < 0 ? 'negative-value' : 'positive-value';
       return `<tr><td class="primary-cell">${escapeHtml(row.albionName)}${row.guildRole ? `<span class="secondary-text">${escapeHtml(row.guildRole)}</span>` : ''}</td><td>${row.discordId ? '<span class="badge member">Vinculado</span>' : '<span class="badge pending">Sem Discord</span>'}</td><td class="number-cell">${escapeHtml(compact.format(row.previousAmount))}</td><td class="number-cell">${escapeHtml(compact.format(row.amount))}</td><td class="number-cell ${deltaClass}">${row.delta >= 0 ? '+' : ''}${escapeHtml(compact.format(row.delta))}</td></tr>`;
     }).join('')
@@ -1114,6 +1129,11 @@ document.querySelector('#fame-file').addEventListener('change', async (event) =>
 document.querySelector('#fame-analyze').addEventListener('click', analyzeFameTable);
 document.querySelector('#fame-confirm').addEventListener('click', confirmFameImport);
 document.querySelector('#fame-undo').addEventListener('click', undoFameImport);
+document.querySelector('#fame-delta-sort').addEventListener('click', () => {
+  if (!state.famePreview) return;
+  state.famePreviewSort = state.famePreviewSort === 'delta-desc' ? 'delta-asc' : 'delta-desc';
+  renderFamePreview(state.famePreview);
+});
 document.querySelector('#staff-withdraw-list').addEventListener('click', (event) => {
   const button = event.target.closest('.staff-withdraw-action');
   if (button) manageStaffWithdrawal(button);

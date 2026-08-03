@@ -7,7 +7,7 @@ function escapeHtml(value) {
 }
 
 function formatSilver(value) {
-  return `${compact.format(Number(value || 0)).toLowerCase()} prata`;
+  return compact.format(Number(value || 0)).toLowerCase();
 }
 
 function parseSilverInput(value) {
@@ -45,8 +45,8 @@ function empty(message) {
   return `<div class="portal-empty">${escapeHtml(message)}</div>`;
 }
 
-function metric(label, value, note, color = '#5865f2') {
-  return `<article class="metric-card" style="--metric-color:${color}"><span class="metric-label">${escapeHtml(label)}</span><strong class="metric-value">${escapeHtml(value)}</strong><small class="metric-note">${escapeHtml(note)}</small></article>`;
+function metric(label, value, note, color = '#5865f2', className = '') {
+  return `<article class="metric-card ${className}" style="--metric-color:${color}"><span class="metric-label">${escapeHtml(label)}</span><strong class="metric-value">${escapeHtml(value)}</strong><small class="metric-note">${escapeHtml(note)}</small></article>`;
 }
 
 async function fetchJson(url) {
@@ -137,9 +137,23 @@ function eventActions(event) {
   return `<div class="event-signup">${current}${participantControl}<button class="button button-secondary event-action" type="button" data-event-id="${event.id}" data-event-action="spectate" ${isSpectator ? 'disabled' : ''}>${isSpectator ? 'Você é espectador' : 'Entrar como espectador'}</button><small>Espectadores não ocupam vaga nem recebem loot.</small></div>`;
 }
 
+function renderEventDescription(event) {
+  const raw = String(event.description || event.location || 'Detalhes no Discord.');
+  const urlMatch = raw.match(/https?:\/\/[^\s<]+/i);
+  if (!urlMatch) return escapeHtml(raw);
+
+  const before = raw.slice(0, urlMatch.index).replace(/[>\-:|\s]+$/g, '').trim();
+  const after = raw.slice(urlMatch.index + urlMatch[0].length).trim();
+  const parts = [];
+  if (before) parts.push(`<span>${escapeHtml(before)}</span>`);
+  parts.push(`<a class="event-build-link" href="${escapeHtml(urlMatch[0])}" target="_blank" rel="noopener noreferrer">Ver builds</a>`);
+  if (after) parts.push(`<span>${escapeHtml(after)}</span>`);
+  return `<span class="event-description">${parts.join('')}</span>`;
+}
+
 function eventCard(event, interactive = true) {
   const total = Number(event.capacity || 20);
-  return `<article class="event-mini-card ${event.status === 'running' ? 'running' : ''}"><div><span>${escapeHtml(event.event_code)}</span>${badge(event.status)}</div><h4>${escapeHtml(event.title)}</h4><p>${escapeHtml(event.description || event.location || 'Local a confirmar')}</p><footer><span>${escapeHtml(event.scheduled_time || 'Horário a confirmar')}</span><strong>${integer.format(event.participants || 0)}/${integer.format(total)} participantes</strong></footer>${interactive ? `${eventPeople(event)}${eventActions(event)}` : ''}</article>`;
+  return `<article class="event-mini-card ${event.status === 'running' ? 'running' : ''}"><div><span>${escapeHtml(event.event_code)}</span>${badge(event.status)}</div><h4>${escapeHtml(event.title)}</h4><p>${renderEventDescription(event)}</p><footer><span>${escapeHtml(event.scheduled_time || 'Horário a confirmar')}</span><strong>${integer.format(event.participants || 0)}/${integer.format(total)} participantes</strong></footer>${interactive ? `${eventPeople(event)}${eventActions(event)}` : ''}</article>`;
 }
 
 function renderEvents(data) {
@@ -200,7 +214,13 @@ const rankingConfig = {
 function renderRankings(data) {
   if (data.profile.accessLevel !== 'member') return;
   const own = data.rankings.own || {};
-  document.querySelector('#personal-ranks').innerHTML = Object.entries(rankingConfig).map(([, config]) => metric(config.label, own[config.rank] ? `#${own[config.rank]}` : '—', own[config.value] ? compact.format(own[config.value]).toLowerCase() : 'Sem pontuação')).join('');
+  document.querySelector('#personal-ranks').innerHTML = Object.entries(rankingConfig).map(([key, config]) => metric(
+    config.label,
+    own[config.rank] ? `#${own[config.rank]}` : '—',
+    own[config.value] ? compact.format(own[config.value]).toLowerCase() : 'Sem pontuação',
+    '#5865f2',
+    `ranking-summary-card${state.rankingCategory === key ? ' active' : ''}`,
+  )).join('');
   const config = rankingConfig[state.rankingCategory];
   const query = document.querySelector('#ranking-search').value.trim().toLowerCase();
   const rows = data.rankings.rows.filter((row) => row[config.rank] && (!query || row.albion_name.toLowerCase().includes(query))).sort((a, b) => a[config.rank] - b[config.rank]);
