@@ -143,6 +143,23 @@ Quando fica online, o bot agenda:
 
 Existe `discloud.config`.
 
+### Deploy Automatico
+
+O workflow `.github/workflows/deploy-discloud.yml` testa e publica a aplicacao
+automaticamente quando alteracoes que afetam o bot chegam a branch `main`.
+
+Configuracao unica no GitHub:
+
+1. Abrir `Settings > Secrets and variables > Actions` no repositorio.
+2. Criar o secret `DISCLOUD_TOKEN` com o token de API da conta Discloud.
+3. Fazer um push na `main` ou executar manualmente `Deploy Discloud` em `Actions`.
+
+O pacote respeita `.discloudignore` e bloqueia o envio de `.env`, `node_modules`,
+arquivos do Git e bancos SQLite. Os testes precisam passar antes da publicacao.
+
+Alteracoes em `src/commands/definitions.js` ainda exigem o registro dos comandos
+com `npm run deploy:commands` em um ambiente que tenha `DISCORD_TOKEN`.
+
 Antes de subir:
 
 1. Confirmar `.env` no ambiente da Discloud.

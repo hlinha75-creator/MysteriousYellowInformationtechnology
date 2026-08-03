@@ -1,0 +1,82 @@
+name: Deploy Discloud
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "src/**"
+      - "scripts/**"
+      - "resources/**"
+      - "data/idle-audio/**"
+      - "package.json"
+      - "package-lock.json"
+      - "discloud.config"
+      - ".discloudignore"
+      - ".github/workflows/deploy-discloud.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-discloud-notag
+  cancel-in-progress: false
+
+jobs:
+  test-and-deploy:
+    name: Testar e publicar
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Baixar codigo
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Executar testes
+        run: npm test
+
+      - name: Criar pacote da Discloud
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_dir="$(mktemp -d)"
+          rsync -a --exclude-from=.discloudignore ./ "$package_dir/"
+          (
+            cd "$package_dir"
+            zip -q -r "$GITHUB_WORKSPACE/notag-deploy.zip" .
+          )
+
+          if unzip -Z1 notag-deploy.zip | grep -Eq '(^|/)(\.env|node_modules|\.git)(/|$)|data/[^/]+\.sqlite($|-)'; then
+            echo "O pacote contem arquivo proibido ou banco SQLite."
+            exit 1
+          fi
+
+      - name: Atualizar aplicacao na Discloud
+        env:
+          DISCLOUD_TOKEN: ${{ secrets.DISCLOUD_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$DISCLOUD_TOKEN" ]; then
+            echo "Cadastre o secret DISCLOUD_TOKEN no repositorio."
+            exit 1
+          fi
+
+          curl \
+            --fail-with-body \
+            --silent \
+            --show-error \
+            --request PUT \
+            --header "api-token: $DISCLOUD_TOKEN" \
+            --form "file=@notag-deploy.zip;type=application/zip" \
+            "https://api.discloud.app/v2/app/notag/commit"
