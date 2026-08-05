@@ -523,7 +523,36 @@ function renderRankings(rankings) {
   document.querySelector('#participation-period').textContent = rankings.participation.label;
   renderRanking('pve-ranking-full', rankings.pve.rows, 'pve');
   renderRanking('participation-ranking-full', rankings.participation.rows, 'participation');
+  renderSeasonRanking(rankings.season);
   renderFameRankings(rankings.fame);
+}
+
+function renderSeasonRanking(season) {
+  if (!season) return;
+  const pointsFormat = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const query = controlValue('season-ranking-search');
+  const link = controlValue('ranking-link');
+  const rows = season.rows.filter((row) => (
+    (!link || (link === 'linked' ? row.linked : !row.linked))
+    && includesQuery(row, query, ['name'])
+  ));
+  const capturedAt = season.capturedAt ? season.capturedAt.split('-').reverse().join('/') : 'data não informada';
+  const missing = Object.values(season.missingRanks || {}).reduce((sum, ranks) => sum + ranks.length, 0);
+  document.querySelector('#season-ranking-period').textContent = `Snapshot ${season.snapshotLabel} · ${capturedAt}`;
+  document.querySelector('#season-ranking-metrics').innerHTML = [
+    metricCard('Pontos da guilda', number.format(season.officialGuildPoints), 'Total oficial no snapshot'),
+    metricCard('Estimativa distribuída', pointsFormat.format(season.distributedEstimate), 'Somente linhas capturadas'),
+    metricCard('Jogadores pontuando', number.format(season.rows.length), 'Ao menos uma categoria Black'),
+    metricCard('Linhas pendentes', number.format(missing), 'Guild Challenge 40–50')
+  ].join('');
+  setSummary('season-ranking-summary', rows.length, season.rows.length);
+  document.querySelector('#season-ranking-table').innerHTML = rows.length ? rows.map((row) => (
+    `<tr><td class="ranking-table-position">#${number.format(row.rank)}</td>`
+    + `<td class="primary-cell">${escapeHtml(row.name)}<small>${row.linked ? 'Vinculado ao Discord' : 'Sem vínculo confirmado'}</small></td>`
+    + `<td>${escapeHtml(row.mainCategory?.label || '—')}<small>${row.mainCategory ? `${pointsFormat.format(row.mainCategory.points)} pts` : ''}</small></td>`
+    + `<td class="number-cell ranking-primary-value">${escapeHtml(pointsFormat.format(row.totalPoints))} pts</td></tr>`
+  )).join('') : emptyRow(4, 'Nenhum jogador encontrado com estes filtros.');
+  document.querySelector('#season-ranking-note').textContent = 'Fórmula: pontos da categoria × contribuição Black do jogador ÷ total da categoria. Totais exibidos em k/m produzem pequena margem de arredondamento.';
 }
 
 const fameCategoryLabels = { pve: 'PvE', pvp: 'PvP', gathering: 'Coleta', crafting: 'Craft' };

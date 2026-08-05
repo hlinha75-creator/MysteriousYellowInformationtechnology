@@ -17,6 +17,7 @@ const { calculateNetLoot, calculatePayouts } = require('./lootCalculator');
 const { formatSilver } = require('../../utils/silver');
 const { backupDatabase } = require('../../database/backup');
 const { normalizeAllowedMentions, safeSend } = require('../../utils/discord');
+const { embedFieldValue, embedLinesFields } = require('./eventPresentation');
 
 const roleConfigs = {
   tank: { label: 'Tank', slots: 'tank_slots', style: ButtonStyle.Primary },
@@ -1936,69 +1937,6 @@ function reviewEmbed(eventId) {
     )
     .setColor(0xd69e2e)
     .setTimestamp(new Date());
-}
-
-function embedFieldValue(value, maxLength = 1024) {
-  const text = String(value || '-').trim() || '-';
-  if (text.length <= maxLength) return text;
-  return `${text.slice(0, maxLength - 20)}\n... texto cortado`;
-}
-
-function embedLinesValue(lines, emptyText, maxLength = 1024) {
-  if (!lines.length) return emptyText;
-  const visible = [];
-  let hidden = 0;
-  for (const line of lines) {
-    const text = String(line || '').trim();
-    if (!text) continue;
-    const candidate = [...visible, text].join('\n');
-    if (candidate.length > maxLength - 32) {
-      hidden += 1;
-    } else {
-      visible.push(text);
-    }
-  }
-
-  if (hidden > 0) {
-    let suffix = `... e mais ${hidden}`;
-    while ([...visible, suffix].join('\n').length > maxLength && visible.length > 0) {
-      visible.pop();
-      hidden += 1;
-      suffix = `... e mais ${hidden}`;
-    }
-    visible.push(suffix);
-  }
-
-  return visible.join('\n') || emptyText;
-}
-
-function embedLinesFields(name, lines, emptyText, maxLength = 1024) {
-  const cleanLines = lines.map((line) => String(line || '').trim()).filter(Boolean);
-  if (!cleanLines.length) return [{ name, value: emptyText, inline: false }];
-
-  const fields = [];
-  let current = [];
-  for (const line of cleanLines) {
-    const candidate = [...current, line].join('\n');
-    if (candidate.length > maxLength && current.length > 0) {
-      fields.push({ name: fieldPageName(name, fields.length), value: current.join('\n'), inline: false });
-      current = [line];
-    } else if (line.length > maxLength) {
-      fields.push({ name: fieldPageName(name, fields.length), value: embedFieldValue(line, maxLength), inline: false });
-      current = [];
-    } else {
-      current.push(line);
-    }
-  }
-
-  if (current.length > 0) {
-    fields.push({ name: fieldPageName(name, fields.length), value: current.join('\n'), inline: false });
-  }
-  return fields.slice(0, 20);
-}
-
-function fieldPageName(name, index) {
-  return index === 0 ? name : `${name} ${index + 1}`;
 }
 
 function reviewComponents(eventId, mode = 'review') {

@@ -2,6 +2,7 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  EmbedBuilder,
   MessageFlags,
   ModalBuilder,
   TextInputBuilder,
@@ -23,6 +24,8 @@ const accountLinks = require('../modules/accounts/accountLinks.service');
 const guildReverification = require('../modules/members/guildReverification.service');
 const guildReverificationRepo = require('../modules/members/guildReverification.repository');
 const giveaways = require('../modules/giveaways/giveaways.service');
+const seasonPoints = require('../modules/albion/seasonPoints.service');
+const { getDatabase } = require('../database/connection');
 
 function input(id, label, style = TextInputStyle.Short, required = true) {
   return new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setRequired(required);
@@ -75,6 +78,57 @@ async function handleCommand(interaction) {
     return interaction.showModal(modal('registration:submit', 'Registro Albion', [
       input('albionName', 'Nome do personagem no Albion')
     ]));
+  }
+
+  if (interaction.commandName === 'temporada') {
+    const action = interaction.options.getSubcommand();
+    const ranking = seasonPoints.calculateSeasonRanking();
+    const format = (value) => new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+
+    if (action === 'ranking') {
+      const limit = interaction.options.getInteger('limite') || 10;
+      const rows = seasonPoints.topSeasonPlayers(limit);
+      const embed = new EmbedBuilder()
+        .setTitle(`Temporada ${ranking.season} - ranking Black`)
+        .setDescription([
+          `Snapshot **${ranking.snapshotLabel}** de ${ranking.capturedAt.split('-').reverse().join('/')}.`,
+          rows.map((row) => `**#${row.rank}** ${row.name} - **${format(row.totalPoints)}** pts`).join('\n')
+        ].join('\n\n'))
+        .setColor(0xf2bd4a)
+        .setFooter({ text: 'Estimativa proporcional; categorias com totais em k/m possuem pequena margem de arredondamento.' });
+      return interaction.reply({ embeds: [embed] });
+    }
+
+    const registered = getDatabase().prepare('SELECT albion_name FROM users WHERE discord_id = ?').get(interaction.user.id);
+    const name = interaction.options.getString('jogador') || registered?.albion_name;
+    if (!name) {
+      return interaction.reply({
+        content: 'Informe o nome do jogador ou registre seu nome do Albion primeiro.',
+        flags: MessageFlags.Ephemeral
+      });
+    }
+    const player = seasonPoints.findSeasonPlayer(name);
+    if (!player) {
+      return interaction.reply({
+        content: `Nao encontrei **${name}** no snapshot Ouro da Temporada ${ranking.season}.`,
+        flags: MessageFlags.Ephemeral
+      });
+    }
+    const details = player.categories.slice(0, 8)
+      .map((category) => `${category.label}: **${format(category.points)}** pts (${new Intl.NumberFormat('pt-BR').format(category.amount)})`)
+      .join('\n');
+    const embed = new EmbedBuilder()
+      .setTitle(`${player.name} - Temporada ${ranking.season}`)
+      .setDescription('Pontos estimados usando apenas as contribuicoes Black dos rankings do Guild Might.')
+      .addFields(
+        { name: 'Rank estimado', value: `#${player.rank}`, inline: true },
+        { name: 'Total estimado', value: `${format(player.totalPoints)} pts`, inline: true },
+        { name: 'Snapshot', value: ranking.snapshotLabel, inline: true },
+        { name: 'Por categoria', value: details || 'Sem contribuicoes.', inline: false }
+      )
+      .setColor(0xf2bd4a)
+      .setFooter({ text: 'Formula: pontos da categoria x contribuicao do jogador / total da categoria.' });
+    return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
   }
 
   if (interaction.commandName === 'mesclar_contas') {

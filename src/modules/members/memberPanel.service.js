@@ -11,10 +11,10 @@ const { getDatabase } = require('../../database/connection');
 const { parseCsv } = require('../../utils/csv');
 const { formatSilver } = require('../../utils/silver');
 const { safeSend } = require('../../utils/discord');
+const seasonPoints = require('../albion/seasonPoints.service');
 
 const pointsDir = path.resolve(__dirname, '..', '..', '..', 'resources', 'season32');
 const normalPointsPath = path.join(pointsDir, 'pontos_normais.csv');
-const seasonPointsPath = path.join(pointsDir, 'pontos_temporada.csv');
 const graphUrl = 'https://notag.xyz/S32/pizza.html';
 
 function panelPayload() {
@@ -49,8 +49,6 @@ function panelComponents() {
 function pointsEmbed(userId, kind) {
   const user = getUser(userId);
   const lookupName = user?.albion_name || '';
-  const file = kind === 'season' ? seasonPointsPath : normalPointsPath;
-  const row = findPointsRow(file, lookupName);
   const title = kind === 'season' ? 'Pontos de temporada' : 'Pontos de influencia';
 
   if (!lookupName) {
@@ -58,15 +56,46 @@ function pointsEmbed(userId, kind) {
       .setDescription('Voce ainda nao tem nick Albion registrado no bot. Use o painel de registro primeiro.');
   }
 
+  if (kind === 'season') {
+    const ranking = seasonPoints.calculateSeasonRanking();
+    const player = seasonPoints.findSeasonPlayer(lookupName);
+    if (!player) {
+      return baseEmbed(title)
+        .setDescription(`Nao encontrei **${lookupName}** no snapshot Ouro da Temporada ${ranking.season}.`);
+    }
+    return baseEmbed(`${title} - Temporada ${ranking.season}`)
+      .setDescription([
+        `Estimativa Black para **${player.name}** no snapshot **${ranking.snapshotLabel}**.`,
+        'Formula: pontos da categoria x contribuicao do jogador / total da categoria.'
+      ].join('\n'))
+      .addFields(
+        { name: 'Rank estimado', value: `#${player.rank}`, inline: true },
+        { name: 'Total estimado', value: numberText(player.totalPoints), inline: true },
+        { name: 'Coleta', value: ranking.capturedAt.split('-').reverse().join('/'), inline: true },
+        {
+          name: 'Destaques',
+          value: player.categories.slice(0, 5)
+            .map((category) => `${category.label}: ${numberText(category.points)} pts`)
+            .join('\n') || 'Sem detalhes.',
+          inline: false
+        },
+        {
+          name: 'Observacao',
+          value: 'Totais abreviados em k/m geram pequena margem de arredondamento. O trecho 40-50 do Guild Challenge ainda nao estava nas capturas.',
+          inline: false
+        }
+      );
+  }
+
+  const row = findPointsRow(normalPointsPath, lookupName);
+
   if (!row) {
     return baseEmbed(title)
       .setDescription(`Nao encontrei **${lookupName}** no CSV atual.\nGrafico: ${graphUrl}`);
   }
 
-  const total = kind === 'season'
-    ? row.season_points_estimado_total
-    : row.pontos_normais_total;
-  const rank = kind === 'season' ? row.rank_estimado : row.rank_pontos_normais;
+  const total = row.pontos_normais_total;
+  const rank = row.rank_pontos_normais;
 
   return baseEmbed(title)
     .setDescription(`Consulta para **${lookupName}**`)

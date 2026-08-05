@@ -14,6 +14,17 @@ const commands = [
     .setDescription('Consulta saldo.')
     .addUserOption((option) => option.setName('membro').setDescription('Membro para consultar.')),
   new SlashCommandBuilder()
+    .setName('temporada')
+    .setDescription('Consulta os pontos Black estimados da temporada.')
+    .addSubcommand((subcommand) => subcommand
+      .setName('pontos')
+      .setDescription('Mostra os pontos de um jogador; sem nome, consulta seu cadastro.')
+      .addStringOption((option) => option.setName('jogador').setDescription('Nome exato no Albion.').setMaxLength(32)))
+    .addSubcommand((subcommand) => subcommand
+      .setName('ranking')
+      .setDescription('Mostra os primeiros colocados da temporada.')
+      .addIntegerOption((option) => option.setName('limite').setDescription('Quantidade de jogadores.').setMinValue(3).setMaxValue(20))),
+  new SlashCommandBuilder()
     .setName('registro')
     .setDescription('Abre registro de nome em jogo.'),
   new SlashCommandBuilder()

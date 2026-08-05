@@ -22,6 +22,11 @@ const giveaways = require('./modules/giveaways/giveaways.service');
 const { startWebServer } = require('./web/server');
 const { handleInteraction } = require('./interactions/router');
 const { isExpiredOrDuplicateInteraction } = require('./utils/interactions');
+const { runTasks, scheduleTaskGroups } = require('./runtime/taskScheduler');
+
+function backgroundTask(run, errorMessage) {
+  return { run, errorMessage };
+}
 
 migrate();
 backupDatabase('startup');
@@ -79,57 +84,52 @@ client.once('clientReady', () => {
       }
     })
     .catch((error) => console.error('Falha ao reconciliar mensagens de eventos:', error));
-  balanceBackup.postDailyBackupIfNeeded(client).catch((error) => console.error('Falha ao postar backup diario de saldos:', error));
-  operations.postDailyAdminReportIfNeeded(client).catch((error) => console.error('Falha ao enviar relatorio diario ADM:', error));
-  operations.postReleaseAnnouncementIfNeeded(client).catch((error) => console.error('Falha ao anunciar atualizacao do bot:', error));
-  operations.postWeeklyAlbionReminderIfNeeded(client).catch((error) => console.error('Falha ao postar lembrete semanal Albion:', error));
-  operations.postMonthlyInactivityPreviewIfNeeded(client).catch((error) => console.error('Falha ao postar previa mensal de inatividade:', error));
-  campaigns.refreshActiveCampaignProgress(client).catch((error) => console.error('Falha ao atualizar progresso da campanha:', error));
-  campaigns.processExpiredEventPayouts(client).catch((error) => console.error('Falha ao processar escolhas vencidas da campanha:', error));
-  guildVerification.processIdentificationNoticeQueue(client).catch((error) => console.error('Falha ao processar avisos de regularizacao:', error));
-  voice.postWeeklyCoreAwardsIfNeeded(client).catch((error) => console.error('Falha ao publicar jogadores constantes:', error));
-  guildReverification.postReminderIfNeeded(client).catch((error) => console.error('Falha ao processar verificacao da guilda:', error));
-  dailyPveRanking.postDailyPveRankingIfNeeded(client).catch((error) => console.error('Falha ao publicar Top 5 PvE:', error));
-  dailyPveRanking.postWeeklyRankingIfNeeded(client).catch((error) => console.error('Falha ao publicar ranking semanal de fama:', error));
-  lochMarket.postAnnouncementIfNeeded(client).catch((error) => console.error('Falha ao publicar comunicado do mercado de Loch:', error));
-  killFeed.pollKillFeed(client).catch((error) => console.error('Falha ao consultar killfeed:', error));
-  giveaways.processDueGiveaways(client).catch((error) => console.error('Falha ao processar sorteios:', error));
-  setInterval(() => {
-    events.refreshRunningEventMessages(client).catch((error) => console.error('Falha ao atualizar eventos em andamento:', error));
-  }, 60000);
-  setInterval(() => {
-    events.checkEventStartWarnings(client).catch((error) => console.error('Falha ao verificar avisos de eventos:', error));
-  }, 30000);
-  setInterval(() => {
-    giveaways.processDueGiveaways(client).catch((error) => console.error('Falha ao processar sorteios:', error));
-  }, 30000);
-  setInterval(() => {
-    killFeed.pollKillFeed(client).catch((error) => console.error('Falha ao consultar killfeed:', error));
-  }, 30000);
-  setInterval(() => {
-    campaigns.processExpiredEventPayouts(client).catch((error) => console.error('Falha ao processar escolhas vencidas da campanha:', error));
-  }, 10 * 60 * 1000);
-  setInterval(() => {
-    campaigns.refreshActiveCampaignProgress(client).catch((error) => console.error('Falha ao atualizar progresso da campanha:', error));
-  }, 10 * 60 * 1000);
-  setInterval(() => {
-    guildVerification.processIdentificationNoticeQueue(client).catch((error) => console.error('Falha ao processar avisos de regularizacao:', error));
-  }, 10 * 60 * 1000);
-  setInterval(() => {
-    events.cleanupExpiredReviewChannels(client).catch((error) => console.error('Falha ao limpar canais de revisao:', error));
-  }, 60 * 60 * 1000);
-  setInterval(() => {
-    balanceBackup.postDailyBackupIfNeeded(client).catch((error) => console.error('Falha ao postar backup diario de saldos:', error));
-    operations.postDailyAdminReportIfNeeded(client).catch((error) => console.error('Falha ao enviar relatorio diario ADM:', error));
-    dailyPveRanking.postDailyPveRankingIfNeeded(client).catch((error) => console.error('Falha ao publicar Top 5 PvE:', error));
-    dailyPveRanking.postWeeklyRankingIfNeeded(client).catch((error) => console.error('Falha ao publicar ranking semanal de fama:', error));
-  }, 60 * 60 * 1000);
-  setInterval(() => {
-    operations.postWeeklyAlbionReminderIfNeeded(client).catch((error) => console.error('Falha ao postar lembrete semanal Albion:', error));
-    operations.postMonthlyInactivityPreviewIfNeeded(client).catch((error) => console.error('Falha ao postar previa mensal de inatividade:', error));
-    voice.postWeeklyCoreAwardsIfNeeded(client).catch((error) => console.error('Falha ao publicar jogadores constantes:', error));
-    guildReverification.postReminderIfNeeded(client).catch((error) => console.error('Falha ao processar verificacao da guilda:', error));
-  }, 60 * 60 * 1000);
+  void runTasks([
+    backgroundTask(() => balanceBackup.postDailyBackupIfNeeded(client), 'Falha ao postar backup diario de saldos:'),
+    backgroundTask(() => operations.postDailyAdminReportIfNeeded(client), 'Falha ao enviar relatorio diario ADM:'),
+    backgroundTask(() => operations.postReleaseAnnouncementIfNeeded(client), 'Falha ao anunciar atualizacao do bot:'),
+    backgroundTask(() => operations.postWeeklyAlbionReminderIfNeeded(client), 'Falha ao postar lembrete semanal Albion:'),
+    backgroundTask(() => operations.postMonthlyInactivityPreviewIfNeeded(client), 'Falha ao postar previa mensal de inatividade:'),
+    backgroundTask(() => campaigns.refreshActiveCampaignProgress(client), 'Falha ao atualizar progresso da campanha:'),
+    backgroundTask(() => campaigns.processExpiredEventPayouts(client), 'Falha ao processar escolhas vencidas da campanha:'),
+    backgroundTask(() => guildVerification.processIdentificationNoticeQueue(client), 'Falha ao processar avisos de regularizacao:'),
+    backgroundTask(() => voice.postWeeklyCoreAwardsIfNeeded(client), 'Falha ao publicar jogadores constantes:'),
+    backgroundTask(() => guildReverification.postReminderIfNeeded(client), 'Falha ao processar verificacao da guilda:'),
+    backgroundTask(() => dailyPveRanking.postDailyPveRankingIfNeeded(client), 'Falha ao publicar Top 5 PvE:'),
+    backgroundTask(() => dailyPveRanking.postWeeklyRankingIfNeeded(client), 'Falha ao publicar ranking semanal de fama:'),
+    backgroundTask(() => lochMarket.postAnnouncementIfNeeded(client), 'Falha ao publicar comunicado do mercado de Loch:'),
+    backgroundTask(() => killFeed.pollKillFeed(client), 'Falha ao consultar killfeed:'),
+    backgroundTask(() => giveaways.processDueGiveaways(client), 'Falha ao processar sorteios:')
+  ]);
+
+  scheduleTaskGroups([
+    { intervalMs: 60000, tasks: [backgroundTask(() => events.refreshRunningEventMessages(client), 'Falha ao atualizar eventos em andamento:')] },
+    { intervalMs: 30000, tasks: [backgroundTask(() => events.checkEventStartWarnings(client), 'Falha ao verificar avisos de eventos:')] },
+    { intervalMs: 30000, tasks: [backgroundTask(() => giveaways.processDueGiveaways(client), 'Falha ao processar sorteios:')] },
+    { intervalMs: 30000, tasks: [backgroundTask(() => killFeed.pollKillFeed(client), 'Falha ao consultar killfeed:')] },
+    { intervalMs: 10 * 60 * 1000, tasks: [backgroundTask(() => campaigns.processExpiredEventPayouts(client), 'Falha ao processar escolhas vencidas da campanha:')] },
+    { intervalMs: 10 * 60 * 1000, tasks: [backgroundTask(() => campaigns.refreshActiveCampaignProgress(client), 'Falha ao atualizar progresso da campanha:')] },
+    { intervalMs: 10 * 60 * 1000, tasks: [backgroundTask(() => guildVerification.processIdentificationNoticeQueue(client), 'Falha ao processar avisos de regularizacao:')] },
+    { intervalMs: 60 * 60 * 1000, tasks: [backgroundTask(() => events.cleanupExpiredReviewChannels(client), 'Falha ao limpar canais de revisao:')] },
+    {
+      intervalMs: 60 * 60 * 1000,
+      tasks: [
+        backgroundTask(() => balanceBackup.postDailyBackupIfNeeded(client), 'Falha ao postar backup diario de saldos:'),
+        backgroundTask(() => operations.postDailyAdminReportIfNeeded(client), 'Falha ao enviar relatorio diario ADM:'),
+        backgroundTask(() => dailyPveRanking.postDailyPveRankingIfNeeded(client), 'Falha ao publicar Top 5 PvE:'),
+        backgroundTask(() => dailyPveRanking.postWeeklyRankingIfNeeded(client), 'Falha ao publicar ranking semanal de fama:')
+      ]
+    },
+    {
+      intervalMs: 60 * 60 * 1000,
+      tasks: [
+        backgroundTask(() => operations.postWeeklyAlbionReminderIfNeeded(client), 'Falha ao postar lembrete semanal Albion:'),
+        backgroundTask(() => operations.postMonthlyInactivityPreviewIfNeeded(client), 'Falha ao postar previa mensal de inatividade:'),
+        backgroundTask(() => voice.postWeeklyCoreAwardsIfNeeded(client), 'Falha ao publicar jogadores constantes:'),
+        backgroundTask(() => guildReverification.postReminderIfNeeded(client), 'Falha ao processar verificacao da guilda:')
+      ]
+    }
+  ]);
 });
 
 client.on('error', (error) => {

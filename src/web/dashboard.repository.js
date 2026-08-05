@@ -1,4 +1,5 @@
 const { getDatabase } = require('../database/connection');
+const seasonPoints = require('../modules/albion/seasonPoints.service');
 
 function scalar(sql, params = []) {
   const row = getDatabase().prepare(sql).get(...params);
@@ -70,6 +71,22 @@ function participationRanking(limit = 10) {
     LIMIT ?
   `).all(limit);
   return { label: 'Últimos 7 dias', source: 'event_participants', rows };
+}
+
+function seasonDashboard() {
+  const ranking = seasonPoints.calculateSeasonRanking();
+  const linkedNames = new Set(getDatabase().prepare(`
+    SELECT lower(albion_name) AS albion_key
+    FROM users
+    WHERE albion_name IS NOT NULL AND trim(albion_name) <> ''
+  `).all().map((row) => row.albion_key));
+  return {
+    ...ranking,
+    rows: ranking.rows.map((row) => ({
+      ...row,
+      linked: linkedNames.has(row.name.toLowerCase())
+    }))
+  };
 }
 
 function fameDashboard() {
@@ -382,6 +399,7 @@ function getDashboardData() {
     rankings: {
       pve: latestPveRanking(),
       participation: participationRanking(),
+      season: seasonDashboard(),
       fame: fameDashboard()
     },
     members: listMembers(),
@@ -403,4 +421,4 @@ function getDashboardData() {
   };
 }
 
-module.exports = { fameDashboard, getDashboardData, latestPveRanking, participationRanking, publicFameRankings };
+module.exports = { fameDashboard, getDashboardData, latestPveRanking, participationRanking, publicFameRankings, seasonDashboard };

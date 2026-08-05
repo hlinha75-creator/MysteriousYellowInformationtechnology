@@ -130,6 +130,15 @@
               <select id="ranking-sort" aria-label="Classificar rankings"><option value="rank">Posição oficial</option><option value="value-desc">Pontos: maior–menor</option><option value="value-asc">Pontos: menor–maior</option><option value="name-asc">Nome: A–Z</option><option value="name-desc">Nome: Z–A</option></select>
             </div>
           </div>
+          <div class="view-subheading"><div><h2>Temporada 33 — Black</h2><p>Estimativa proporcional do snapshot Ouro, usando somente os rankings do Guild Might.</p></div><div class="table-controls"><input class="search-input" id="season-ranking-search" type="search" placeholder="Buscar na temporada…" aria-label="Buscar no ranking da temporada"></div></div>
+          <div class="metric-grid compact ranking-metrics" id="season-ranking-metrics"></div>
+          <article class="panel ranking-panel season-ranking-panel">
+            <div class="panel-head"><div><span id="season-ranking-period">Snapshot Ouro</span><h3>Ranking estimado da temporada</h3></div><span class="badge">Black</span></div>
+            <div class="result-summary" id="season-ranking-summary"></div>
+            <div class="table-wrap"><table class="fame-ranking-table"><thead><tr><th>Posição</th><th>Jogador</th><th>Principal categoria</th><th class="number-cell">Pontos estimados</th></tr></thead><tbody id="season-ranking-table"></tbody></table></div>
+            <p class="table-note" id="season-ranking-note"></p>
+          </article>
+          <div class="view-subheading"><div><h2>Classificações All-time</h2><p>Desempenho acumulado nas categorias importadas.</p></div></div>
           <div class="ranking-tabs" id="ranking-tabs" role="tablist" aria-label="Categorias de classificação">
             <button class="ranking-tab active" type="button" role="tab" aria-selected="true" data-ranking-category="overall">Geral</button>
             <button class="ranking-tab" type="button" role="tab" aria-selected="false" data-ranking-category="pve">PvE</button>
