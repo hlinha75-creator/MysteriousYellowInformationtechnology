@@ -1,6 +1,7 @@
-const state = { data: null, session: null, view: 'overview', rankingCategory: 'overall', lastLoadedAt: 0, withdrawDraft: null, editingWithdrawId: null };
+const state = { data: null, session: null, view: 'overview', rankingCategory: 'overall', expandedSeasonPlayer: null, lastLoadedAt: 0, withdrawDraft: null, editingWithdrawId: null };
 const compact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
 const integer = new Intl.NumberFormat('pt-BR');
+const decimal = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[character]));
@@ -211,8 +212,49 @@ const rankingConfig = {
   crafting: { rank: 'crafting_fame_rank', value: 'crafting_fame', label: 'Craft' }
 };
 
+function seasonRankingRows(rows, ownName) {
+  return rows.map((row) => {
+    const expanded = state.expandedSeasonPlayer === row.name;
+    const categories = (row.categories || []).map((category) => `
+      <tr>
+        <td>${escapeHtml(category.label)}</td>
+        <td class="number-cell">${escapeHtml(integer.format(category.amount))}</td>
+        <td class="number-cell">${escapeHtml(decimal.format(category.points))} pts</td>
+      </tr>`).join('');
+    return `<tr class="${row.name.toLowerCase() === String(ownName || '').toLowerCase() ? 'own-ranking-row' : ''}">
+      <td>#${row.rank}</td>
+      <td class="primary-cell"><button class="season-player-toggle" type="button" data-season-player="${escapeHtml(row.name)}" aria-expanded="${expanded}">${escapeHtml(row.name)}<small>${escapeHtml(row.mainCategory?.label || 'Contribuição Black')}</small></button></td>
+      <td class="number-cell">${escapeHtml(decimal.format(row.totalPoints))} pts</td>
+    </tr>
+    <tr class="season-detail-row" ${expanded ? '' : 'hidden'}>
+      <td colspan="3"><div class="season-breakdown"><div class="season-breakdown-title"><strong>Detalhamento de ${escapeHtml(row.name)}</strong><span>Total: ${escapeHtml(decimal.format(row.totalPoints))} pontos</span></div><div class="table-wrap"><table><thead><tr><th>Categoria</th><th class="number-cell">Contribuição</th><th class="number-cell">Pontos gerados</th></tr></thead><tbody>${categories}</tbody></table></div></div></td>
+    </tr>`;
+  }).join('');
+}
+
 function renderRankings(data) {
   if (data.profile.accessLevel !== 'member') return;
+  const note = document.querySelector('#member-ranking-note');
+  const scoreHeading = document.querySelector('#ranking-score-heading');
+  const query = document.querySelector('#ranking-search').value.trim().toLowerCase();
+
+  if (state.rankingCategory === 'season') {
+    const season = data.rankings.season;
+    const own = season?.own;
+    document.querySelector('#personal-ranks').innerHTML = [
+      metric('Minha posição', own ? `#${own.rank}` : '—', own ? `${decimal.format(own.totalPoints)} pontos` : 'Sem pontuação Black', '#f2bd4a', 'ranking-summary-card active'),
+      metric('Pontos da guilda', integer.format(season?.officialGuildPoints || 0), `Snapshot ${season?.snapshotLabel || 'Ouro'}`, '#f2bd4a'),
+      metric('Jogadores', integer.format(season?.playerCount || 0), 'Com contribuição Black registrada', '#23a55a'),
+      metric('Estimativa distribuída', decimal.format(season?.distributedEstimate || 0), `Temporada ${season?.season || 33}`, '#33a7d8')
+    ].join('');
+    const rows = (season?.rows || []).filter((row) => !query || row.name.toLowerCase().includes(query));
+    document.querySelector('#member-ranking-table').innerHTML = rows.length ? seasonRankingRows(rows, data.profile.albionName) : '<tr><td colspan="3" class="empty-cell">Nenhum jogador encontrado.</td></tr>';
+    scoreHeading.textContent = 'Pontos estimados';
+    note.textContent = 'Estimativa proporcional baseada somente nos rankings Black do Guild Might. Totais exibidos pelo jogo em k/m podem gerar pequena margem de arredondamento.';
+    note.hidden = false;
+    return;
+  }
+
   const own = data.rankings.own || {};
   document.querySelector('#personal-ranks').innerHTML = Object.entries(rankingConfig).map(([key, config]) => metric(
     config.label,
@@ -222,9 +264,10 @@ function renderRankings(data) {
     `ranking-summary-card${state.rankingCategory === key ? ' active' : ''}`,
   )).join('');
   const config = rankingConfig[state.rankingCategory];
-  const query = document.querySelector('#ranking-search').value.trim().toLowerCase();
   const rows = data.rankings.rows.filter((row) => row[config.rank] && (!query || row.albion_name.toLowerCase().includes(query))).sort((a, b) => a[config.rank] - b[config.rank]);
   document.querySelector('#member-ranking-table').innerHTML = rows.length ? rows.map((row) => `<tr class="${row.discord_id === data.profile.primaryDiscordId ? 'own-ranking-row' : ''}"><td>#${row[config.rank]}</td><td class="primary-cell">${escapeHtml(row.albion_name)}</td><td class="number-cell">${escapeHtml(compact.format(row[config.value]).toLowerCase())}${config.suffix || ''}</td></tr>`).join('') : '<tr><td colspan="3" class="empty-cell">Nenhum jogador encontrado.</td></tr>';
+  scoreHeading.textContent = 'Pontuação';
+  note.hidden = true;
 }
 
 function requestRow(row, title) {
@@ -398,9 +441,16 @@ function setView(name) {
 document.querySelectorAll('.nav-item').forEach((button) => button.addEventListener('click', () => setView(button.dataset.view)));
 document.querySelector('#refresh-button').addEventListener('click', loadPortal);
 document.querySelector('#ranking-search').addEventListener('input', () => state.data && renderRankings(state.data));
+document.querySelector('#member-ranking-table').addEventListener('click', (event) => {
+  const button = event.target.closest('[data-season-player]');
+  if (!button) return;
+  state.expandedSeasonPlayer = state.expandedSeasonPlayer === button.dataset.seasonPlayer ? null : button.dataset.seasonPlayer;
+  if (state.data) renderRankings(state.data);
+});
 document.querySelectorAll('#member-ranking-tabs button').forEach((button) => button.addEventListener('click', () => {
   state.rankingCategory = button.dataset.category;
   document.querySelectorAll('#member-ranking-tabs button').forEach((item) => item.classList.toggle('active', item === button));
+  window.history.replaceState(null, '', state.rankingCategory === 'season' ? '#temporada' : window.location.pathname);
   if (state.data) renderRankings(state.data);
 }));
 document.querySelector('#portal-events').addEventListener('click', (event) => {
@@ -425,5 +475,13 @@ window.setInterval(() => { if (!document.hidden && !state.withdrawDraft) loadPor
 Promise.all([fetchJson('/api/portal/session'), loadPortal()]).then(([session]) => {
   state.session = session;
   renderSession();
-  setView('overview');
+  const seasonRequested = window.location.hash.toLowerCase() === '#temporada' && session.user.accessLevel === 'member';
+  if (seasonRequested) {
+    state.rankingCategory = 'season';
+    document.querySelectorAll('#member-ranking-tabs button').forEach((item) => item.classList.toggle('active', item.dataset.category === 'season'));
+    if (state.data) renderRankings(state.data);
+    setView('rankings');
+  } else {
+    setView('overview');
+  }
 }).catch(() => {});

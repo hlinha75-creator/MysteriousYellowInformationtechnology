@@ -19,6 +19,7 @@ const campaigns = require('./modules/campaigns/campaigns.service');
 const guildReverification = require('./modules/members/guildReverification.service');
 const lochMarket = require('./modules/community/lochMarket.service');
 const giveaways = require('./modules/giveaways/giveaways.service');
+const seasonAnnouncement = require('./modules/albion/seasonAnnouncement.service');
 const { startWebServer } = require('./web/server');
 const { handleInteraction } = require('./interactions/router');
 const { isExpiredOrDuplicateInteraction } = require('./utils/interactions');
@@ -99,7 +100,8 @@ client.once('clientReady', () => {
     backgroundTask(() => dailyPveRanking.postWeeklyRankingIfNeeded(client), 'Falha ao publicar ranking semanal de fama:'),
     backgroundTask(() => lochMarket.postAnnouncementIfNeeded(client), 'Falha ao publicar comunicado do mercado de Loch:'),
     backgroundTask(() => killFeed.pollKillFeed(client), 'Falha ao consultar killfeed:'),
-    backgroundTask(() => giveaways.processDueGiveaways(client), 'Falha ao processar sorteios:')
+    backgroundTask(() => giveaways.processDueGiveaways(client), 'Falha ao processar sorteios:'),
+    backgroundTask(() => seasonAnnouncement.publishSeasonAnnouncement(client), 'Falha ao publicar anuncio Ouro da temporada:')
   ]);
 
   scheduleTaskGroups([

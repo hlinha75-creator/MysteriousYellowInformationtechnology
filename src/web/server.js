@@ -39,6 +39,7 @@ const {
 } = require('./auth');
 
 const PUBLIC_DIR = path.join(__dirname, 'public');
+const PORTAL_RETURN_COOKIE = 'notag_portal_return';
 const ALLOWED_STAFF_ROLES = new Set([ids.roles.adm, ids.roles.staff].filter(Boolean));
 const REGISTRATION_REVIEW_ROLES = new Set([
   ids.roles.adm,
@@ -578,6 +579,27 @@ function createRequestHandler(client, options = {}) {
         }
         return serveFile(res, 'dashboard.html', isProduction, 'private, no-store');
       }
+      if (url.pathname === '/portal/temporada') {
+        if (!portalSession && session) {
+          const access = await portalAccess(client, session.id);
+          if (access) {
+            const portalToken = createPortalSession(session, env.dashboardSessionSecret, access);
+            const portalMaxAge = access.privileged ? PORTAL_PRIVILEGED_MAX_AGE_SECONDS : PORTAL_MEMBER_MAX_AGE_SECONDS;
+            return redirect(res, '/portal#temporada', {
+              'Set-Cookie': [
+                cookie(PORTAL_SESSION_COOKIE, portalToken, { maxAge: portalMaxAge, secure: secureCookie }),
+                clearCookie(PORTAL_RETURN_COOKIE, secureCookie)
+              ]
+            }, isProduction);
+          }
+        }
+        if (portalSession && await portalAccess(client, portalSession.id)) {
+          return redirect(res, '/portal#temporada', { 'Set-Cookie': clearCookie(PORTAL_RETURN_COOKIE, secureCookie) }, isProduction);
+        }
+        return redirect(res, '/join/discord', {
+          'Set-Cookie': cookie(PORTAL_RETURN_COOKIE, 'temporada', { maxAge: OAUTH_STATE_MAX_AGE_SECONDS, secure: secureCookie })
+        }, isProduction);
+      }
       if (url.pathname === '/portal') {
         if (!portalSession && session) {
           const access = await portalAccess(client, session.id);
@@ -644,14 +666,20 @@ function createRequestHandler(client, options = {}) {
         }, isProduction);
       }
       if (url.pathname === '/join/discord') {
-        if (portalSession && await portalAccess(client, portalSession.id)) return redirect(res, '/portal', {}, isProduction);
+        const portalDestination = cookies[PORTAL_RETURN_COOKIE] === 'temporada' ? '/portal#temporada' : '/portal';
+        if (portalSession && await portalAccess(client, portalSession.id)) {
+          return redirect(res, portalDestination, { 'Set-Cookie': clearCookie(PORTAL_RETURN_COOKIE, secureCookie) }, isProduction);
+        }
         if (session) {
           const access = await portalAccess(client, session.id);
           if (access) {
             const portalToken = createPortalSession(session, env.dashboardSessionSecret, access);
             const portalMaxAge = access.privileged ? PORTAL_PRIVILEGED_MAX_AGE_SECONDS : PORTAL_MEMBER_MAX_AGE_SECONDS;
-            return redirect(res, '/portal', {
-              'Set-Cookie': cookie(PORTAL_SESSION_COOKIE, portalToken, { maxAge: portalMaxAge, secure: secureCookie })
+            return redirect(res, portalDestination, {
+              'Set-Cookie': [
+                cookie(PORTAL_SESSION_COOKIE, portalToken, { maxAge: portalMaxAge, secure: secureCookie }),
+                clearCookie(PORTAL_RETURN_COOKIE, secureCookie)
+              ]
             }, isProduction);
           }
         }
@@ -688,13 +716,16 @@ function createRequestHandler(client, options = {}) {
           ? createSession({ ...discordUser, roles: access.roles }, env.dashboardSessionSecret)
           : null;
         const existingProfile = getPortalData(discordUser.id, access?.accessLevel || 'guest', access?.privileged || false).profile;
-        const destination = access?.accessLevel === 'member' || existingProfile.albionName ? '/portal' : '/join';
+        const destination = access?.accessLevel === 'member' || existingProfile.albionName
+          ? (cookies[PORTAL_RETURN_COOKIE] === 'temporada' ? '/portal#temporada' : '/portal')
+          : '/join';
         return redirect(res, destination, {
           'Set-Cookie': [
             cookie(JOIN_SESSION_COOKIE, joinToken, { maxAge: JOIN_SESSION_MAX_AGE_SECONDS, secure: secureCookie }),
             cookie(PORTAL_SESSION_COOKIE, portalToken, { maxAge: portalMaxAge, secure: secureCookie }),
             ...(staffToken ? [cookie(SESSION_COOKIE, staffToken, { maxAge: SESSION_MAX_AGE_SECONDS, secure: secureCookie })] : []),
-            clearCookie(JOIN_OAUTH_STATE_COOKIE, secureCookie)
+            clearCookie(JOIN_OAUTH_STATE_COOKIE, secureCookie),
+            clearCookie(PORTAL_RETURN_COOKIE, secureCookie)
           ]
         }, isProduction);
       }

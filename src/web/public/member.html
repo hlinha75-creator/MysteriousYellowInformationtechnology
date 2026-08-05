@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Portal pessoal da comunidade Notag.">
   <title>Meu portal — Notag</title>
-  <link rel="stylesheet" href="/assets/styles.css?v=20260801-1">
-  <script src="/assets/member.js?v=20260801-1" defer></script>
+  <link rel="stylesheet" href="/assets/styles.css?v=20260805-3">
+  <script src="/assets/member.js?v=20260805-3" defer></script>
 </head>
 <body class="dashboard-body member-portal-body">
   <div class="app-shell">
@@ -68,10 +68,10 @@
         </section>
 
         <section class="view member-only" id="view-rankings" data-title="Classificações" data-kicker="Desempenho">
-          <div class="view-heading"><div><h2>Classificações Albion</h2><p>Sua posição e o ranking da guilda em cada categoria.</p></div></div>
-          <div class="ranking-tabs" id="member-ranking-tabs"><button class="ranking-tab active" data-category="overall">Geral</button><button class="ranking-tab" data-category="pve">PvE</button><button class="ranking-tab" data-category="pvp">PvP</button><button class="ranking-tab" data-category="gathering">Coleta</button><button class="ranking-tab" data-category="crafting">Craft</button></div>
+          <div class="view-heading"><div><h2>Classificações Albion</h2><p>Sua posição, os rankings de fama e a contribuição na temporada da guilda.</p></div></div>
+          <div class="ranking-tabs" id="member-ranking-tabs"><button class="ranking-tab season-tab" data-category="season">Temporada 33</button><button class="ranking-tab active" data-category="overall">Geral</button><button class="ranking-tab" data-category="pve">PvE</button><button class="ranking-tab" data-category="pvp">PvP</button><button class="ranking-tab" data-category="gathering">Coleta</button><button class="ranking-tab" data-category="crafting">Craft</button></div>
           <div class="metric-grid compact portal-ranking-metrics" id="personal-ranks"></div>
-          <article class="panel portal-ranking-panel"><div class="table-controls"><input class="search-input" id="ranking-search" type="search" placeholder="Buscar jogador…" aria-label="Buscar jogador"></div><div class="table-wrap"><table><thead><tr><th>#</th><th>Jogador</th><th class="number-cell">Pontuação</th></tr></thead><tbody id="member-ranking-table"></tbody></table></div></article>
+          <article class="panel portal-ranking-panel"><div class="table-controls"><input class="search-input" id="ranking-search" type="search" placeholder="Buscar jogador…" aria-label="Buscar jogador"><small>Na Temporada 33, clique no nome para ver todas as categorias.</small></div><div class="table-wrap"><table><thead><tr><th>#</th><th>Jogador</th><th class="number-cell" id="ranking-score-heading">Pontuação</th></tr></thead><tbody id="member-ranking-table"></tbody></table></div><p class="table-note" id="member-ranking-note" hidden></p></article>
         </section>
 
         <section class="view" id="view-finance" data-title="Saldo e saque" data-kicker="Minha conta">

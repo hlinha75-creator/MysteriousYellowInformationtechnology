@@ -3,12 +3,43 @@ const accountLinks = require('../modules/accounts/accountLinks.service');
 const financeRepo = require('../modules/finance/finance.repository');
 const { fameDashboard } = require('./dashboard.repository');
 const { MAX_PARTICIPANTS } = require('./portal-events.service');
+const seasonPoints = require('../modules/albion/seasonPoints.service');
 
 function placeholders(values) {
   return values.map(() => '?').join(',');
 }
 
 const portalRoleLabels = { tank: 'Tank', healer: 'Healer', support: 'Suporte', dps: 'DPS' };
+
+function seasonPortalRanking(albionName) {
+  const ranking = seasonPoints.calculateSeasonRanking();
+  const own = albionName ? seasonPoints.findSeasonPlayer(albionName) : null;
+  return {
+    season: ranking.season,
+    snapshotLabel: ranking.snapshotLabel,
+    capturedAt: ranking.capturedAt,
+    officialGuildPoints: ranking.officialGuildPoints,
+    distributedEstimate: ranking.distributedEstimate,
+    playerCount: ranking.rows.length,
+    formula: ranking.formula,
+    rows: ranking.rows.map((row) => ({
+      rank: row.rank,
+      name: row.name,
+      totalPoints: row.totalPoints,
+      categories: row.categories,
+      mainCategory: row.mainCategory ? {
+        label: row.mainCategory.label,
+        points: row.mainCategory.points
+      } : null
+    })),
+    own: own ? {
+      rank: own.rank,
+      name: own.name,
+      totalPoints: own.totalPoints,
+      categories: own.categories
+    } : null
+  };
+}
 
 function customSlotLabel(event, slot) {
   const isLooter = slot.role === 'dps' && Number(slot.slot_index) === Number(event.dps_slots);
@@ -171,8 +202,8 @@ function getPortalData(discordId, accessLevel = 'guest', privileged = false) {
     ? fame.rows.find((row) => row.albion_name.localeCompare(profile.albionName, undefined, { sensitivity: 'accent' }) === 0) || null
     : null;
   const rankings = accessLevel === 'member'
-    ? { imports: fame.imports, rows: fame.rows.slice(0, 250), own: ownFame }
-    : { imports: [], rows: [], own: null };
+    ? { imports: fame.imports, rows: fame.rows.slice(0, 250), own: ownFame, season: seasonPortalRanking(profile.albionName) }
+    : { imports: [], rows: [], own: null, season: null };
 
   return {
     generatedAt: new Date().toISOString(),

@@ -426,6 +426,17 @@ tbody tr:hover td { background: #222429; }
 .event-signup .button:disabled, .event-signup .button.busy { cursor: not-allowed; opacity: .55; transform: none; }
 .event-signup > small { grid-column: 1 / -1; color: #747a85; font-size: 9px; }
 .own-ranking-row td { background: rgba(88,101,242,.12); }
+.member-portal-body .ranking-tab.season-tab { color: #f2bd4a; }
+.member-portal-body .ranking-tab.season-tab.active { background: rgba(242,189,74,.14); border-color: rgba(242,189,74,.38); }
+.member-portal-body #member-ranking-table .primary-cell small { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; font-weight: 500; }
+.season-player-toggle { width: 100%; padding: 0; border: 0; color: inherit; background: transparent; font: inherit; font-weight: 700; text-align: left; cursor: pointer; }
+.season-player-toggle:hover, .season-player-toggle:focus-visible { color: #f2bd4a; outline: none; }
+.season-detail-row > td { padding: 0 !important; background: rgba(242,189,74,.035) !important; }
+.season-breakdown { margin: 7px 12px 14px; padding: 12px; border: 1px solid rgba(242,189,74,.22); border-radius: 9px; background: #17191d; }
+.season-breakdown-title { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 9px; color: #f2bd4a; font-size: 11px; }
+.season-breakdown-title span { color: var(--muted); font-weight: 600; }
+.season-breakdown table { min-width: 520px; }
+.season-breakdown th, .season-breakdown td { padding: 7px 8px; font-size: 10px; }
 .finance-action-feedback { margin-bottom: 12px; padding: 12px 14px; border: 1px solid rgba(35,165,90,.45); border-radius: 9px; color: #b8ebca; background: rgba(35,165,90,.1); font-size: 11px; }
 .finance-action-feedback.error { border-color: rgba(240,124,126,.48); color: #ffc1c2; background: rgba(240,124,126,.1); }
 .withdraw-panel .panel-head small { color: #8d929d; font-size: 9px; white-space: nowrap; }
@@ -737,7 +748,7 @@ tbody tr:hover td { background: #222429; }
 
 .member-portal-body .ranking-tabs {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
 .member-portal-body .ranking-tab {

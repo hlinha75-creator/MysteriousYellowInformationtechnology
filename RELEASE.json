@@ -1,15 +1,14 @@
 {
   "enabled": true,
-  "version": "1.40",
-  "title": "Continuidade, segurança e limpeza técnica",
+  "version": "1.41",
+  "title": "Temporada 33: Ouro e ranking completo",
   "notes": [
-    "A defesa pontual da HO de Sunstrand Shoal e seus botões antigos foram removidos definitivamente.",
-    "Comandos pausados e handlers sem registro foram retirados para manter Discord, código e documentação alinhados.",
-    "O catálogo incompleto de Builds PvE foi removido do painel antigo do membro.",
-    "Os emojis Shadow, Damnation e Enig foram conferidos com os IDs oficiais do servidor.",
-    "As dependências do Discord foram atualizadas e a auditoria de produção não aponta vulnerabilidades conhecidas.",
-    "A CI agora valida sintaxe, testes, cobertura mínima e vulnerabilidades antes da publicação.",
-    "O arquivo de release agora participa do gatilho automático de deploy.",
-    "Foi criada uma rotina para preparar backup consistente com checksum para download manual periódico."
+    "A NoTag alcançou o bracket Ouro com 81.043 pontos de temporada no snapshot atual.",
+    "O portal agora mostra o ranking completo da Temporada 33 para os membros.",
+    "Cada jogador pode consultar sua colocação e abrir o detalhamento de pontos por categoria.",
+    "O anúncio de Ouro publica o Top 20 em dois canais e inclui acesso direto ao painel.",
+    "A mensagem lembra a meta de 120.000 pontos para liberar o QG Qualidade 5.",
+    "O cálculo considera somente as contribuições Black dos rankings individuais fornecidos pelo jogo.",
+    "Foram adicionadas validações para impedir personagens e posições duplicadas nos dados extraídos."
   ]
 }

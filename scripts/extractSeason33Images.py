@@ -29,6 +29,7 @@ CATEGORY_FILES = {
         "b73bf877-3bdd-41dc-8381-3ad392831107", "174b16e2-57c8-44d4-846a-349030b64546",
         "ae610e9e-3508-422c-9a80-cbb4649c5186", "e4fc0fba-5cc4-4318-bd43-5dc76f900953",
         "1a3c3eb3-750f-4e71-b9f5-e1caef054c74", "cfd5f643-6db7-46c9-999a-42f94e150fb5",
+        "fbfc55eb-41cd-4e1a-b6cb-196de919933c",
     ],
     "PvE (Outlands and Roads)": [
         "e88aca2a-c82a-41a3-b22b-143232886341", "ff464c73-3e70-4550-89eb-01a7b86ba383",
@@ -94,7 +95,7 @@ SEASON_POINTS = {
 }
 
 TOTAL_AMOUNTS = {
-    "Guild Challenge": 136_036_000,
+    "Guild Challenge": 136_126_000,
     "PvE (Outlands and Roads)": 22_000_000,
     "Keeper Uprising": 3_300_000,
     "Gathering (Outlands and Roads)": 858_000,
@@ -132,7 +133,7 @@ PLAYER_ALIASES = {
     "ispelinotfound": "ISpellNotFound",
     "clsn": "dsn",
     "dlsn": "dsn",
-    "bobbob": "BBob",
+    "bobbob": "BobBob",
     "robertxvll": "RobertXVII",
     "robertxvll": "RobertXVII",
     "xishanksxl": "XIShanksXI",
@@ -156,6 +157,18 @@ PLAYER_ALIASES = {
 
 MANUAL_ROWS = {
     "Guild Challenge": {
+        39: ("hardfedles", 1_009_876),
+        40: ("jordansPt", 988_349),
+        41: ("Dorfiuses", 918_416),
+        42: ("VnfaTI", 854_240),
+        43: ("Merlinavo", 783_622),
+        44: ("Jmbv", 783_402),
+        45: ("YukitoRaiden", 767_262),
+        46: ("Elga7id", 710_765),
+        47: ("BBob", 688_134),
+        48: ("MARIOMALAN", 664_569),
+        49: ("Superpk", 641_725),
+        50: ("Soldier027", 621_344),
         87: ("IIIIIIIIIII", 164_620),
         130: ("Andrezao", 36_477),
         158: ("ziorni", 8_010),
@@ -327,7 +340,10 @@ def main():
         "officialGuildPoints": 81043,
         "formula": "seasonPoints * memberAmount / totalAmount",
         "ignoredSources": ["Guild Season Bracket Level Up", "Personal Season Stats", "zero-value categories"],
-        "missingRanks": {"Guild Challenge": list(range(40, 51))},
+        "missingRanks": {},
+        "sourceNotes": [
+            "Guild Challenge ranks 39-52 and total amount were refreshed from the follow-up screenshot captured about three hours later."
+        ],
         "categories": [],
     }
     all_conflicts = []

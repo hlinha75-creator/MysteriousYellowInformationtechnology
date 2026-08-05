@@ -4,6 +4,7 @@ const groups = {
   createEvent: ['caller', 'staff', 'adm', 'recruiter'],
   approvePayment: ['staff', 'adm', 'treasurer'],
   importCsv: ['staff', 'adm', 'treasurer'],
+  publishSeason: ['staff', 'adm'],
   withdrawBalance: ['staff', 'adm', 'treasurer'],
   approveRegistration: ['staff', 'adm', 'recruiter'],
   assumeEvent: ['staff', 'caller', 'treasurer', 'recruiter', 'adm']

@@ -23,7 +23,10 @@ const commands = [
     .addSubcommand((subcommand) => subcommand
       .setName('ranking')
       .setDescription('Mostra os primeiros colocados da temporada.')
-      .addIntegerOption((option) => option.setName('limite').setDescription('Quantidade de jogadores.').setMinValue(3).setMaxValue(20))),
+      .addIntegerOption((option) => option.setName('limite').setDescription('Quantidade de jogadores.').setMinValue(3).setMaxValue(20)))
+    .addSubcommand((subcommand) => subcommand
+      .setName('publicar')
+      .setDescription('Publica ou atualiza o anúncio Ouro nos canais da guilda.')),
   new SlashCommandBuilder()
     .setName('registro')
     .setDescription('Abre registro de nome em jogo.'),

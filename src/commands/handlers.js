@@ -25,6 +25,7 @@ const guildReverification = require('../modules/members/guildReverification.serv
 const guildReverificationRepo = require('../modules/members/guildReverification.repository');
 const giveaways = require('../modules/giveaways/giveaways.service');
 const seasonPoints = require('../modules/albion/seasonPoints.service');
+const seasonAnnouncement = require('../modules/albion/seasonAnnouncement.service');
 const { getDatabase } = require('../database/connection');
 
 function input(id, label, style = TextInputStyle.Short, required = true) {
@@ -84,6 +85,18 @@ async function handleCommand(interaction) {
     const action = interaction.options.getSubcommand();
     const ranking = seasonPoints.calculateSeasonRanking();
     const format = (value) => new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+
+    if (action === 'publicar') {
+      if (!can(interaction.member, 'publishSeason')) {
+        return interaction.reply({ content: 'Somente a Staff ou ADM pode publicar o anúncio da temporada.', flags: MessageFlags.Ephemeral });
+      }
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      const results = await seasonAnnouncement.publishSeasonAnnouncement(interaction.client);
+      const lines = results.map((result) => result.ok
+        ? `✅ <#${result.channelId}> — ${result.updated ? 'mensagem atualizada' : 'mensagem publicada'}`
+        : `❌ <#${result.channelId}> — ${result.error}`);
+      return interaction.editReply({ content: lines.join('\n'), allowedMentions: { parse: [] } });
+    }
 
     if (action === 'ranking') {
       const limit = interaction.options.getInteger('limite') || 10;

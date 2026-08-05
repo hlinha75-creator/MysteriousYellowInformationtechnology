@@ -543,7 +543,7 @@ function renderSeasonRanking(season) {
     metricCard('Pontos da guilda', number.format(season.officialGuildPoints), 'Total oficial no snapshot'),
     metricCard('Estimativa distribuída', pointsFormat.format(season.distributedEstimate), 'Somente linhas capturadas'),
     metricCard('Jogadores pontuando', number.format(season.rows.length), 'Ao menos uma categoria Black'),
-    metricCard('Linhas pendentes', number.format(missing), 'Guild Challenge 40–50')
+    metricCard('Linhas pendentes', number.format(missing), missing ? 'Revisar capturas incompletas' : 'Capturas individuais completas')
   ].join('');
   setSummary('season-ranking-summary', rows.length, season.rows.length);
   document.querySelector('#season-ranking-table').innerHTML = rows.length ? rows.map((row) => (

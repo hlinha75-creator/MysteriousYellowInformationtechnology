@@ -10,26 +10,15 @@
     "Personal Season Stats",
     "zero-value categories"
   ],
-  "missingRanks": {
-    "Guild Challenge": [
-      40,
-      41,
-      42,
-      43,
-      44,
-      45,
-      46,
-      47,
-      48,
-      49,
-      50
-    ]
-  },
+  "missingRanks": {},
+  "sourceNotes": [
+    "Guild Challenge ranks 39-52 and total amount were refreshed from the follow-up screenshot captured about three hours later."
+  ],
   "categories": [
     {
       "name": "Guild Challenge",
       "seasonPoints": 13200,
-      "totalAmount": 136036000,
+      "totalAmount": 136126000,
       "rows": [
         {
           "rank": 1,
@@ -224,7 +213,62 @@
         {
           "rank": 39,
           "player": "hardfedles",
-          "amount": 1007403
+          "amount": 1009876
+        },
+        {
+          "rank": 40,
+          "player": "jordansPt",
+          "amount": 988349
+        },
+        {
+          "rank": 41,
+          "player": "Dorfiuses",
+          "amount": 918416
+        },
+        {
+          "rank": 42,
+          "player": "VnfaTI",
+          "amount": 854240
+        },
+        {
+          "rank": 43,
+          "player": "Merlinavo",
+          "amount": 783622
+        },
+        {
+          "rank": 44,
+          "player": "Jmbv",
+          "amount": 783402
+        },
+        {
+          "rank": 45,
+          "player": "YukitoRaiden",
+          "amount": 767262
+        },
+        {
+          "rank": 46,
+          "player": "Elga7id",
+          "amount": 710765
+        },
+        {
+          "rank": 47,
+          "player": "BBob",
+          "amount": 688134
+        },
+        {
+          "rank": 48,
+          "player": "MARIOMALAN",
+          "amount": 664569
+        },
+        {
+          "rank": 49,
+          "player": "Superpk",
+          "amount": 641725
+        },
+        {
+          "rank": 50,
+          "player": "Soldier027",
+          "amount": 621344
         },
         {
           "rank": 51,
@@ -513,7 +557,7 @@
         },
         {
           "rank": 108,
-          "player": "BBob",
+          "player": "BobBob",
           "amount": 103632
         },
         {
@@ -1435,7 +1479,7 @@
         },
         {
           "rank": 90,
-          "player": "BBob",
+          "player": "BobBob",
           "amount": 6884
         },
         {
@@ -2157,7 +2201,7 @@
         },
         {
           "rank": 87,
-          "player": "BBob",
+          "player": "BobBob",
           "amount": 331
         },
         {
@@ -3763,7 +3807,7 @@
         },
         {
           "rank": 112,
-          "player": "BBob",
+          "player": "BobBob",
           "amount": 537
         },
         {
@@ -4045,7 +4089,7 @@
         },
         {
           "rank": 40,
-          "player": "BBob",
+          "player": "BobBob",
           "amount": 19612
         },
         {

@@ -139,6 +139,11 @@ test('servidor publica landing e protege a API do dashboard', async (t) => {
   const portal = await fetch(`${base}/portal`, { redirect: 'manual' });
   assert.equal(portal.status, 302);
   assert.equal(portal.headers.get('location'), '/?portal=required');
+
+  const seasonPortal = await fetch(`${base}/portal/temporada`, { redirect: 'manual' });
+  assert.equal(seasonPortal.status, 302);
+  assert.equal(seasonPortal.headers.get('location'), '/join/discord');
+  assert.match(seasonPortal.headers.get('set-cookie'), /notag_portal_return=temporada/);
 });
 
 test('portal entrega somente os dados pessoais e oculta rankings de convidado', async (t) => {
@@ -210,6 +215,9 @@ test('portal permite participar, trocar para espectador e respeita o limite de 2
   assert.equal(joinResponse.status, 200);
   assert.equal(joined.result.action, 'participant');
   assert.equal(joined.portal.events.find((event) => event.id === openEvent).ownParticipation.role, 'healer');
+  assert.equal(joined.portal.rankings.season.rows[0].name, 'Tmaiusculo');
+  assert.equal(joined.portal.rankings.season.rows.length >= 195, true);
+  assert.equal(joined.portal.rankings.season.rows[0].categories.some((category) => category.label === 'Keeper Uprising'), true);
 
   const spectateResponse = await fetch(`${base}/api/portal/events/participation`, {
     method: 'POST',
