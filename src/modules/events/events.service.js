@@ -745,14 +745,37 @@ async function syncEventPublication(client, eventId, { channelId, content, allow
     return currentMessage;
   }
 
-  await currentMessage?.delete().catch(() => {});
   const targetChannel = await client.channels.fetch(targetChannelId).catch(() => null);
   if (!targetChannel || typeof targetChannel.send !== 'function') {
     throw new Error('Canal de publicacao do evento nao encontrado.');
   }
+  const existingTargetMessage = await findEventPublication(targetChannel, eventId);
+  if (existingTargetMessage) {
+    await existingTargetMessage.edit(payload);
+    await currentMessage?.delete().catch(() => {});
+    repo.updateEvent(eventId, { message_id: existingTargetMessage.id, message_channel_id: targetChannel.id });
+    return existingTargetMessage;
+  }
+
+  await currentMessage?.delete().catch(() => {});
   const message = await targetChannel.send(payload);
   repo.updateEvent(eventId, { message_id: message.id, message_channel_id: targetChannel.id });
   return message;
+}
+
+async function findEventPublication(channel, eventId) {
+  if (typeof channel?.messages?.fetch !== 'function') return null;
+  const recent = await channel.messages.fetch({ limit: 100 }).catch(() => null);
+  if (!recent || typeof recent.values !== 'function') return null;
+  const eventIdText = String(eventId);
+  for (const message of recent.values()) {
+    const components = message.components || message.payload?.components;
+    const matches = components?.some((row) => (row.components || row.data?.components)?.some((component) => (
+      String(component.customId || component.data?.custom_id || '').split(':').includes(eventIdText)
+    )));
+    if (matches) return message;
+  }
+  return null;
 }
 
 async function updateCreatedEvent({ client, guild, eventId, actorId, patch, publication }) {

@@ -295,10 +295,14 @@ test('corrige publicação existente enviada ao ping-raid por falso positivo', a
     postChannelId: ids.channels.participate
   });
 
+  const targetChannel = await harness.client.channels.fetch(ids.channels.pingContent);
+  const orphan = await targetChannel.send(harness.sentMessages[0].payload);
+
   const repaired = await events.repairMisroutedEventPublications(harness.client);
   assert.deepEqual(repaired, [event.id]);
   assert.equal(eventsRepo.getEvent(event.id).message_channel_id, ids.channels.pingContent);
-  assert.equal(harness.sentMessages.at(-1).channelId, ids.channels.pingContent);
+  assert.equal(eventsRepo.getEvent(event.id).message_id, orphan.id);
+  assert.equal(harness.sentMessages.length, 2);
 });
 
 test('evento personalizado cria telas dinamicas e salva detalhes por vaga', async () => {
@@ -644,7 +648,12 @@ function createDiscordHarness() {
       id,
       isTextBased: () => true,
       messages: {
-        fetch: async (messageId) => messages.get(messageId) || null
+        fetch: async (messageId) => {
+          if (typeof messageId === 'object') {
+            return new Map([...messages].filter(([, message]) => message.channel.id === id));
+          }
+          return messages.get(messageId) || null;
+        }
       },
       send: async (payload) => {
         const message = {

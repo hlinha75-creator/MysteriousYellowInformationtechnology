@@ -66,17 +66,14 @@ client.once('clientReady', () => {
   }
   events.cleanupExpiredReviewChannels(client).catch((error) => console.error('Falha ao limpar canais de revisao:', error));
   events.recoverRunningEventsOnStartup(client)
-    .then((result) => {
+    .then(async (result) => {
       if (result.checked > 0) {
         console.log(`[EVENTOS] Em andamento recuperados: ${result.restored}/${result.checked}; ${result.sessions} sessao(oes) retomada(s); ${result.failed} falha(s).`);
       }
-    })
-    .catch((error) => console.error('Falha ao recuperar eventos em andamento:', error));
-  events.repairMisroutedEventPublications(client)
-    .then((eventIds) => {
+      const eventIds = await events.repairMisroutedEventPublications(client);
       if (eventIds.length > 0) console.log(`[EVENTOS] Publicacoes movidas para ping-content: ${eventIds.length}.`);
     })
-    .catch((error) => console.error('Falha ao corrigir canal de publicacao dos eventos:', error));
+    .catch((error) => console.error('Falha ao recuperar eventos em andamento:', error));
   events.recoverInterruptedEventReviews(client)
     .then((result) => {
       if (result.checked > 0) {
