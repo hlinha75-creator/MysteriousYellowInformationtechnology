@@ -16,6 +16,7 @@ const { getDatabase } = require('../src/database/connection');
 const { migrate } = require('../src/database/migrate');
 const events = require('../src/modules/events/events.service');
 const eventsRepo = require('../src/modules/events/events.repository');
+const ids = require('../src/config/ids');
 const customEventWizard = require('../src/modules/events/customEventWizard.service');
 const finance = require('../src/modules/finance/finance.service');
 const financeRepo = require('../src/modules/finance/finance.repository');
@@ -259,6 +260,45 @@ test('evento comum reserva a ultima vaga DPS para o Looter', async () => {
   assert.match(description, /Javali Espectral/);
   assert.match(description, /sacos do chao/);
   assert.equal(event.dps_slots, 3);
+});
+
+test('cavalo na descrição não transforma Roaming em Raid Avalon', async () => {
+  const harness = createDiscordHarness();
+  const event = await events.createEventFromFields(harness.interaction('creator-roaming'), {
+    creatorId: 'creator-roaming',
+    title: 'Roaming 4.1 aquecer',
+    description: 'Build T5.4.1 cavalo t3',
+    location: 'HO Loch',
+    scheduledTime: '08:10',
+    tankSlots: 2,
+    healerSlots: 2,
+    supportSlots: 2,
+    dpsSlots: 14
+  });
+
+  assert.equal(harness.sentMessages[0].channelId, ids.channels.pingContent);
+  assert.equal(eventsRepo.getEvent(event.id).message_channel_id, ids.channels.pingContent);
+});
+
+test('corrige publicação existente enviada ao ping-raid por falso positivo', async () => {
+  const harness = createDiscordHarness();
+  const event = await events.createEventFromFields(harness.interaction('creator-repair'), {
+    creatorId: 'creator-repair',
+    title: 'Roaming 4.1 aquecer',
+    description: 'Build T5.4.1 cavalo t3',
+    location: 'HO Loch',
+    scheduledTime: '08:10',
+    tankSlots: 2,
+    healerSlots: 2,
+    supportSlots: 2,
+    dpsSlots: 14,
+    postChannelId: ids.channels.participate
+  });
+
+  const repaired = await events.repairMisroutedEventPublications(harness.client);
+  assert.deepEqual(repaired, [event.id]);
+  assert.equal(eventsRepo.getEvent(event.id).message_channel_id, ids.channels.pingContent);
+  assert.equal(harness.sentMessages.at(-1).channelId, ids.channels.pingContent);
 });
 
 test('evento personalizado cria telas dinamicas e salva detalhes por vaga', async () => {

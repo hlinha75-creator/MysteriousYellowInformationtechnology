@@ -72,6 +72,11 @@ client.once('clientReady', () => {
       }
     })
     .catch((error) => console.error('Falha ao recuperar eventos em andamento:', error));
+  events.repairMisroutedEventPublications(client)
+    .then((eventIds) => {
+      if (eventIds.length > 0) console.log(`[EVENTOS] Publicacoes movidas para ping-content: ${eventIds.length}.`);
+    })
+    .catch((error) => console.error('Falha ao corrigir canal de publicacao dos eventos:', error));
   events.recoverInterruptedEventReviews(client)
     .then((result) => {
       if (result.checked > 0) {

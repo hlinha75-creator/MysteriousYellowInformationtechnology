@@ -802,7 +802,18 @@ function eventPostChannelId(fields = {}) {
 
 function isRaidEventFields(fields = {}) {
   const text = `${fields.title || ''} ${fields.description || ''}`.toLowerCase();
-  return /\braid\b|avalon|ava/.test(text);
+  return /\braid\b|\bavalon(?:iano|iana)?\b|\bava\b/.test(text);
+}
+
+async function repairMisroutedEventPublications(client) {
+  const repaired = [];
+  for (const event of repo.listInteractiveEvents()) {
+    if (event.message_channel_id !== ids.channels.participate) continue;
+    if (repo.getRaidAvalonEventMeta(event.id) || isRaidEventFields(event)) continue;
+    await syncEventPublication(client, event.id, { channelId: ids.channels.pingContent });
+    repaired.push(event.id);
+  }
+  return repaired;
 }
 
 async function fetchEventMessageChannel(client, event) {
@@ -2730,6 +2741,7 @@ module.exports = {
   raidWeaponSuggestions,
   refreshEventMessage,
   refreshRaidAvalonCareerPanel,
+  repairMisroutedEventPublications,
   reconcileEventWorkflowMessages,
   recoverInterruptedEventReviews,
   recoverRunningEventsOnStartup,
