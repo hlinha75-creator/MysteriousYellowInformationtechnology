@@ -18,7 +18,8 @@
     "backup:db": "node --no-warnings scripts/backupDatabase.js",
     "backup:prepare-download": "node --no-warnings scripts/prepareManualBackup.js",
     "restore:db": "node --no-warnings scripts/restoreDatabase.js",
-    "restore:campaign900m": "node --no-warnings scripts/restoreCampaign900mSnapshot.js"
+    "restore:campaign900m": "node --no-warnings scripts/restoreCampaign900mSnapshot.js",
+    "close:campaign900m": "node --no-warnings scripts/closeCampaign900m.js"
   },
   "dependencies": {
     "@discordjs/builders": "^1.8.2",
