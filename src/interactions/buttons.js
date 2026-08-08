@@ -14,6 +14,7 @@ const deposit = require('../modules/deposit/deposit.service');
 const inactiveEvents = require('../modules/members/inactiveEvents.service');
 const inactiveGuests = require('../modules/members/inactiveGuests.service');
 const operations = require('../modules/operations/operations.service');
+const announcementAcknowledgement = require('../modules/operations/announcementAcknowledgement.service');
 const staffTutorial = require('../modules/tutorials/staffTutorial.service');
 const campaigns = require('../modules/campaigns/campaigns.service');
 const memberProfile = require('../modules/members/profile.service');
@@ -160,6 +161,21 @@ async function handleButton(interaction) {
 
   if (scope === 'giveaway') return giveaways.handleButton(interaction);
   if (scope === 'roster_link') return rosterAutoLink.handleProposalButton(interaction, approveRosterMember);
+
+  if (scope === 'announcement' && action === 'ack') {
+    if (!hasRole(interaction.member, 'member')) {
+      return interaction.reply({
+        content: 'Somente membros da guilda podem confirmar este aviso.',
+        flags: MessageFlags.Ephemeral
+      });
+    }
+
+    const result = announcementAcknowledgement.registerAcknowledgement(id, interaction.user.id);
+    return interaction.reply({
+      content: result.added ? 'OK registrado. Obrigado por confirmar!' : 'Seu OK ja estava registrado.',
+      flags: MessageFlags.Ephemeral
+    });
+  }
 
   if (scope === 'custom_event' && action === 'details') {
     const draft = customEventWizard.getDraft(id, interaction.user.id);
