@@ -2,6 +2,7 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('
 const ids = require('../../config/ids');
 const { getDatabase } = require('../../database/connection');
 const { estimateCombatValues } = require('./marketValue.service');
+const { backfillBattleEvents, finalizeStaleBattles, recordBattleEvent } = require('./battleReports.service');
 
 const DEFAULT_API_BASE = 'https://gameinfo-ams.albiononline.com/api/gameinfo';
 const LEGACY_AMERICAS_API_BASE = 'https://gameinfo.albiononline.com/api/gameinfo';
@@ -314,6 +315,7 @@ async function pollKillFeed(client, options = {}) {
       const payload = await eventPayload(item.event, item.type, apiBase, options);
       const message = await channel.send(payload);
       save.run(item.event.EventId, item.type, item.event.TimeStamp || null, message.id);
+      await recordBattleEvent(db, item.event, item.type, options);
       if (item.type === 'death') recordVengeanceDeath(db, item.event);
       if (item.type === 'kill') await processVengeance(client, channel, db, item.event);
       posted += 1;
@@ -326,12 +328,16 @@ async function pollKillFeed(client, options = {}) {
         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
       `).run(cursorKey, String(newestGlobalId));
     }
+    const backfill = await backfillBattleEvents(db, { ...options, db, apiBase });
+    const battles = backfill.pending === 0
+      ? await finalizeStaleBattles(client, { ...options, db })
+      : { reported: 0, discarded: 0 };
     const now = Date.now();
-    if (posted > 0 || now - lastHealthLogAt >= 10 * 60 * 1000) {
-      console.log(`[KILLFEED] OK Europa | ${events.length} eventos consultados | ${relevant.length} da NoTag | ${posted} publicados | cursor ${newestGlobalId}`);
+    if (posted > 0 || battles.reported > 0 || now - lastHealthLogAt >= 10 * 60 * 1000) {
+      console.log(`[KILLFEED] OK Europa | ${events.length} eventos consultados | ${relevant.length} da NoTag | ${posted} publicados | ${backfill.processed} histórico(s) recuperado(s) | ${battles.reported} batalha(s) relatada(s) | cursor ${newestGlobalId}`);
       lastHealthLogAt = now;
     }
-    return { posted, checked: events.length, relevant: relevant.length, cursor: newestGlobalId };
+    return { posted, checked: events.length, relevant: relevant.length, cursor: newestGlobalId, backfill, battles };
   } finally {
     polling = false;
   }

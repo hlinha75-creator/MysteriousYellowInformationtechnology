@@ -63,6 +63,15 @@ Servidor:
 Bot:
 - clientId: `1465328470312747181`
 
+## Relatorios de Batalha Albion
+
+- o killfeed agrupa kills e mortes relacionadas em batalhas;
+- uma batalha e publicada quando identifica pelo menos 4 membros unicos da NoTag e 2 mortes no total;
+- a batalha encerra depois de 30 minutos sem novos eventos relacionados, sem limite fixo de duracao;
+- os valores consideram somente a build equipada da vitima, sem inventario e sem valor efetivamente destruido;
+- os relatorios usam o canal do killfeed por padrao; `ALBION_BATTLE_REPORT_CHANNEL_ID` permite escolher outro canal;
+- eventos dos ultimos 7 dias ja registrados no banco sao recuperados gradualmente pela API do Albion para compor o historico; `ALBION_BATTLE_HISTORY_DAYS` altera essa janela.
+
 ## Cargos
 
 - ADM: `1481251362447823010`

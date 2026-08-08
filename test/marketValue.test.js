@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { estimateCombatValues, estimateVictimLoss, victimItems } = require('../src/modules/albion/marketValue.service');
+const { estimateCombatValues, estimateVictimBuild, estimateVictimLoss, victimItems } = require('../src/modules/albion/marketValue.service');
 
 test('soma equipamento e inventário da vítima usando quantidade e qualidade', async () => {
   const event = {
@@ -38,4 +38,20 @@ test('consulta em lote e calcula os valores de quem matou e de quem morreu', asy
   assert.equal(requests, 1);
   assert.equal(result.killer.total, 20000);
   assert.equal(result.victim.total, 10000);
+});
+
+test('valor da build considera somente equipamento e ignora inventário', async () => {
+  const event = {
+    Victim: {
+      Equipment: { MainHand: { Type: 'BUILD_ONLY_SWORD', Quality: 1 } },
+      Inventory: [{ Type: 'EXPENSIVE_LOOT', Quality: 1, Count: 50 }]
+    }
+  };
+  const result = await estimateVictimBuild(event, {
+    fetchImpl: async () => ({ ok: true, json: async () => [
+      { item_id: 'BUILD_ONLY_SWORD', quality: 1, sell_price_min: 25000 },
+      { item_id: 'EXPENSIVE_LOOT', quality: 1, sell_price_min: 1000000 }
+    ] })
+  });
+  assert.deepEqual(result, { total: 25000, priced: 1, items: 1 });
 });

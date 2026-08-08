@@ -6,9 +6,13 @@ function victimItems(event) {
   return playerItems(event?.Victim);
 }
 
+function equipmentItems(player) {
+  return Object.values(player?.Equipment || {}).filter((item) => item?.Type);
+}
+
 function playerItems(player) {
   return [
-    ...Object.values(player?.Equipment || {}),
+    ...equipmentItems(player),
     ...(player?.Inventory || [])
   ].filter((item) => item?.Type);
 }
@@ -51,6 +55,13 @@ async function estimateVictimLoss(event, options = {}) {
   return estimateItems(items);
 }
 
+async function estimateVictimBuild(event, options = {}) {
+  const items = equipmentItems(event?.Victim);
+  if (!items.length) return { total: 0, priced: 0, items: 0 };
+  await fetchPrices(items, options);
+  return estimateItems(items);
+}
+
 async function estimateCombatValues(event, options = {}) {
   const killerItems = playerItems(event?.Killer);
   const victimEquipment = playerItems(event?.Victim);
@@ -73,4 +84,11 @@ function estimateItems(items) {
   return { total: Math.round(total), priced, items: items.length };
 }
 
-module.exports = { estimateCombatValues, estimateVictimLoss, playerItems, victimItems };
+module.exports = {
+  equipmentItems,
+  estimateCombatValues,
+  estimateVictimBuild,
+  estimateVictimLoss,
+  playerItems,
+  victimItems
+};

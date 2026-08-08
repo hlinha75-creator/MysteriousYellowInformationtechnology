@@ -1626,6 +1626,58 @@ const migrations = [
         db.exec('ALTER TABLE event_reviews ADD COLUMN finance_message_id TEXT');
       }
     }
+  },
+  {
+    version: 57,
+    name: 'albion_battle_reports',
+    up(db) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS albion_battles (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          status TEXT NOT NULL DEFAULT 'active',
+          started_at TEXT NOT NULL,
+          last_event_at TEXT NOT NULL,
+          closed_at TEXT,
+          report_channel_id TEXT,
+          report_message_id TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CHECK (status IN ('active', 'reported', 'discarded'))
+        );
+
+        CREATE TABLE IF NOT EXISTS albion_battle_events (
+          event_id INTEGER PRIMARY KEY,
+          battle_id INTEGER NOT NULL,
+          event_type TEXT NOT NULL,
+          event_at TEXT NOT NULL,
+          victim_name TEXT NOT NULL,
+          victim_guild TEXT,
+          victim_build_value INTEGER NOT NULL DEFAULT 0,
+          priced_items INTEGER NOT NULL DEFAULT 0,
+          total_items INTEGER NOT NULL DEFAULT 0,
+          notag_members_json TEXT NOT NULL DEFAULT '[]',
+          player_keys_json TEXT NOT NULL DEFAULT '[]',
+          enemy_guilds_json TEXT NOT NULL DEFAULT '[]',
+          enemy_alliances_json TEXT NOT NULL DEFAULT '[]',
+          raw_event_json TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (battle_id) REFERENCES albion_battles(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS albion_battle_backfill (
+          event_id INTEGER PRIMARY KEY,
+          attempts INTEGER NOT NULL DEFAULT 0,
+          last_error TEXT,
+          retry_after TEXT,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_albion_battles_active
+          ON albion_battles (status, last_event_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_albion_battle_events_battle
+          ON albion_battle_events (battle_id, event_at, event_id);
+      `);
+    }
   }
 ];
 

@@ -43,7 +43,8 @@ module.exports = {
     staffTutorial: '1516001418052501614',
     pveCareer: '1516001449505460235',
     killFeed: '1481317632140513395',
-    deathFeed: '1525810975515611216'
+    deathFeed: '1525810975515611216',
+    battleReports: process.env.ALBION_BATTLE_REPORT_CHANNEL_ID || '1481317632140513395'
   },
   importantChannels: [
     '1497902778771701800',
