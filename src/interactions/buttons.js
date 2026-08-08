@@ -162,7 +162,7 @@ async function handleButton(interaction) {
   if (scope === 'giveaway') return giveaways.handleButton(interaction);
   if (scope === 'roster_link') return rosterAutoLink.handleProposalButton(interaction, approveRosterMember);
 
-  if (scope === 'announcement' && action === 'ack') {
+  if (scope === 'announcement' && ['ack', 'list'].includes(action)) {
     if (!hasRole(interaction.member, 'member')) {
       return interaction.reply({
         content: 'Somente membros da guilda podem confirmar este aviso.',
@@ -170,8 +170,32 @@ async function handleButton(interaction) {
       });
     }
 
+    if (action === 'list') {
+      const count = announcementAcknowledgement.acknowledgementCount(id);
+      await interaction.message.edit({
+        components: announcementAcknowledgement.acknowledgementComponents(id, count)
+      });
+      const pages = announcementAcknowledgement.acknowledgementListPages(id);
+      await interaction.reply({
+        content: pages[0],
+        allowedMentions: { parse: [] },
+        flags: MessageFlags.Ephemeral
+      });
+      for (const page of pages.slice(1)) {
+        await interaction.followUp({
+          content: page,
+          allowedMentions: { parse: [] },
+          flags: MessageFlags.Ephemeral
+        });
+      }
+      return null;
+    }
+
     const result = announcementAcknowledgement.registerAcknowledgement(id, interaction.user.id);
-    return interaction.reply({
+    await interaction.update({
+      components: announcementAcknowledgement.acknowledgementComponents(id, result.count)
+    });
+    return interaction.followUp({
       content: result.added ? 'OK registrado. Obrigado por confirmar!' : 'Seu OK ja estava registrado.',
       flags: MessageFlags.Ephemeral
     });
