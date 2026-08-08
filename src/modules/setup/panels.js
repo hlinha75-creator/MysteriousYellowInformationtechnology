@@ -57,7 +57,7 @@ const panels = [
       new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('finance:balance').setLabel('Consultar').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId('finance:withdraw').setLabel('Sacar').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId('finance:payment_request').setLabel('Pedir pagamento').setStyle(ButtonStyle.Success)
+        new ButtonBuilder().setCustomId('finance:payment_request').setLabel('Service').setStyle(ButtonStyle.Success)
       )
     ]
   },
